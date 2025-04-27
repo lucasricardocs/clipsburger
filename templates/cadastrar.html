@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cadastrar Venda</title>
+</head>
+<body>
+    <h1>Cadastrar Nova Venda</h1>
+    <form action="{{ url_for('cadastrar') }}" method="POST">
+        <label for="data">Data:</label>
+        <input type="date" name="data" required><br>
+
+        <label for="valor_cartao">Valor Cartão:</label>
+        <input type="number" name="valor_cartao" step="0.01" placeholder="Valor no Cartão" required><br>
+
+        <label for="valor_dinheiro">Valor Dinheiro:</label>
+        <input type="number" name="valor_dinheiro" step="0.01" placeholder="Valor em Dinheiro" required><br>
+
+        <label for="valor_pix">Valor PIX:</label>
+        <input type="number" name="valor_pix" step="0.01" placeholder="Valor via PIX" required><br>
+
+        <button type="submit">Cadastrar</button>
+    </form>
+</body>
+</html>
