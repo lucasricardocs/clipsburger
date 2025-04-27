@@ -1,9 +1,7 @@
-from flask import Flask, render_template, request, redirect, url_for
+import streamlit as st
 import sqlite3
 import altair as alt
 import pandas as pd
-
-app = Flask(__name__)
 
 # Função para inserir uma venda no banco de dados
 def insert_venda(data, valor_cartao, valor_dinheiro, valor_pix):
@@ -14,7 +12,7 @@ def insert_venda(data, valor_cartao, valor_dinheiro, valor_pix):
         conn.commit()
         conn.close()
     except sqlite3.Error as e:
-        print(f"Erro ao acessar o banco de dados: {e}")
+        st.error(f"Erro ao acessar o banco de dados: {e}")
 
 # Função para pegar os dados do banco de dados e convertê-los em um DataFrame
 def get_vendas_data():
@@ -24,42 +22,40 @@ def get_vendas_data():
     conn.close()
     return df
 
-@app.route('/')
-def index():
-    # Pega os dados do banco de dados
-    df = get_vendas_data()
+# Layout Streamlit
+st.title('Dashboard de Vendas')
 
-    # Gráfico de vendas por forma de pagamento
-    chart = alt.Chart(df).transform_fold(
-        ['valor_cartao', 'valor_dinheiro', 'valor_pix'],
-        as_=['Forma de Pagamento', 'Valor']
-    ).mark_bar().encode(
-        x='Forma de Pagamento:N',
-        y='sum(Valor):Q',
-        color='Forma de Pagamento:N',
-        tooltip=['Forma de Pagamento:N', 'sum(Valor):Q']
-    ).properties(
-        title='Total de Vendas por Forma de Pagamento'
-    )
+# Formulário para inserção de dados
+st.header('Cadastrar Nova Venda')
+data = st.date_input("Data")
+valor_cartao = st.number_input("Valor Cartão", min_value=0.0, step=0.01)
+valor_dinheiro = st.number_input("Valor Dinheiro", min_value=0.0, step=0.01)
+valor_pix = st.number_input("Valor PIX", min_value=0.0, step=0.01)
 
-    # Renderiza o template e passa o gráfico
-    return render_template('index.html', chart=chart.to_html())
+if st.button('Cadastrar Venda'):
+    if data and valor_cartao >= 0 and valor_dinheiro >= 0 and valor_pix >= 0:
+        insert_venda(str(data), valor_cartao, valor_dinheiro, valor_pix)
+        st.success('Venda cadastrada com sucesso!')
+    else:
+        st.error('Por favor, preencha todos os campos corretamente.')
 
-@app.route('/cadastrar', methods=['GET', 'POST'])
-def cadastrar():
-    if request.method == 'POST':
-        data = request.form['data']
-        valor_cartao = request.form['valor_cartao']
-        valor_dinheiro = request.form['valor_dinheiro']
-        valor_pix = request.form['valor_pix']
-        
-        # Inserir os dados no banco de dados
-        insert_venda(data, valor_cartao, valor_dinheiro, valor_pix)
-        
-        # Redirecionar para a página inicial
-        return redirect(url_for('index'))
-    
-    return render_template('cadastrar.html')
+# Exibindo gráfico de vendas por forma de pagamento
+st.header('Total de Vendas por Forma de Pagamento')
 
-if __name__ == '__main__':
-    app.run(debug=True)
+# Pegando os dados do banco
+df = get_vendas_data()
+
+# Gráfico de vendas por forma de pagamento
+chart = alt.Chart(df).transform_fold(
+    ['valor_cartao', 'valor_dinheiro', 'valor_pix'],
+    as_=['Forma de Pagamento', 'Valor']
+).mark_bar().encode(
+    x='Forma de Pagamento:N',
+    y='sum(Valor):Q',
+    color='Forma de Pagamento:N',
+    tooltip=['Forma de Pagamento:N', 'sum(Valor):Q']
+).properties(
+    title='Total de Vendas por Forma de Pagamento'
+)
+
+st.altair_chart(chart, use_container_width=True)
