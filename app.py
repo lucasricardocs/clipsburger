@@ -44,18 +44,53 @@ def setup_database():
     conn.commit()
     conn.close()
 
+# Função para verificar se já existe venda para uma data específica
+def venda_existe(data):
+    conn = sqlite3.connect('vendas.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT id FROM vendas WHERE data = ?', (data,))
+    resultado = cursor.fetchone()
+    conn.close()
+    return resultado is not None
+
 # Função para inserir uma venda no banco de dados
 def insert_venda(data, valor_cartao, valor_dinheiro, valor_pix):
     try:
+        # Verificar se já existe venda para esta data
+        if venda_existe(data):
+            return False, "Já existe uma venda registrada para esta data."
+        
         conn = sqlite3.connect('vendas.db')
         conn.execute('INSERT INTO vendas (data, valor_cartao, valor_dinheiro, valor_pix) VALUES (?, ?, ?, ?)', 
                      (data, valor_cartao, valor_dinheiro, valor_pix))
         conn.commit()
         conn.close()
-        return True
+        return True, "Venda cadastrada com sucesso!"
     except sqlite3.Error as e:
-        st.error(f"Erro ao acessar o banco de dados: {e}")
-        return False
+        return False, f"Erro ao acessar o banco de dados: {e}"
+
+# Função para atualizar uma venda no banco de dados
+def update_venda(id, valor_cartao, valor_dinheiro, valor_pix):
+    try:
+        conn = sqlite3.connect('vendas.db')
+        conn.execute('UPDATE vendas SET valor_cartao = ?, valor_dinheiro = ?, valor_pix = ? WHERE id = ?', 
+                     (valor_cartao, valor_dinheiro, valor_pix, id))
+        conn.commit()
+        conn.close()
+        return True, "Venda atualizada com sucesso!"
+    except sqlite3.Error as e:
+        return False, f"Erro ao atualizar o banco de dados: {e}"
+
+# Função para excluir uma venda do banco de dados
+def delete_venda(id):
+    try:
+        conn = sqlite3.connect('vendas.db')
+        conn.execute('DELETE FROM vendas WHERE id = ?', (id,))
+        conn.commit()
+        conn.close()
+        return True, "Venda excluída com sucesso!"
+    except sqlite3.Error as e:
+        return False, f"Erro ao excluir do banco de dados: {e}"
 
 # Função para pegar os dados do banco de dados e convertê-los em um DataFrame
 def get_vendas_data():
@@ -80,6 +115,24 @@ def get_vendas_data():
     df['valor_total'] = df['valor_cartao'] + df['valor_dinheiro'] + df['valor_pix']
     
     return df
+
+# Função para obter dados de uma venda específica pelo ID
+def get_venda_by_id(id):
+    conn = sqlite3.connect('vendas.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM vendas WHERE id = ?', (id,))
+    venda = cursor.fetchone()
+    conn.close()
+    
+    if venda:
+        return {
+            'id': venda[0],
+            'data': venda[1],
+            'valor_cartao': venda[2],
+            'valor_dinheiro': venda[3],
+            'valor_pix': venda[4]
+        }
+    return None
 
 # Aplicação Streamlit
 def main():
@@ -127,7 +180,7 @@ def main():
         df_filtrado = pd.DataFrame()
     
     # Layout usando abas
-    tab1, tab2, tab3 = st.tabs(["Cadastro", "Resumo Mensal", "Análise Detalhada"])
+    tab1, tab2, tab3, tab4 = st.tabs(["Cadastro", "Resumo Mensal", "Análise Detalhada", "Gerenciar Registros"])
     
     with tab1:
         st.header('Cadastrar Nova Venda')
@@ -144,11 +197,19 @@ def main():
         total = valor_cartao + valor_dinheiro + valor_pix
         st.info(f"Valor Total: R$ {total:.2f}")
         
+        # Verificar se já existe venda para esta data
+        data_str = str(data)
+        if venda_existe(data_str):
+            st.warning(f"⚠️ Já existe um registro de venda para {data.strftime('%d/%m/%Y')}. Para atualizar, use a aba 'Gerenciar Registros'.")
+        
         if st.button('Cadastrar Venda', use_container_width=True):
             if data and valor_cartao >= 0 and valor_dinheiro >= 0 and valor_pix >= 0:
-                if insert_venda(str(data), valor_cartao, valor_dinheiro, valor_pix):
-                    st.success('Venda cadastrada com sucesso!')
+                sucesso, mensagem = insert_venda(data_str, valor_cartao, valor_dinheiro, valor_pix)
+                if sucesso:
+                    st.success(mensagem)
                     st.rerun()
+                else:
+                    st.error(mensagem)
             else:
                 st.error('Por favor, preencha todos os campos corretamente.')
     
@@ -326,6 +387,107 @@ def main():
                 use_container_width=True,
                 hide_index=True
             )
+    
+    with tab4:
+        st.header('Gerenciar Registros de Vendas')
+        
+        if df.empty:
+            st.warning("Não há registros de vendas no banco de dados.")
+        else:
+            # Preparar dados com a coluna de ID para gerenciamento
+            df_gerenciamento = df.copy()
+            df_gerenciamento['data_formatada'] = df_gerenciamento['data'].dt.strftime('%d/%m/%Y')
+            df_gerenciamento = df_gerenciamento.sort_values('data', ascending=False)
+            
+            # Tabela com todos os registros para seleção
+            st.subheader('Selecione um registro para editar ou excluir')
+            
+            # Adicionar botões de ação para cada linha
+            df_gerenciamento['ações'] = None
+            
+            # Exibir dados em uma tabela interativa
+            selected_indices = st.multiselect(
+                "Selecione registros para gerenciar:",
+                df_gerenciamento.index,
+                format_func=lambda x: f"{df_gerenciamento.loc[x, 'data_formatada']} - R$ {df_gerenciamento.loc[x, 'valor_total']:.2f}"
+            )
+            
+            if selected_indices:
+                registro_selecionado = df_gerenciamento.loc[selected_indices[0]]
+                
+                st.subheader(f"Gerenciar Registro de {registro_selecionado['data_formatada']}")
+                
+                # Exibir detalhes do registro selecionado
+                col1, col2, col3 = st.columns(3)
+                col1.metric("Valor Cartão", f"R$ {registro_selecionado['valor_cartao']:.2f}")
+                col2.metric("Valor Dinheiro", f"R$ {registro_selecionado['valor_dinheiro']:.2f}")
+                col3.metric("Valor PIX", f"R$ {registro_selecionado['valor_pix']:.2f}")
+                
+                # Opções para editar os valores
+                st.subheader("Editar Valores")
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    novo_valor_cartao = st.number_input(
+                        "Novo Valor Cartão (R$)", 
+                        value=float(registro_selecionado['valor_cartao']),
+                        min_value=0.0, 
+                        step=0.01,
+                        format="%.2f"
+                    )
+                
+                with col2:
+                    novo_valor_dinheiro = st.number_input(
+                        "Novo Valor Dinheiro (R$)", 
+                        value=float(registro_selecionado['valor_dinheiro']),
+                        min_value=0.0, 
+                        step=0.01,
+                        format="%.2f"
+                    )
+                
+                with col3:
+                    novo_valor_pix = st.number_input(
+                        "Novo Valor PIX (R$)", 
+                        value=float(registro_selecionado['valor_pix']),
+                        min_value=0.0, 
+                        step=0.01,
+                        format="%.2f"
+                    )
+                
+                # Botões de ação
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    if st.button("💾 Atualizar Registro", use_container_width=True):
+                        sucesso, mensagem = update_venda(
+                            registro_selecionado['id'],
+                            novo_valor_cartao,
+                            novo_valor_dinheiro,
+                            novo_valor_pix
+                        )
+                        if sucesso:
+                            st.success(mensagem)
+                            st.rerun()
+                        else:
+                            st.error(mensagem)
+                
+                with col2:
+                    # Botão de exclusão com confirmação
+                    if st.button("🗑️ Excluir Registro", use_container_width=True):
+                        # Adicionando uma camada extra de confirmação
+                        st.warning(f"Tem certeza que deseja excluir o registro do dia {registro_selecionado['data_formatada']}?")
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.button("✅ Sim, excluir", use_container_width=True):
+                                sucesso, mensagem = delete_venda(registro_selecionado['id'])
+                                if sucesso:
+                                    st.success(mensagem)
+                                    st.rerun()
+                                else:
+                                    st.error(mensagem)
+                        with col2:
+                            if st.button("❌ Cancelar", use_container_width=True):
+                                st.rerun()
     
     # Adicionar rodapé
     st.divider()
