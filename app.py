@@ -1,67 +1,29 @@
 import os
-import json
-import streamlit as st
-from google.oauth2.service_account import Credentials
+import google.auth
 from googleapiclient.discovery import build
+from google.oauth2.service_account import Credentials
 
-# Função para criar o arquivo temporário de credenciais
-def create_credentials_file():
-    # Recupera o conteúdo do credentials a partir da variável de ambiente
-    credentials_content = os.environ.get('GOOGLE_CREDENTIALS')
+def get_google_credentials():
+    # Verifica se a variável de ambiente GOOGLE_CREDENTIALS está definida
+    credentials_json = os.getenv('GOOGLE_CREDENTIALS')
+    if not credentials_json:
+        raise ValueError("A variável de ambiente GOOGLE_CREDENTIALS não está definida!")
+    
+    # Carrega as credenciais do arquivo de serviço
+    credentials = Credentials.from_service_account_info(credentials_json)
+    return credentials
 
-    if credentials_content:
-        # Converte a string JSON para dicionário
-        credentials_dict = json.loads(credentials_content)
-        
-        # Cria o arquivo 'credentials.json' temporário
-        with open('credentials.json', 'w') as f:
-            json.dump(credentials_dict, f)
-    else:
-        st.error("A variável de ambiente GOOGLE_CREDENTIALS não está definida!")
-
-# Função para autenticar usando as credenciais do Google
-def authenticate_with_google():
-    # Cria o arquivo temporário
-    create_credentials_file()
-
-    # Carrega as credenciais do arquivo JSON
-    credentials = Credentials.from_service_account_file('credentials.json')
-
-    # Conecte-se à API do Google (exemplo: Google Sheets API)
-    service = build('sheets', 'v4', credentials=credentials)
-    return service
-
-# Função para ler os dados da planilha
 def read_google_sheet():
-    service = authenticate_with_google()
-
-    # ID da planilha e intervalo
-    spreadsheet_id = 'https://docs.google.com/spreadsheets/d/1NTScbiIna-iE7roQ9XBdjUOssRihTFFby4INAAQNXTg/edit'  # Nome da planilha, substitua pelo ID correto
-    range_ = 'Vendas!A2:D'  # Nome da aba (Vendas) e o intervalo (A2:D)
-
-    # Fazendo a requisição para ler os dados
-    sheet = service.spreadsheets()
-    result = sheet.values().get(spreadsheetId=spreadsheet_id, range=range_).execute()
-    rows = result.get('values', [])
-
-    if not rows:
-        st.write("Nenhum dado encontrado.")
-    else:
-        # Exibir os dados lidos (Data, Cartão, Dinheiro, Pix)
-        for row in rows:
-            data = row[0]  # Data
-            cartao = row[1]  # Cartão
-            dinheiro = row[2]  # Dinheiro
-            pix = row[3]  # Pix
-
-            st.write(f"Data: {data}, Cartão: {cartao}, Dinheiro: {dinheiro}, Pix: {pix}")
-
-# Exemplo de interface no Streamlit
-def main():
-    st.title("Leitura de Planilha Google")
-
-    if st.button('Ler Dados'):
-        read_google_sheet()
-
-if __name__ == '__main__':
-    main()
+    # Carrega as credenciais
+    credentials = get_google_credentials()
+    
+    # Use as credenciais para acessar a planilha
+    service = build('sheets', 'v4', credentials=credentials)
+    spreadsheet_id = 'https://docs.google.com/spreadsheets/d/1NTScbiIna-iE7roQ9XBdjUOssRihTFFby4INAAQNXTg/edit'
+    range_ = 'Vendas!A1:D10'  # Alterar o range conforme necessário
+    
+    # Obter dados da planilha
+    result = service.spreadsheets().values().get(spreadsheetId=spreadsheet_id, range=range_).execute()
+    values = result.get('values', [])
+    
+    return values
