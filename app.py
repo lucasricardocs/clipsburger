@@ -7,7 +7,7 @@ from google.oauth2.service_account import Credentials
 from gspread.exceptions import SpreadsheetNotFound
 
 # Configuração da página
-st.set_page_config(page_title="Sistema de Registro de Vendas", layout="centered")
+st.set_page_config(page_title="Sistema de Registro de Vendas", layout="centered") # Layout wide para mais espaço
 
 def read_google_sheet():
     """Função para ler os dados da planilha Google Sheets"""
@@ -66,7 +66,7 @@ def process_data(df):
 
 def main():
     st.title("📊 Sistema de Registro de Vendas")
-    tab1, tab2, tab3 = st.tabs(["Registrar Venda", "Visualizar Vendas", "Análise de Capital"])
+    tab1, tab3 = st.tabs(["Registrar Venda", "Análise Detalhada"]) # Removendo tab2
 
     with tab1:
         st.header("Registrar Nova Venda")
@@ -91,69 +91,8 @@ def main():
                 else:
                     st.warning("Pelo menos um valor de venda deve ser maior que zero.")
 
-    with tab2:
-        st.header("Histórico de Vendas")
-        with st.spinner("Carregando dados..."):
-            df_raw, _ = read_google_sheet()
-            if not df_raw.empty:
-                df = process_data(df_raw.copy())
-                st.dataframe(df[['DataFormatada', 'Cartão', 'Dinheiro', 'Pix', 'Total']]
-                             if 'DataFormatada' in df.columns else df, use_container_width=True)
-                st.subheader("Resumo Financeiro")
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    st.metric("Total Cartão", f"R$ {df['Cartão'].sum():.2f}")
-                with col2:
-                    st.metric("Total Dinheiro", f"R$ {df['Dinheiro'].sum():.2f}")
-                with col3:
-                    st.metric("Total PIX", f"R$ {df['Pix'].sum():.2f}")
-                with col4:
-                    st.metric("Total Geral", f"R$ {df['Total'].sum():.2f}")
-
-                st.subheader("Visualização dos Dados")
-                payment_data = pd.DataFrame({
-                    'Método': ['Cartão', 'Dinheiro', 'PIX'],
-                    'Valor': [df['Cartão'].sum(), df['Dinheiro'].sum(), df['Pix'].sum()]
-                })
-                st.write("**Distribuição por Método de Pagamento**")
-                base = alt.Chart(payment_data).encode(
-                    theta=alt.Theta("Valor:Q", stack=True),
-                    color=alt.Color("Método:N", legend=alt.Legend(title="Método de Pagamento")),
-                    tooltip=["Método", "Valor"]
-                )
-                pie = base.mark_arc(innerRadius=50, outerRadius=100)
-                text = base.mark_text(radius=130, size=14).encode(text="Método:N")
-                donut_chart = (pie + text).properties(title="Distribuição por Método de Pagamento")
-                st.altair_chart(donut_chart, use_container_width=True)
-
-                if 'Data' in df.columns:
-                    st.subheader("Vendas por Data")
-                    date_column = 'DataFormatada' if 'DataFormatada' in df.columns else 'Data'
-                    daily_sales = df.groupby(date_column)[['Cartão', 'Dinheiro', 'Pix', 'Total']].sum().reset_index()
-                    daily_sales_long = pd.melt(daily_sales, id_vars=[date_column],
-                                                value_vars=['Cartão', 'Dinheiro', 'Pix'],
-                                                var_name='Método', value_name='Valor')
-                    bar_chart = alt.Chart(daily_sales_long).mark_bar().encode(
-                        x=alt.X(f'{date_column}:N', title='Data', sort=None),
-                        y=alt.Y('sum(Valor):Q', title='Valor (R$)'),
-                        color=alt.Color('Método:N', legend=alt.Legend(title="Método de Pagamento")),
-                        tooltip=[date_column, 'Método', 'Valor']
-                    ).properties(title='Vendas Diárias por Método de Pagamento')
-                    st.altair_chart(bar_chart, use_container_width=True)
-
-                    line_chart = alt.Chart(daily_sales).mark_line(point=True).encode(
-                        x=alt.X(f'{date_column}:N', title='Data', sort=None),
-                        y=alt.Y('Total:Q', title='Total de Vendas (R$)'),
-                        tooltip=[date_column, 'Total']
-                    ).properties(title='Tendência de Vendas Totais')
-                    st.altair_chart(line_chart, use_container_width=True)
-                else:
-                    st.info("Não há dados para exibir os gráficos.")
-            else:
-                st.info("Não há dados para exibir.")
-
     with tab3:
-        st.header("Análise Detalhada de Capital")
+        st.header("Análise Detalhada de Vendas")
         with st.spinner("Carregando dados..."):
             df_raw, _ = read_google_sheet()
             if not df_raw.empty:
@@ -174,44 +113,48 @@ def main():
                     st.dataframe(df_filtered[['DataFormatada', 'Cartão', 'Dinheiro', 'Pix', 'Total']]
                                  if 'DataFormatada' in df_filtered.columns else df_filtered, use_container_width=True)
 
-                    st.subheader("Distribuição por Método de Pagamento")
-                    payment_filtered = pd.DataFrame({
-                        'Método': ['Cartão', 'Dinheiro', 'PIX'],
-                        'Valor': [df_filtered['Cartão'].sum(), df_filtered['Dinheiro'].sum(), df_filtered['Pix'].sum()]
-                    })
-                    base_pie = alt.Chart(payment_filtered).encode(
-                        theta=alt.Theta("Valor:Q", stack=True),
-                        color=alt.Color("Método:N", legend=alt.Legend(title="Método de Pagamento")),
-                        tooltip=["Método", "Valor"]
-                    )
-                    pie_chart = base_pie.mark_arc(outerRadius=120)
-                    text_pie = base_pie.mark_text(radius=140).encode(text=alt.Text('Valor:Q', format='.1f'))
-                    final_pie = pie_chart + text_pie
-                    st.altair_chart(final_pie, use_container_width=True)
+                    col1, col2 = st.columns(2) # Dividindo a tela em duas colunas para os gráficos
 
-                    st.subheader("Vendas Diárias por Método de Pagamento")
-                    date_column_filtered = 'DataFormatada' if 'DataFormatada' in df_filtered.columns else 'Data'
-                    daily_filtered = df_filtered.groupby(date_column_filtered)[['Cartão', 'Dinheiro', 'Pix']].sum().reset_index()
-                    daily_filtered_long = pd.melt(daily_filtered, id_vars=[date_column_filtered],
-                                                    value_vars=['Cartão', 'Dinheiro', 'Pix'],
-                                                    var_name='Método', value_name='Valor')
-                    bar_chart_filtered = alt.Chart(daily_filtered_long).mark_bar().encode(
-                        x=alt.X(f'{date_column_filtered}:N', title='Data', sort=None),
-                        y=alt.Y('sum(Valor):Q', title='Valor (R$)'),
-                        color=alt.Color('Método:N', legend=alt.Legend(title="Método de Pagamento")),
-                        tooltip=[date_column_filtered, 'Método', 'Valor']
-                    ).properties(title='Vendas Diárias por Método de Pagamento')
-                    st.altair_chart(bar_chart_filtered, use_container_width=True)
+                    with col1:
+                        st.subheader("Distribuição por Método de Pagamento")
+                        payment_filtered = pd.DataFrame({
+                            'Método': ['Cartão', 'Dinheiro', 'PIX'],
+                            'Valor': [df_filtered['Cartão'].sum(), df_filtered['Dinheiro'].sum(), df_filtered['Pix'].sum()]
+                        })
+                        base_pie = alt.Chart(payment_filtered).encode(
+                            theta=alt.Theta("Valor:Q", stack=True),
+                            color=alt.Color("Método:N", legend=alt.Legend(title="Método de Pagamento")),
+                            tooltip=["Método", "Valor"]
+                        )
+                        pie_chart = base_pie.mark_arc(outerRadius=150) # Aumentando o raio
+                        text_pie = base_pie.mark_text(radius=170).encode(text=alt.Text('Valor:Q', format='.1f'))
+                        final_pie = pie_chart + text_pie
+                        st.altair_chart(final_pie, use_container_width=True)
 
-                    st.subheader("Acúmulo de Capital ao Longo do Tempo")
-                    df_accumulated = df_filtered.sort_values('Data').copy()
-                    df_accumulated['Total Acumulado'] = df_accumulated['Total'].cumsum()
-                    acum_chart = alt.Chart(df_accumulated).mark_line(point=True).encode(
-                        x=alt.X('DataFormatada:N', title='Data'),
-                        y=alt.Y('Total Acumulado:Q', title='Capital Acumulado (R$)'),
-                        tooltip=['DataFormatada', 'Total Acumulado']
-                    ).properties(title='Acúmulo de Capital ao Longo do Tempo')
-                    st.altair_chart(acum_chart, use_container_width=True)
+                        st.subheader("Acúmulo de Capital ao Longo do Tempo")
+                        df_accumulated = df_filtered.sort_values('Data').copy()
+                        df_accumulated['Total Acumulado'] = df_accumulated['Total'].cumsum()
+                        acum_chart = alt.Chart(df_accumulated).mark_line(point=True).encode(
+                            x=alt.X('DataFormatada:N', title='Data'),
+                            y=alt.Y('Total Acumulado:Q', title='Capital Acumulado (R$)'),
+                            tooltip=['DataFormatada', 'Total Acumulado']
+                        ).properties(title='Acúmulo de Capital') # Título mais curto
+                        st.altair_chart(acum_chart, use_container_width=True)
+
+                    with col2:
+                        st.subheader("Vendas Diárias por Método de Pagamento")
+                        date_column_filtered = 'DataFormatada' if 'DataFormatada' in df_filtered.columns else 'Data'
+                        daily_filtered = df_filtered.groupby(date_column_filtered)[['Cartão', 'Dinheiro', 'Pix']].sum().reset_index()
+                        daily_filtered_long = pd.melt(daily_filtered, id_vars=[date_column_filtered],
+                                                        value_vars=['Cartão', 'Dinheiro', 'Pix'],
+                                                        var_name='Método', value_name='Valor')
+                        bar_chart_filtered = alt.Chart(daily_filtered_long).mark_bar().encode(
+                            x=alt.X(f'{date_column_filtered}:N', title='Data', sort=None, axis=alt.Axis(labelAngle=-45)), # Rotacionando labels
+                            y=alt.Y('sum(Valor):Q', title='Valor (R$)'),
+                            color=alt.Color('Método:N', legend=alt.Legend(title="Pagamento")), # Título da legenda menor
+                            tooltip=[date_column_filtered, 'Método', 'Valor']
+                        ).properties(title='Vendas Diárias por Método') # Título mais curto
+                        st.altair_chart(bar_chart_filtered, use_container_width=True)
 
                 else:
                     st.info("Não há dados de data para análise.")
