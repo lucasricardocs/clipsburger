@@ -397,11 +397,11 @@ def main():
                             st.metric("Média Diária", f"R$ {media_diaria:.2f}")
                         else:
                             st.warning("Selecione pelo menos um dia dentro do período para calcular a média diária.")
-                    else:  # Este else corresponde ao 'if 'Data' in df.columns and ...:'
+                    else:
                         st.warning("Selecione pelo menos um ano para visualizar os dados.")
-                else:  # Este else corresponde ao 'if not df_raw.empty:'
+                else:
                     st.error("Formato de data não reconhecido. Não é possível criar a análise temporal.")
-            else:  # Este else corresponde ao 'if st.button("Carregar Dados", ...):'
+            else:
                 st.info("Não há dados para analisar ou houve um problema ao carregar a planilha.")
 
 if __name__ == "__main__":
