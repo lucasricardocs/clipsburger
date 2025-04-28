@@ -1,197 +1,65 @@
 import streamlit as st
+import gspread
+from google.oauth2.service_account import Credentials
 import pandas as pd
 import altair as alt
-from google.oauth2.service_account import Credentials
-from googleapiclient.discovery import build
 
-# Função para autenticar e acessar o Google Sheets
-def authenticate_google_sheets(credentials_file):
-    creds = Credentials.from_service_account_file(credentials_file, scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"])
-    service = build("sheets", "v4", credentials=creds)
-    return service
+# Função para ler a planilha do Google Sheets
+def read_google_sheet():
+    # Carregando as credenciais do secrets do Streamlit
+    credentials_dict = st.secrets["google_credentials"]
+    
+    # Crie as credenciais a partir do dicionário do secrets
+    creds = Credentials.from_service_account_info(credentials_dict)
+    
+    # Autenticação com o Google Sheets
+    gc = gspread.authorize(creds)
 
-# Função para carregar dados da planilha
-def load_data_from_google_sheets(spreadsheet_id, range_name, credentials_file):
-    service = authenticate_google_sheets(credentials_file)
-    sheet = service.spreadsheets()
-    result = sheet.values().get(spreadsheetId=spreadsheet_id, range=range_name).execute()
-    values = result.get('values', [])
+    # ID da planilha e nome da aba
+    spreadsheet_id = '1NTScbiIna-iE7roQ9XBdjUOssRihTFFby4INAAQNXTg'
+    worksheet_name = 'Vendas'
     
-    # Verifique os dados recebidos
-    if not values:
-        st.error("Não há dados na planilha.")
-        return pd.DataFrame()
+    # Abrindo a planilha e a aba
+    worksheet = gc.open_by_key(spreadsheet_id).worksheet(worksheet_name)
     
-    # Convertendo os dados para DataFrame
-    df = pd.DataFrame(values[1:], columns=values[0])
-    
-    # Verificando se a coluna "Data" e as de pagamentos existem
-    required_columns = ['Data', 'Cartão', 'Dinheiro', 'Pix']
-    missing_columns = [col for col in required_columns if col not in df.columns]
-    
-    if missing_columns:
-        st.error(f"Faltam as seguintes colunas na planilha: {', '.join(missing_columns)}.")
-        return pd.DataFrame()
+    # Lendo os dados da planilha
+    rows = worksheet.get_all_records()
 
-    # Convertendo a coluna 'Data' para datetime
-    df['Data'] = pd.to_datetime(df['Data'], format='%d/%m/%Y', errors='coerce')
-    
-    # Verificando se há valores ausentes ou inválidos
-    if df['Data'].isnull().any():
-        st.warning("Existem valores inválidos na coluna 'Data'.")
+    # Convertendo para DataFrame
+    df = pd.DataFrame(rows)
     
     return df
 
-# Função para criar gráfico de distribuição de pagamentos
-def create_payment_distribution_graph(df):
-    if df.empty:
-        return alt.Chart().mark_text().encode(
-            text="Sem dados disponíveis"
-        ).properties(width=800, height=400)
+# Função para criar o gráfico de acumulação de patrimônio
+def create_accumulated_wealth_graph(df):
+    # Calculando a acumulação de patrimônio
+    df['Total'] = df[['Cartão', 'Dinheiro', 'Pix']].sum(axis=1)
+    df['Acumulado'] = df['Total'].cumsum()
 
-    # Verificando se as colunas estão presentes no DataFrame
-    required_columns = ['Data', 'Cartão', 'Dinheiro', 'Pix']
-    if not all(col in df.columns for col in required_columns):
-        st.error("Algumas colunas necessárias não estão presentes no DataFrame.")
-        return alt.Chart().mark_text().encode(
-            text="Erro nas colunas do DataFrame"
-        ).properties(width=800, height=400)
+    # Gráfico de linha para acumulação de patrimônio
+    chart = alt.Chart(df).mark_line().encode(
+        x=alt.X('Data:T', title='Data'),
+        y=alt.Y('Acumulado:Q', title='Patrimônio Acumulado'),
+    ).properties(
+        width=800,
+        height=400
+    )
 
-    try:
-        # Gráfico de barras para cada tipo de pagamento (Cartão, Dinheiro, Pix)
-        chart = alt.Chart(df).mark_bar().encode(
-            x=alt.X('Data:T', title='Data'),
-            y=alt.Y('Cartão:Q', title='Valor do Cartão'),
-            color=alt.value('blue'),
-            tooltip=['Data:T', 'Cartão:Q']
-        ).properties(width=800, height=400).interactive()
+    return chart
 
-        chart2 = alt.Chart(df).mark_bar().encode(
-            x=alt.X('Data:T', title='Data'),
-            y=alt.Y('Dinheiro:Q', title='Valor do Dinheiro'),
-            color=alt.value('green'),
-            tooltip=['Data:T', 'Dinheiro:Q']
-        ).properties(width=800, height=400).interactive()
-
-        chart3 = alt.Chart(df).mark_bar().encode(
-            x=alt.X('Data:T', title='Data'),
-            y=alt.Y('Pix:Q', title='Valor do Pix'),
-            color=alt.value('orange'),
-            tooltip=['Data:T', 'Pix:Q']
-        ).properties(width=800, height=400).interactive()
-
-        return chart & chart2 & chart3
-
-    except KeyError as e:
-        st.error(f"Erro ao criar gráfico de distribuição de pagamentos: {e}")
-        return alt.Chart().mark_text().encode(
-            text="Erro ao gerar gráfico"
-        ).properties(width=800, height=400)
-
-# Função para criar gráfico de capital acumulado
-def create_accumulated_capital_graph(df):
-    if df.empty:
-        return alt.Chart().mark_text().encode(
-            text="Sem dados disponíveis"
-        ).properties(width=800, height=400)
-
-    # Verificando se as colunas estão presentes no DataFrame
-    required_columns = ['Data', 'Cartão', 'Dinheiro', 'Pix']
-    if not all(col in df.columns for col in required_columns):
-        st.error("Algumas colunas necessárias não estão presentes no DataFrame.")
-        return alt.Chart().mark_text().encode(
-            text="Erro nas colunas do DataFrame"
-        ).properties(width=800, height=400)
-
-    try:
-        # Calculando o acumulado para cada tipo de pagamento
-        df['Acumulado_Cartao'] = df['Cartão'].cumsum()
-        df['Acumulado_Dinheiro'] = df['Dinheiro'].cumsum()
-        df['Acumulado_Pix'] = df['Pix'].cumsum()
-
-        chart = alt.Chart(df).mark_line().encode(
-            x=alt.X('Data:T', title='Data'),
-            y=alt.Y('Acumulado_Cartao:Q', title='Capital Acumulado Cartão'),
-            color=alt.value('blue'),
-            tooltip=['Data:T', 'Acumulado_Cartao:Q']
-        ).properties(width=800, height=400)
-
-        chart2 = alt.Chart(df).mark_line().encode(
-            x=alt.X('Data:T', title='Data'),
-            y=alt.Y('Acumulado_Dinheiro:Q', title='Capital Acumulado Dinheiro'),
-            color=alt.value('green'),
-            tooltip=['Data:T', 'Acumulado_Dinheiro:Q']
-        ).properties(width=800, height=400)
-
-        chart3 = alt.Chart(df).mark_line().encode(
-            x=alt.X('Data:T', title='Data'),
-            y=alt.Y('Acumulado_Pix:Q', title='Capital Acumulado Pix'),
-            color=alt.value('orange'),
-            tooltip=['Data:T', 'Acumulado_Pix:Q']
-        ).properties(width=800, height=400)
-
-        return chart & chart2 & chart3
-
-    except KeyError as e:
-        st.error(f"Erro ao criar gráfico de capital acumulado: {e}")
-        return alt.Chart().mark_text().encode(
-            text="Erro ao gerar gráfico"
-        ).properties(width=800, height=400)
-
-# Função principal para exibir o Streamlit app
+# Função principal do aplicativo
 def main():
-    st.title("Controle de Vendas")
-
-    # Seção para seleção de mês e ano
-    st.sidebar.header("Filtrar por mês e ano")
-    year = st.sidebar.selectbox("Ano", options=[2025, 2026], index=0)
-    month = st.sidebar.selectbox("Mês", options=["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-                                                 "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"], index=3)
-
-    # Carregar os dados da planilha
-    try:
-        df = load_data_from_google_sheets(SPREADSHEET_ID, RANGE_NAME, 'credentials.json')  # O caminho para o credentials.json
-        if not df.empty:
-            st.write(df)  # Exibe o dataframe
-    except Exception as e:
-        st.error(f"Erro ao carregar os dados: {e}")
-        return
-
-    # Exibição do gráfico de distribuição de pagamentos
-    st.subheader("Distribuição de Pagamentos")
-    st.altair_chart(create_payment_distribution_graph(df), use_container_width=True)
-
-    # Exibição do gráfico de capital acumulado
-    st.subheader("Capital Acumulado")
-    st.altair_chart(create_accumulated_capital_graph(df), use_container_width=True)
-
-    # Formulário para cadastrar novos dados
-    st.subheader("Cadastrar Nova Venda")
-
-    with st.form(key="data_form"):
-        new_date = st.date_input("Data", value=pd.to_datetime("2025-04-29"))
-        new_cartao = st.number_input("Cartão", min_value=0, step=1)
-        new_dinheiro = st.number_input("Dinheiro", min_value=0, step=1)
-        new_pix = st.number_input("Pix", min_value=0, step=1)
-
-        submit_button = st.form_submit_button("Cadastrar")
-
-        if submit_button:
-            # Adicionar novo registro ao DataFrame
-            new_data = {
-                'Data': new_date,
-                'Cartão': new_cartao,
-                'Dinheiro': new_dinheiro,
-                'Pix': new_pix
-            }
-            new_row = pd.DataFrame([new_data])
-            df = pd.concat([df, new_row], ignore_index=True)
-
-            st.success(f"Nova venda registrada para {new_date.strftime('%d/%m/%Y')}.")
-
-    # Exibição da tabela com os dados atualizados
-    st.subheader("Tabela de Vendas")
-    st.write(df)
+    st.title("Leitura de Planilha Google e Acumulação de Patrimônio")
+    
+    # Botão para carregar dados da planilha
+    if st.button("Carregar dados da planilha"):
+        df = read_google_sheet()
+        
+        # Exibindo os dados da planilha
+        st.write("Dados da planilha:", df)
+        
+        # Exibindo o gráfico de acumulação de patrimônio
+        st.altair_chart(create_accumulated_wealth_graph(df), use_container_width=True)
 
 if __name__ == "__main__":
     main()
