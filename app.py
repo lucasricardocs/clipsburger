@@ -12,7 +12,7 @@ st.set_page_config(page_title="Sistema de Registro de Vendas", layout="centered"
 def read_google_sheet():
     """Função para ler os dados da planilha Google Sheets"""
     try:
-        SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+        SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/spreadsheets.readonly', 'https://www.googleapis.com/auth/drive.readonly']
         credentials_dict = st.secrets["google_credentials"]
         creds = Credentials.from_service_account_info(credentials_dict, scopes=SCOPES)
         gc = gspread.authorize(creds)
@@ -121,14 +121,14 @@ def main():
                     base_pie = alt.Chart(payment_filtered).encode(
                         theta=alt.Theta("Valor:Q", stack=True),
                         color=alt.Color("Método:N", legend=alt.Legend(title="Método de Pagamento")),
-                        tooltip=["Método", alt.Tooltip('Valor:Q', format='R$ .2f')] # Formatação BRL no tooltip
+                        tooltip=["Método", "Valor"]
                     ).properties(
                         width=400,
                         height=400,
                         title='Distribuição por Método de Pagamento'
                     )
                     pie_chart = base_pie.mark_arc(outerRadius=150)
-                    text_pie = base_pie.mark_text(radius=170).encode(text=alt.Text('Valor:Q', format='R$ .1f')) # Formatação BRL no texto
+                    text_pie = base_pie.mark_text(radius=170).encode(text=alt.Text('Valor:Q', format='.1f'))
                     final_pie = pie_chart + text_pie
                     st.altair_chart(final_pie, use_container_width=True)
 
@@ -142,7 +142,7 @@ def main():
                         x=alt.X(f'{date_column_filtered}:N', title='Data', sort=None, axis=alt.Axis(labelAngle=-45)),
                         y=alt.Y('sum(Valor):Q', title='Valor (R$)'),
                         color=alt.Color('Método:N', legend=alt.Legend(title="Pagamento")),
-                        tooltip=[date_column_filtered, 'Método', alt.Tooltip('Valor:Q', format='R$ .2f')] # Formatação BRL no tooltip
+                        tooltip=[date_column_filtered, 'Método', 'Valor']
                     ).properties(
                         width=600,
                         height=400,
@@ -154,9 +154,9 @@ def main():
                     df_accumulated = df_filtered.sort_values('Data').copy()
                     df_accumulated['Total Acumulado'] = df_accumulated['Total'].cumsum()
                     acum_chart = alt.Chart(df_accumulated).mark_line(point=True).encode(
-                        x=alt.X('Data:T', title='Data'),
+                        x=alt.X('Data:T', title='Data'), # Usando o tipo 'T' para temporal
                         y=alt.Y('Total Acumulado:Q', title='Capital Acumulado (R$)'),
-                        tooltip=['DataFormatada', alt.Tooltip('Total Acumulado:Q', format='R$ .2f')] # Formatação BRL no tooltip
+                        tooltip=['DataFormatada', 'Total Acumulado']
                     ).properties(
                         width=600,
                         height=400,
