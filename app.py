@@ -36,7 +36,7 @@ def read_google_sheet():
     service = authenticate_with_google()
 
     # ID da planilha e intervalo
-    spreadsheet_id = 'VendasPitDog'  # Nome da planilha, substitua pelo ID correto
+    spreadsheet_id = 'https://docs.google.com/spreadsheets/d/1NTScbiIna-iE7roQ9XBdjUOssRihTFFby4INAAQNXTg/edit'  # Nome da planilha, substitua pelo ID correto
     range_ = 'Vendas!A2:D'  # Nome da aba (Vendas) e o intervalo (A2:D)
 
     # Fazendo a requisição para ler os dados
