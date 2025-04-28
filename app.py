@@ -1,6 +1,8 @@
 import streamlit as st
 import gspread
 import pandas as pd
+import altair as alt
+import numpy as np
 from datetime import datetime
 from google.oauth2.service_account import Credentials
 from gspread.exceptions import SpreadsheetNotFound
@@ -151,20 +153,74 @@ def main():
                     with col4:
                         st.metric("Total Geral", f"R$ {df['Total'].sum():.2f}")
                     
-                    # Criar gráficos
+                    # Criar gráficos com Altair
                     st.subheader("Visualização dos Dados")
                     
-                    # Gráfico de pizza para métodos de pagamento
-                    payment_data = {
+                    # Preparar dados para o gráfico de pizza
+                    payment_data = pd.DataFrame({
                         'Método': ['Cartão', 'Dinheiro', 'PIX'],
                         'Valor': [df['Cartão'].sum(), df['Dinheiro'].sum(), df['Pix'].sum()]
-                    }
-                    payment_df = pd.DataFrame(payment_data)
+                    })
                     
+                    # Gráfico de pizza simplificado com Altair
                     st.write("**Distribuição por Método de Pagamento**")
                     
-                    # Usando o chart nativo do Streamlit para o gráfico de pizza
-                    st.pie_chart(payment_df.set_index('Método'))
+                    # Criando o gráfico de donut com Altair
+                    base = alt.Chart(payment_data).encode(
+                        theta=alt.Theta("Valor:Q", stack=True),
+                        color=alt.Color("Método:N", legend=alt.Legend(title="Método de Pagamento")),
+                        tooltip=["Método", "Valor"]
+                    )
+                    
+                    pie = base.mark_arc(innerRadius=50, outerRadius=100)
+                    text = base.mark_text(radius=130, size=14).encode(text="Método:N")
+                    
+                    donut_chart = (pie + text).properties(
+                        width=400,
+                        height=400,
+                        title="Distribuição por Método de Pagamento"
+                    )
+                    
+                    st.altair_chart(donut_chart, use_container_width=True)
+                    
+                    # Adicionar gráfico de barras com os totais diários
+                    if 'Data' in df.columns:
+                        st.subheader("Vendas por Data")
+                        
+                        # Agrupar por data e somar os valores
+                        daily_sales = df.groupby('Data').sum().reset_index()
+                        
+                        # Convertendo para formato longo (tidy) para Altair
+                        daily_sales_long = pd.melt(
+                            daily_sales, 
+                            id_vars=['Data'], 
+                            value_vars=['Cartão', 'Dinheiro', 'Pix'],
+                            var_name='Método',
+                            value_name='Valor'
+                        )
+                        
+                        # Criando o gráfico de barras empilhadas com Altair
+                        bar_chart = alt.Chart(daily_sales_long).mark_bar().encode(
+                            x=alt.X('Data:N', title='Data', sort=None),
+                            y=alt.Y('sum(Valor):Q', title='Valor (R$)'),
+                            color=alt.Color('Método:N', legend=alt.Legend(title="Método de Pagamento")),
+                            tooltip=['Data', 'Método', 'Valor']
+                        ).properties(
+                            title='Vendas Diárias por Método de Pagamento'
+                        )
+                        
+                        st.altair_chart(bar_chart, use_container_width=True)
+                        
+                        # Adicionar gráfico de linha para tendência de vendas totais
+                        line_chart = alt.Chart(daily_sales).mark_line(point=True).encode(
+                            x=alt.X('Data:N', title='Data', sort=None),
+                            y=alt.Y('Total:Q', title='Total de Vendas (R$)'),
+                            tooltip=['Data', 'Total']
+                        ).properties(
+                            title='Tendência de Vendas Totais'
+                        )
+                        
+                        st.altair_chart(line_chart, use_container_width=True)
                     
                 else:
                     st.info("Não há dados para exibir ou houve um problema ao carregar a planilha.")
