@@ -5,6 +5,7 @@ import altair as alt
 from datetime import datetime
 from google.oauth2.service_account import Credentials
 from gspread.exceptions import SpreadsheetNotFound
+from streamlit_pdf import st_pdf
 
 # Configuração da página
 st.set_page_config(page_title="Sistema de Registro de Vendas", layout="centered")
@@ -125,7 +126,6 @@ def main():
                     ).properties(
                         width=400,
                         height=400,
-                        #title='Distribuição por Método de Pagamento'
                     )
                     pie_chart = base_pie.mark_arc(outerRadius=150)
                     text_pie = base_pie.mark_text(radius=170).encode(text=alt.Text('Valor:Q', format='.1f'))
@@ -146,7 +146,6 @@ def main():
                     ).properties(
                         width=600,
                         height=400,
-                        #title='Vendas Diárias por Método de Pagamento'
                     )
                     st.altair_chart(bar_chart_filtered, use_container_width=True)
 
@@ -160,9 +159,13 @@ def main():
                     ).properties(
                         width=600,
                         height=400,
-                        #title='Acúmulo de Capital ao Longo do Tempo'
                     )
                     st.altair_chart(acum_chart, use_container_width=True)
+
+                    # Botão de exportar para PDF
+                    pdf_export = st_pdf(unsafe_allow_html=True)
+                    if pdf_export:
+                        st.success("PDF gerado com sucesso!")
 
                 else:
                     st.info("Não há dados de data para análise.")
