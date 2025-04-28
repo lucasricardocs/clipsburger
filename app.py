@@ -1,29 +1,59 @@
+import streamlit as st
+import pandas as pd
+import json
 import os
-import google.auth
-from googleapiclient.discovery import build
-from google.oauth2.service_account import Credentials
 
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+
+# Função para pegar as credenciais
 def get_google_credentials():
-    # Verifica se a variável de ambiente GOOGLE_CREDENTIALS está definida
     credentials_json = os.getenv('GOOGLE_CREDENTIALS')
     if not credentials_json:
         raise ValueError("A variável de ambiente GOOGLE_CREDENTIALS não está definida!")
-    
-    # Carrega as credenciais do arquivo de serviço
-    credentials = Credentials.from_service_account_info(credentials_json)
+
+    # Carrega a variável de ambiente como dicionário
+    credentials_info = json.loads(credentials_json)
+    credentials = service_account.Credentials.from_service_account_info(credentials_info)
+
     return credentials
 
+# Função para ler a planilha
 def read_google_sheet():
-    # Carrega as credenciais
     credentials = get_google_credentials()
     
-    # Use as credenciais para acessar a planilha
     service = build('sheets', 'v4', credentials=credentials)
-    spreadsheet_id = 'https://docs.google.com/spreadsheets/d/1NTScbiIna-iE7roQ9XBdjUOssRihTFFby4INAAQNXTg/edit'
-    range_ = 'Vendas!A1:D10'  # Alterar o range conforme necessário
     
-    # Obter dados da planilha
-    result = service.spreadsheets().values().get(spreadsheetId=spreadsheet_id, range=range_).execute()
+    # Seu ID da planilha
+    spreadsheet_id = '1NTScbiIna-iE7roQ9XBdjUOssRihTFFby4INAAQNXTg'
+    range_name = 'Vendas!A1:D'  # Nome da aba e intervalo de colunas
+    
+    sheet = service.spreadsheets()
+    result = sheet.values().get(spreadsheetId=spreadsheet_id, range=range_name).execute()
     values = result.get('values', [])
+
+    # Converter os dados para DataFrame, se tiver dados
+    if not values:
+        return pd.DataFrame()
     
-    return values
+    headers = values[0]
+    rows = values[1:]
+    df = pd.DataFrame(rows, columns=headers)
+
+    return df
+
+# Função principal do Streamlit
+def main():
+    st.title("Leitura da Planilha de Vendas - PitDog")
+
+    try:
+        df = read_google_sheet()
+        if df.empty:
+            st.warning("Nenhum dado encontrado na planilha.")
+        else:
+            st.dataframe(df)
+    except Exception as e:
+        st.error(f"Ocorreu um erro: {e}")
+
+if __name__ == "__main__":
+    main()
