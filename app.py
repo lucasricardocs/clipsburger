@@ -4,6 +4,30 @@ import altair as alt
 import pandas as pd
 from datetime import datetime, timedelta
 import calendar
+import locale
+
+# Tentar configurar o locale para português
+try:
+    locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')
+except:
+    try:
+        locale.setlocale(locale.LC_ALL, 'pt_BR')
+    except:
+        try:
+            locale.setlocale(locale.LC_ALL, 'Portuguese_Brazil')
+        except:
+            pass  # Se falhar, continuamos com o locale padrão
+
+# Nomes dos meses em português (backup caso o locale não funcione)
+MESES_PT = {
+    1: "Janeiro", 2: "Fevereiro", 3: "Março", 4: "Abril",
+    5: "Maio", 6: "Junho", 7: "Julho", 8: "Agosto",
+    9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"
+}
+
+# Função para obter nome do mês em português
+def get_nome_mes(mes_numero):
+    return MESES_PT.get(mes_numero, str(mes_numero))
 
 # Configuração inicial do banco de dados
 def setup_database():
@@ -40,13 +64,15 @@ def get_vendas_data():
     df = pd.read_sql(query, conn)
     conn.close()
     
+    if df.empty:
+        return pd.DataFrame()
+    
     # Convertendo a coluna de data para datetime
     df['data'] = pd.to_datetime(df['data'])
     
     # Adicionando colunas para facilitar filtragem
     df['ano'] = df['data'].dt.year
     df['mes'] = df['data'].dt.month
-    df['mes_nome'] = df['data'].dt.month_name()
     df['dia'] = df['data'].dt.day
     df['dia_semana'] = df['data'].dt.day_name()
     
@@ -68,18 +94,37 @@ def main():
     # Obter dados para popular os filtros
     df = get_vendas_data()
     
+    ano_atual = datetime.now().year
+    mes_atual = datetime.now().month
+    
     if not df.empty:
         anos_disponiveis = sorted(df['ano'].unique())
-        meses_disponiveis = range(1, 13)  # 1 a 12
-        
-        # Filtros de data
-        ano_selecionado = st.sidebar.selectbox("Ano", anos_disponiveis, index=len(anos_disponiveis)-1 if anos_disponiveis else 0)
-        mes_selecionado = st.sidebar.selectbox("Mês", meses_disponiveis, format_func=lambda x: calendar.month_name[x])
-        
-        # Aplicar filtros
+        if not anos_disponiveis:  # Se não houver dados
+            anos_disponiveis = [ano_atual]
+    else:
+        anos_disponiveis = [ano_atual]
+    
+    meses_disponiveis = range(1, 13)  # 1 a 12
+    
+    # Filtros de data
+    ano_selecionado = st.sidebar.selectbox(
+        "Ano", 
+        anos_disponiveis, 
+        index=anos_disponiveis.index(ano_atual) if ano_atual in anos_disponiveis else 0
+    )
+    
+    mes_selecionado = st.sidebar.selectbox(
+        "Mês", 
+        meses_disponiveis, 
+        index=mes_atual-1,
+        format_func=get_nome_mes
+    )
+    
+    # Aplicar filtros
+    if not df.empty:
         df_filtrado = df[(df['ano'] == ano_selecionado) & (df['mes'] == mes_selecionado)]
     else:
-        df_filtrado = df
+        df_filtrado = pd.DataFrame()
     
     # Layout usando abas
     tab1, tab2, tab3 = st.tabs(["Cadastro", "Resumo Mensal", "Análise Detalhada"])
@@ -107,11 +152,13 @@ def main():
             else:
                 st.error('Por favor, preencha todos os campos corretamente.')
     
+    nome_mes = get_nome_mes(mes_selecionado)
+    
     with tab2:
         if df_filtrado.empty:
-            st.warning(f"Não há dados disponíveis para {calendar.month_name[mes_selecionado]} de {ano_selecionado}.")
+            st.warning(f"Não há dados disponíveis para {nome_mes} de {ano_selecionado}.")
         else:
-            st.header(f'Resumo de Vendas - {calendar.month_name[mes_selecionado]} de {ano_selecionado}')
+            st.header(f'Resumo de Vendas - {nome_mes} de {ano_selecionado}')
             
             # Estatísticas resumidas
             col1, col2, col3, col4 = st.columns(4)
@@ -187,16 +234,16 @@ def main():
             grafico_combinado = alt.layer(grafico_diario, grafico_acumulado).resolve_scale(
                 y='independent'
             ).properties(
-                title=f'Vendas Diárias e Acumuladas - {calendar.month_name[mes_selecionado]} de {ano_selecionado}'
+                title=f'Vendas Diárias e Acumuladas - {nome_mes} de {ano_selecionado}'
             )
             
             st.altair_chart(grafico_combinado, use_container_width=True)
             
     with tab3:
         if df_filtrado.empty:
-            st.warning(f"Não há dados disponíveis para {calendar.month_name[mes_selecionado]} de {ano_selecionado}.")
+            st.warning(f"Não há dados disponíveis para {nome_mes} de {ano_selecionado}.")
         else:
-            st.header(f'Análise Detalhada - {calendar.month_name[mes_selecionado]} de {ano_selecionado}')
+            st.header(f'Análise Detalhada - {nome_mes} de {ano_selecionado}')
             
             # Distribuição percentual por forma de pagamento
             st.subheader('Distribuição por Forma de Pagamento')
