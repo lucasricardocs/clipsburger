@@ -5,7 +5,11 @@ import altair as alt
 from datetime import datetime
 from google.oauth2.service_account import Credentials
 from gspread.exceptions import SpreadsheetNotFound
-from streamlit_pdf import st_pdf
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib import colors
+import os
 
 # Configuração da página
 st.set_page_config(page_title="Sistema de Registro de Vendas", layout="centered")
@@ -64,6 +68,66 @@ def process_data(df):
             except Exception as e:
                 st.error(f"Erro ao processar a coluna 'Data': {e}")
     return df
+
+def generate_pdf_report(df_filtered, pie_chart, bar_chart, acum_chart):
+    """Função para gerar o relatório em PDF"""
+    doc = SimpleDocTemplate("analise_vendas.pdf", pagesize=letter)
+    elements = []
+    styles = getSampleStyleSheet()
+
+    elements.append(Paragraph("Análise Detalhada de Vendas", styles['h1']))
+    elements.append(Spacer(1, 12))
+
+    # Adicionar tabela de dados
+    if 'DataFormatada' in df_filtered.columns:
+        table_data = [df_filtered.columns.tolist()] + df_filtered[['DataFormatada', 'Cartão', 'Dinheiro', 'Pix', 'Total']].values.tolist()
+    else:
+        table_data = [df_filtered.columns.tolist()] + df_filtered.values.tolist()
+
+    table = Table(table_data)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+    ]))
+    elements.append(table)
+    elements.append(Spacer(1, 12))
+
+    # Salvar gráficos Altair como SVG em memória e adicionar como imagens
+    pie_chart_svg = pie_chart.to_svg()
+    with open("pie_chart.svg", "w") as f:
+        f.write(pie_chart_svg)
+    elements.append(Paragraph("Distribuição por Método de Pagamento", styles['h2']))
+    elements.append(Image("pie_chart.svg", width=400, height=400))
+    elements.append(Spacer(1, 12))
+    os.remove("pie_chart.svg") # Limpar arquivo temporário
+
+    bar_chart_svg = bar_chart.to_svg()
+    with open("bar_chart.svg", "w") as f:
+        f.write(bar_chart_svg)
+    elements.append(Paragraph("Vendas Diárias por Método de Pagamento", styles['h2']))
+    elements.append(Image("bar_chart.svg", width=600, height=400))
+    elements.append(Spacer(1, 12))
+    os.remove("bar_chart.svg") # Limpar arquivo temporário
+
+    acum_chart_svg = acum_chart.to_svg()
+    with open("acum_chart.svg", "w") as f:
+        f.write(acum_chart_svg)
+    elements.append(Paragraph("Acúmulo de Capital ao Longo do Tempo", styles['h2']))
+    elements.append(Image("acum_chart.svg", width=600, height=400))
+    os.remove("acum_chart.svg") # Limpar arquivo temporário
+
+    doc.build(elements)
+
+    with open("analise_vendas.pdf", "rb") as pdf_file:
+        PDFbyte = pdf_file.read()
+    os.remove("analise_vendas.pdf") # Limpar arquivo temporário
+
+    return PDFbyte
 
 def main():
     st.title("📊 Sistema de Registro de Vendas")
@@ -162,10 +226,16 @@ def main():
                     )
                     st.altair_chart(acum_chart, use_container_width=True)
 
-                    # Botão de exportar para PDF
-                    pdf_export = st_pdf(unsafe_allow_html=True)
-                    if pdf_export:
-                        st.success("PDF gerado com sucesso!")
+                    # Botão para gerar e baixar o PDF
+                    if st.button("Exportar Análise para PDF"):
+                        with st.spinner("Gerando PDF..."):
+                            pdf_bytes = generate_pdf_report(df_filtered, final_pie, bar_chart_filtered, acum_chart)
+                            st.download_button(
+                                label="Baixar PDF",
+                                data=pdf_bytes,
+                                file_name="analise_vendas.pdf",
+                                mime="application/pdf"
+                            )
 
                 else:
                     st.info("Não há dados de data para análise.")
