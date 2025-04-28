@@ -91,7 +91,7 @@ def main():
                 else:
                     st.warning("Pelo menos um valor de venda deve ser maior que zero.")
 
-    with tab3:
+    #with tab3:
         st.header("Análise Detalhada de Vendas")
         with st.spinner("Carregando dados..."):
             df_raw, _ = read_google_sheet()
