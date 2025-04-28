@@ -1,40 +1,36 @@
 import streamlit as st
-import pandas as pd
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-import json
+import gspread
+from google.oauth2.service_account import Credentials
 
-# Título do app
-st.title("📄 Visualizador de Vendas - PitDog")
+def read_google_sheet():
+    # Carregando as credenciais do secrets do Streamlit
+    credentials_dict = st.secrets["google_credentials"]
+    
+    # Crie as credenciais a partir do dicionário do secrets
+    creds = Credentials.from_service_account_info(credentials_dict)
+    
+    # Autenticação com o Google Sheets
+    gc = gspread.authorize(creds)
 
-# 1. Ler credenciais do st.secrets
-creds_info = st.secrets["google_credentials"]
+    # ID da planilha e nome da aba
+    spreadsheet_id = '1NTScbiIna-iE7roQ9XBdjUOssRihTFFby4INAAQNXTg'
+    worksheet_name = 'Vendas'
+    
+    # Abrindo a planilha e a aba
+    worksheet = gc.open_by_key(spreadsheet_id).worksheet(worksheet_name)
+    
+    # Lendo os dados da planilha
+    rows = worksheet.get_all_records()
 
-# 2. Criar credenciais com google.oauth2
-credentials = service_account.Credentials.from_service_account_info(
-    creds_info,
-    scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"],
-)
+    # Exibindo as linhas
+    st.write(rows)
 
-# 3. Conectar ao Google Sheets
-service = build("sheets", "v4", credentials=credentials)
-sheet = service.spreadsheets()
+def main():
+    st.title("Leitura de Planilha Google")
+    
+    # Botão para carregar dados da planilha
+    if st.button("Carregar dados"):
+        read_google_sheet()
 
-# 4. ID da planilha (só o ID do link)
-SPREADSHEET_ID = "1NTScbiIna-iE7roQ9XBdjUOssRihTFFby4INAAQNXTg"
-RANGE_NAME = "Vendas"  # Nome da aba
-
-# 5. Buscar os dados
-try:
-    result = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range=RANGE_NAME).execute()
-    values = result.get("values", [])
-
-    if not values:
-        st.warning("Nenhum dado encontrado na planilha.")
-    else:
-        # Transformar em DataFrame
-        df = pd.DataFrame(values[1:], columns=values[0])
-        st.dataframe(df)
-
-except Exception as e:
-    st.error(f"Ocorreu um erro ao acessar a planilha: {e}")
+if __name__ == "__main__":
+    main()
