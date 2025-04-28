@@ -125,7 +125,7 @@ def main():
                     ).properties(
                         width=400,
                         height=400,
-                        title='Distribuição por Método de Pagamento'
+                        #title='Distribuição por Método de Pagamento'
                     )
                     pie_chart = base_pie.mark_arc(outerRadius=150)
                     text_pie = base_pie.mark_text(radius=170).encode(text=alt.Text('Valor:Q', format='.1f'))
@@ -146,7 +146,7 @@ def main():
                     ).properties(
                         width=600,
                         height=400,
-                        title='Vendas Diárias por Método de Pagamento'
+                        #title='Vendas Diárias por Método de Pagamento'
                     )
                     st.altair_chart(bar_chart_filtered, use_container_width=True)
 
@@ -160,7 +160,7 @@ def main():
                     ).properties(
                         width=600,
                         height=400,
-                        title='Acúmulo de Capital ao Longo do Tempo'
+                        #title='Acúmulo de Capital ao Longo do Tempo'
                     )
                     st.altair_chart(acum_chart, use_container_width=True)
 
