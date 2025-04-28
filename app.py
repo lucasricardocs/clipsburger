@@ -389,7 +389,8 @@ def main():
                         with col4:
                             st.metric("Total Geral", f"R$ {df_filtered['Total'].sum():.2f}")
 
-                       # Calcular média diária para o período selecionado
+
+                        # Calcular média diária para o período selecionado
                         dias_unicos = df_filtered['Data'].nunique()
                         if dias_unicos > 0:
                             media_diaria = df_filtered['Total'].sum() / dias_unicos
