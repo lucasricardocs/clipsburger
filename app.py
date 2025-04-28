@@ -47,16 +47,29 @@ def create_payment_distribution_graph(df):
         ).properties(width=800, height=400)
 
     try:
-        df_melted = df.melt(id_vars=['Data'], value_vars=['Cartão', 'Dinheiro', 'Pix'],
-                            var_name='Tipo de pagamento', value_name='Valor')
-
-        chart = alt.Chart(df_melted).mark_bar().encode(
+        # Gráfico de barras para cada tipo de pagamento (Cartão, Dinheiro, Pix)
+        chart = alt.Chart(df).mark_bar().encode(
             x=alt.X('Data:T', title='Data'),
-            y=alt.Y('sum(Valor):Q', title='Valor'),
-            color='Tipo de pagamento:N',
-            tooltip=['Data:T', 'sum(Valor):Q', 'Tipo de pagamento:N']
-        ).properties(width=800, height=400)
-        return chart
+            y=alt.Y('Cartão:Q', title='Valor do Cartão'),
+            color=alt.value('blue'),
+            tooltip=['Data:T', 'Cartão:Q']
+        ).properties(width=800, height=400).interactive()
+        
+        chart2 = alt.Chart(df).mark_bar().encode(
+            x=alt.X('Data:T', title='Data'),
+            y=alt.Y('Dinheiro:Q', title='Valor do Dinheiro'),
+            color=alt.value('green'),
+            tooltip=['Data:T', 'Dinheiro:Q']
+        ).properties(width=800, height=400).interactive()
+
+        chart3 = alt.Chart(df).mark_bar().encode(
+            x=alt.X('Data:T', title='Data'),
+            y=alt.Y('Pix:Q', title='Valor do Pix'),
+            color=alt.value('orange'),
+            tooltip=['Data:T', 'Pix:Q']
+        ).properties(width=800, height=400).interactive()
+
+        return chart & chart2 & chart3
 
     except KeyError as e:
         st.error(f"Erro ao criar gráfico de distribuição de pagamentos: {e}")
@@ -72,18 +85,33 @@ def create_accumulated_capital_graph(df):
         ).properties(width=800, height=400)
 
     try:
-        df_melted = df.melt(id_vars=['Data'], value_vars=['Cartão', 'Dinheiro', 'Pix'],
-                            var_name='Tipo de pagamento', value_name='Valor')
+        # Calculando o acumulado para cada tipo de pagamento
+        df['Acumulado_Cartao'] = df['Cartão'].cumsum()
+        df['Acumulado_Dinheiro'] = df['Dinheiro'].cumsum()
+        df['Acumulado_Pix'] = df['Pix'].cumsum()
 
-        df_melted['Acumulado'] = df_melted.groupby('Tipo de pagamento')['Valor'].cumsum()
-
-        chart = alt.Chart(df_melted).mark_line().encode(
+        chart = alt.Chart(df).mark_line().encode(
             x=alt.X('Data:T', title='Data'),
-            y=alt.Y('Acumulado:Q', title='Capital Acumulado'),
-            color='Tipo de pagamento:N',
-            tooltip=['Data:T', 'Acumulado:Q', 'Tipo de pagamento:N']
+            y=alt.Y('Acumulado_Cartao:Q', title='Capital Acumulado Cartão'),
+            color=alt.value('blue'),
+            tooltip=['Data:T', 'Acumulado_Cartao:Q']
         ).properties(width=800, height=400)
-        return chart
+
+        chart2 = alt.Chart(df).mark_line().encode(
+            x=alt.X('Data:T', title='Data'),
+            y=alt.Y('Acumulado_Dinheiro:Q', title='Capital Acumulado Dinheiro'),
+            color=alt.value('green'),
+            tooltip=['Data:T', 'Acumulado_Dinheiro:Q']
+        ).properties(width=800, height=400)
+
+        chart3 = alt.Chart(df).mark_line().encode(
+            x=alt.X('Data:T', title='Data'),
+            y=alt.Y('Acumulado_Pix:Q', title='Capital Acumulado Pix'),
+            color=alt.value('orange'),
+            tooltip=['Data:T', 'Acumulado_Pix:Q']
+        ).properties(width=800, height=400)
+
+        return chart & chart2 & chart3
 
     except KeyError as e:
         st.error(f"Erro ao criar gráfico de capital acumulado: {e}")
