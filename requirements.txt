@@ -1,7 +1,7 @@
-streamlit==1.17.1
-pandas==1.5.3
-altair==4.2.0
-google-api-python-client==2.94.0
-google-auth==2.15.0
-google-auth-oauthlib==0.5.3
-google-auth-httplib2==0.1.0
+streamlit
+pandas
+altair
+google-api-python-client
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
