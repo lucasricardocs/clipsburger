@@ -123,8 +123,8 @@ def main():
                         color=alt.Color("Método:N", legend=alt.Legend(title="Método de Pagamento")),
                         tooltip=["Método", "Valor"]
                     ).properties(
-                        width=400, # Definindo largura para ser quadrado
-                        height=400, # Definindo altura para ser quadrado
+                        width=600, # Definindo largura para ser quadrado
+                        height=600, # Definindo altura para ser quadrado
                         title='Distribuição por Método de Pagamento'
                     )
                     pie_chart = base_pie.mark_arc(outerRadius=150)
@@ -145,7 +145,7 @@ def main():
                         tooltip=[date_column_filtered, 'Método', 'Valor']
                     ).properties(
                         width=600, # Aumentando a largura
-                        height=400, # Definindo altura
+                        height=600, # Definindo altura
                         title='Vendas Diárias por Método de Pagamento'
                     )
                     st.altair_chart(bar_chart_filtered, use_container_width=True)
@@ -159,7 +159,7 @@ def main():
                         tooltip=['DataFormatada', 'Total Acumulado']
                     ).properties(
                         width=600, # Aumentando a largura
-                        height=400, # Definindo altura
+                        height=600, # Definindo altura
                         title='Acúmulo de Capital ao Longo do Tempo'
                     )
                     st.altair_chart(acum_chart, use_container_width=True)
