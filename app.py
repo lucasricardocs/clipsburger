@@ -17,42 +17,79 @@ def load_data_from_google_sheets(spreadsheet_id, range_name, credentials_file):
     result = sheet.values().get(spreadsheetId=spreadsheet_id, range=range_name).execute()
     values = result.get('values', [])
     
+    # Verifique os dados recebidos
+    if not values:
+        st.error("Não há dados na planilha.")
+        return pd.DataFrame()
+    
     # Convertendo os dados para DataFrame
     df = pd.DataFrame(values[1:], columns=values[0])
-    df['Data'] = pd.to_datetime(df['Data'], format='%d/%m/%Y')
-    return df
+    
+    # Verificando se a coluna "Data" existe
+    if 'Data' not in df.columns:
+        st.error("A coluna 'Data' não foi encontrada na planilha.")
+        return pd.DataFrame()
 
-# ID da planilha e intervalo (ajuste conforme necessário)
-SPREADSHEET_ID = '1NTScbiIna-iE7roQ9XBdjUOssRihTFFby4INAAQNXTg'  # Substitua com o ID da sua planilha
-RANGE_NAME = 'Vendas!A1:D'  # Ajuste o nome da aba e intervalo conforme necessário
+    # Convertendo a coluna 'Data' para datetime
+    df['Data'] = pd.to_datetime(df['Data'], format='%d/%m/%Y', errors='coerce')
+    
+    # Verificando se há valores ausentes ou inválidos
+    if df['Data'].isnull().any():
+        st.warning("Existem valores inválidos na coluna 'Data'.")
+    
+    return df
 
 # Função para criar gráfico de distribuição de pagamentos
 def create_payment_distribution_graph(df):
-    df_melted = df.melt(id_vars=['Data'], value_vars=['Cartão', 'Dinheiro', 'Pix'],
-                        var_name='Tipo de pagamento', value_name='Valor')
+    if df.empty:
+        return alt.Chart().mark_text().encode(
+            text="Sem dados disponíveis"
+        ).properties(width=800, height=400)
 
-    chart = alt.Chart(df_melted).mark_bar().encode(
-        x=alt.X('Data:T', title='Data'),
-        y=alt.Y('sum(Valor):Q', title='Valor'),
-        color='Tipo de pagamento:N',
-        tooltip=['Data:T', 'sum(Valor):Q', 'Tipo de pagamento:N']
-    ).properties(width=800, height=400)
-    return chart
+    try:
+        df_melted = df.melt(id_vars=['Data'], value_vars=['Cartão', 'Dinheiro', 'Pix'],
+                            var_name='Tipo de pagamento', value_name='Valor')
+
+        chart = alt.Chart(df_melted).mark_bar().encode(
+            x=alt.X('Data:T', title='Data'),
+            y=alt.Y('sum(Valor):Q', title='Valor'),
+            color='Tipo de pagamento:N',
+            tooltip=['Data:T', 'sum(Valor):Q', 'Tipo de pagamento:N']
+        ).properties(width=800, height=400)
+        return chart
+
+    except KeyError as e:
+        st.error(f"Erro ao criar gráfico de distribuição de pagamentos: {e}")
+        return alt.Chart().mark_text().encode(
+            text="Erro ao gerar gráfico"
+        ).properties(width=800, height=400)
 
 # Função para criar gráfico de capital acumulado
 def create_accumulated_capital_graph(df):
-    df_melted = df.melt(id_vars=['Data'], value_vars=['Cartão', 'Dinheiro', 'Pix'],
-                        var_name='Tipo de pagamento', value_name='Valor')
+    if df.empty:
+        return alt.Chart().mark_text().encode(
+            text="Sem dados disponíveis"
+        ).properties(width=800, height=400)
 
-    df_melted['Acumulado'] = df_melted.groupby('Tipo de pagamento')['Valor'].cumsum()
+    try:
+        df_melted = df.melt(id_vars=['Data'], value_vars=['Cartão', 'Dinheiro', 'Pix'],
+                            var_name='Tipo de pagamento', value_name='Valor')
 
-    chart = alt.Chart(df_melted).mark_line().encode(
-        x=alt.X('Data:T', title='Data'),
-        y=alt.Y('Acumulado:Q', title='Capital Acumulado'),
-        color='Tipo de pagamento:N',
-        tooltip=['Data:T', 'Acumulado:Q', 'Tipo de pagamento:N']
-    ).properties(width=800, height=400)
-    return chart
+        df_melted['Acumulado'] = df_melted.groupby('Tipo de pagamento')['Valor'].cumsum()
+
+        chart = alt.Chart(df_melted).mark_line().encode(
+            x=alt.X('Data:T', title='Data'),
+            y=alt.Y('Acumulado:Q', title='Capital Acumulado'),
+            color='Tipo de pagamento:N',
+            tooltip=['Data:T', 'Acumulado:Q', 'Tipo de pagamento:N']
+        ).properties(width=800, height=400)
+        return chart
+
+    except KeyError as e:
+        st.error(f"Erro ao criar gráfico de capital acumulado: {e}")
+        return alt.Chart().mark_text().encode(
+            text="Erro ao gerar gráfico"
+        ).properties(width=800, height=400)
 
 # Função principal para exibir o Streamlit app
 def main():
@@ -67,7 +104,8 @@ def main():
     # Carregar os dados da planilha
     try:
         df = load_data_from_google_sheets(SPREADSHEET_ID, RANGE_NAME, 'credentials.json')  # O caminho para o credentials.json
-        st.write(df)  # Exibe o dataframe
+        if not df.empty:
+            st.write(df)  # Exibe o dataframe
     except Exception as e:
         st.error(f"Erro ao carregar os dados: {e}")
         return
@@ -103,6 +141,10 @@ def main():
             df = pd.concat([df, new_row], ignore_index=True)
 
             st.success(f"Nova venda registrada para {new_date.strftime('%d/%m/%Y')}.")
+
+    # Exibição da tabela com os dados atualizados
+    st.subheader("Tabela de Vendas")
+    st.write(df)
 
 if __name__ == "__main__":
     main()
