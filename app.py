@@ -7,12 +7,12 @@ from google.oauth2.service_account import Credentials
 from gspread.exceptions import SpreadsheetNotFound
 
 # Configuração da página
-st.set_page_config(page_title="Sistema de Registro de Vendas", layout="centered") # Layout centered novamente
+st.set_page_config(page_title="Sistema de Registro de Vendas", layout="centered")
 
 def read_google_sheet():
     """Função para ler os dados da planilha Google Sheets"""
     try:
-        SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+        SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/spreadsheets.readonly', 'https://www.googleapis.com/auth/drive.readonly']
         credentials_dict = st.secrets["google_credentials"]
         creds = Credentials.from_service_account_info(credentials_dict, scopes=SCOPES)
         gc = gspread.authorize(creds)
@@ -123,8 +123,8 @@ def main():
                         color=alt.Color("Método:N", legend=alt.Legend(title="Método de Pagamento")),
                         tooltip=["Método", "Valor"]
                     ).properties(
-                        width=400, # Definindo largura para ser quadrado
-                        height=400, # Definindo altura para ser quadrado
+                        width=400,
+                        height=400,
                         title='Distribuição por Método de Pagamento'
                     )
                     pie_chart = base_pie.mark_arc(outerRadius=150)
@@ -144,8 +144,8 @@ def main():
                         color=alt.Color('Método:N', legend=alt.Legend(title="Pagamento")),
                         tooltip=[date_column_filtered, 'Método', 'Valor']
                     ).properties(
-                        width=600, # Aumentando a largura
-                        height=400, # Definindo altura
+                        width=600,
+                        height=400,
                         title='Vendas Diárias por Método de Pagamento'
                     )
                     st.altair_chart(bar_chart_filtered, use_container_width=True)
@@ -154,12 +154,12 @@ def main():
                     df_accumulated = df_filtered.sort_values('Data').copy()
                     df_accumulated['Total Acumulado'] = df_accumulated['Total'].cumsum()
                     acum_chart = alt.Chart(df_accumulated).mark_line(point=True).encode(
-                        x=alt.X('DataFormatada:N', title='Data'),
+                        x=alt.X('Data:T', title='Data'), # Usando o tipo 'T' para temporal
                         y=alt.Y('Total Acumulado:Q', title='Capital Acumulado (R$)'),
                         tooltip=['DataFormatada', 'Total Acumulado']
                     ).properties(
-                        width=600, # Aumentando a largura
-                        height=400, # Definindo altura
+                        width=600,
+                        height=400,
                         title='Acúmulo de Capital ao Longo do Tempo'
                     )
                     st.altair_chart(acum_chart, use_container_width=True)
