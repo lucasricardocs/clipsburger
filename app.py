@@ -25,9 +25,12 @@ def load_data_from_google_sheets(spreadsheet_id, range_name, credentials_file):
     # Convertendo os dados para DataFrame
     df = pd.DataFrame(values[1:], columns=values[0])
     
-    # Verificando se a coluna "Data" existe
-    if 'Data' not in df.columns:
-        st.error("A coluna 'Data' não foi encontrada na planilha.")
+    # Verificando se a coluna "Data" e as de pagamentos existem
+    required_columns = ['Data', 'Cartão', 'Dinheiro', 'Pix']
+    missing_columns = [col for col in required_columns if col not in df.columns]
+    
+    if missing_columns:
+        st.error(f"Faltam as seguintes colunas na planilha: {', '.join(missing_columns)}.")
         return pd.DataFrame()
 
     # Convertendo a coluna 'Data' para datetime
