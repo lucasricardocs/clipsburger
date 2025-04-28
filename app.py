@@ -389,20 +389,19 @@ def main():
                         with col4:
                             st.metric("Total Geral", f"R$ {df_filtered['Total'].sum():.2f}")
 
-                        # Calcular média diária para o período selecionado
+                       # Calcular média diária para o período selecionado
                         dias_unicos = df_filtered['Data'].nunique()
                         if dias_unicos > 0:
                             media_diaria = df_filtered['Total'].sum() / dias_unicos
                             st.metric("Média Diária", f"R$ {media_diaria:.2f}")
                         else:
-                            st.warning("Selecione pelo menos um mês para visualizar os dados.")
+                            st.warning("Selecione pelo menos um dia dentro do período para calcular a média diária.")
                     else:
                         st.warning("Selecione pelo menos um ano para visualizar os dados.")
                 else:
                     st.error("Formato de data não reconhecido. Não é possível criar a análise temporal.")
             else:
                 st.info("Não há dados para analisar ou houve um problema ao carregar a planilha.")
-
 
 if __name__ == "__main__":
     main()
