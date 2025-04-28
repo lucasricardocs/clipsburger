@@ -49,6 +49,14 @@ def create_payment_distribution_graph(df):
             text="Sem dados disponíveis"
         ).properties(width=800, height=400)
 
+    # Verificando se as colunas estão presentes no DataFrame
+    required_columns = ['Data', 'Cartão', 'Dinheiro', 'Pix']
+    if not all(col in df.columns for col in required_columns):
+        st.error("Algumas colunas necessárias não estão presentes no DataFrame.")
+        return alt.Chart().mark_text().encode(
+            text="Erro nas colunas do DataFrame"
+        ).properties(width=800, height=400)
+
     try:
         # Gráfico de barras para cada tipo de pagamento (Cartão, Dinheiro, Pix)
         chart = alt.Chart(df).mark_bar().encode(
@@ -57,7 +65,7 @@ def create_payment_distribution_graph(df):
             color=alt.value('blue'),
             tooltip=['Data:T', 'Cartão:Q']
         ).properties(width=800, height=400).interactive()
-        
+
         chart2 = alt.Chart(df).mark_bar().encode(
             x=alt.X('Data:T', title='Data'),
             y=alt.Y('Dinheiro:Q', title='Valor do Dinheiro'),
@@ -85,6 +93,14 @@ def create_accumulated_capital_graph(df):
     if df.empty:
         return alt.Chart().mark_text().encode(
             text="Sem dados disponíveis"
+        ).properties(width=800, height=400)
+
+    # Verificando se as colunas estão presentes no DataFrame
+    required_columns = ['Data', 'Cartão', 'Dinheiro', 'Pix']
+    if not all(col in df.columns for col in required_columns):
+        st.error("Algumas colunas necessárias não estão presentes no DataFrame.")
+        return alt.Chart().mark_text().encode(
+            text="Erro nas colunas do DataFrame"
         ).properties(width=800, height=400)
 
     try:
