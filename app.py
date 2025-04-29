@@ -18,22 +18,10 @@ import base64
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
+import altair_saver
 
 # Configuração da página
 st.set_page_config(page_title="Sistema de Registro de Vendas", layout="centered")
-
-# Configurando estilo dos gráficos matplotlib
-plt.style.use('ggplot')
-mpl.rcParams['font.size'] = 14
-mpl.rcParams['figure.figsize'] = (12, 9)
-mpl.rcParams['figure.facecolor'] = 'white'
-mpl.rcParams['axes.facecolor'] = '#f0f0f0'
-mpl.rcParams['axes.grid'] = True
-mpl.rcParams['grid.alpha'] = 0.3
-mpl.rcParams['axes.labelsize'] = 16
-mpl.rcParams['axes.titlesize'] = 20
-mpl.rcParams['xtick.labelsize'] = 14
-mpl.rcParams['ytick.labelsize'] = 14
 
 @st.cache_data(ttl=3600)
 def read_google_sheet():
@@ -172,156 +160,116 @@ def generate_sales_stats(df):
     
     return stats
 
-def create_pie_chart_matplotlib(df_filtered):
-    """Cria gráfico de pizza usando matplotlib"""
-    valores = [df_filtered['Cartão'].sum(), df_filtered['Dinheiro'].sum(), df_filtered['Pix'].sum()]
-    labels = ['Cartão', 'Dinheiro', 'PIX']
-    cores = ['#3498db', '#f39c12', '#2ecc71']
+def create_pie_chart_altair(df_filtered):
+    """Cria gráfico de pizza usando Altair"""
+    data = pd.DataFrame({
+        'Método': ['Cartão', 'Dinheiro', 'PIX'],
+        'Valor': [df_filtered['Cartão'].sum(), df_filtered['Dinheiro'].sum(), df_filtered['Pix'].sum()]
+    })
     
-    plt.figure(figsize=(12, 9))
-    explode = (0.05, 0.05, 0.05)
-    wedges, texts, autotexts = plt.pie(
-        valores, 
-        labels=labels, 
-        autopct='%1.1f%%', 
-        startangle=90, 
-        colors=cores,
-        explode=explode,
-        shadow=True,
-        textprops={'fontsize': 16, 'fontweight': 'bold'},
-        wedgeprops={'edgecolor': 'white', 'linewidth': 2}
+    pie = alt.Chart(data).mark_arc(outerRadius=150).encode(
+        theta=alt.Theta('Valor:Q', stack=True),
+        color=alt.Color('Método:N', scale=alt.Scale(range=['#3498db', '#f39c12', '#2ecc71']),
+        tooltip=['Método', 'Valor']
+    ).properties(
+        title='Distribuição por Método de Pagamento',
+        width=500,
+        height=400
     )
     
-    for autotext in autotexts:
-        autotext.set_color('white')
-        autotext.set_fontsize(14)
-        autotext.set_fontweight('bold')
+    text = pie.mark_text(radius=180, size=14, color='black', fontWeight='bold').encode(
+        text=alt.Text('Valor:Q', format='.1f')
+    )
     
-    plt.axis('equal')
-    plt.title('Distribuição por Método de Pagamento', fontsize=24, pad=20, fontweight='bold')
-    centre_circle = plt.Circle((0, 0), 0.5, fc='white')
-    plt.gca().add_artist(centre_circle)
-    
-    total = sum(valores)
-    legendas = [f'{l}: R$ {v:.2f} ({v/total*100:.1f}%)' for l, v in zip(labels, valores)]
-    plt.legend(legendas, loc="center", bbox_to_anchor=(0.5, -0.1), fontsize=14)
-    
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png', dpi=300, bbox_inches='tight', facecolor='white')
-    plt.close()
-    return buf
+    return (pie + text).configure_view(
+        strokeWidth=0
+    ).configure_title(
+        fontSize=20,
+        anchor='middle'
+    )
 
-def create_bar_chart_matplotlib(df_filtered):
-    """Cria gráfico de barras usando matplotlib"""
+def create_bar_chart_altair(df_filtered):
+    """Cria gráfico de barras usando Altair"""
     date_column = 'DataFormatada' if 'DataFormatada' in df_filtered.columns else 'Data'
     daily = df_filtered.groupby(date_column)[['Cartão', 'Dinheiro', 'Pix']].sum().reset_index()
-    cores = ['#3498db', '#f39c12', '#2ecc71']
+    daily_long = daily.melt(id_vars=[date_column], var_name='Método', value_name='Valor')
     
-    fig, ax = plt.subplots(figsize=(14, 10))
-    x = np.arange(len(daily[date_column]))
-    width = 0.25
+    bar_chart = alt.Chart(daily_long).mark_bar(size=20).encode(
+        x=alt.X(f'{date_column}:N', title='Data', axis=alt.Axis(labelAngle=-45)),
+        y=alt.Y('Valor:Q', title='Valor (R$)'),
+        color=alt.Color('Método:N', scale=alt.Scale(range=['#3498db', '#f39c12', '#2ecc71'])),
+        tooltip=[date_column, 'Método', 'Valor']
+    ).properties(
+        title='Vendas Diárias por Método de Pagamento',
+        width=600,
+        height=400
+    ).facet(
+        column='Método:N'
+    ).resolve_scale(
+        y='independent'
+    ).configure_view(
+        stroke='transparent'
+    ).configure_title(
+        fontSize=20,
+        anchor='middle'
+    )
     
-    rects1 = ax.bar(x - width, daily['Cartão'], width, label='Cartão', color=cores[0], 
-                    edgecolor='white', linewidth=1.5, alpha=0.9)
-    rects2 = ax.bar(x, daily['Dinheiro'], width, label='Dinheiro', color=cores[1],
-                   edgecolor='white', linewidth=1.5, alpha=0.9)
-    rects3 = ax.bar(x + width, daily['Pix'], width, label='PIX', color=cores[2],
-                   edgecolor='white', linewidth=1.5, alpha=0.9)
-    
-    def add_value_labels(rects):
-        for rect in rects:
-            height = rect.get_height()
-            if height > 0:
-                ax.text(rect.get_x() + rect.get_width()/2., height + 5,
-                        f'R${height:.0f}', ha='center', va='bottom', 
-                        fontsize=12, fontweight='bold')
-    
-    add_value_labels(rects1)
-    add_value_labels(rects2)
-    add_value_labels(rects3)
-    
-    ax.set_ylabel('Valor (R$)', fontsize=18, fontweight='bold')
-    ax.set_title('Vendas Diárias por Método de Pagamento', fontsize=22, fontweight='bold', pad=20)
-    ax.set_xticks(x)
-    ax.set_xticklabels(daily[date_column], rotation=45, ha='right')
-    ax.yaxis.grid(True, linestyle='--', alpha=0.7)
-    ax.set_axisbelow(True)
-    
-    for spine in ax.spines.values():
-        spine.set_visible(False)
-    
-    ax.legend(fontsize=14, frameon=True, facecolor='white', edgecolor='#dddddd')
-    fig.tight_layout()
-    
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png', dpi=300, bbox_inches='tight', facecolor='white')
-    plt.close()
-    return buf
+    return bar_chart
 
-def create_line_chart_matplotlib(df_filtered):
-    """Cria gráfico de linha usando matplotlib"""
+def create_line_chart_altair(df_filtered):
+    """Cria gráfico de linha usando Altair"""
     df_acum = df_filtered.sort_values('Data').copy()
     df_acum['Total Acumulado'] = df_acum['Total'].cumsum()
     
-    fig, ax = plt.subplots(figsize=(14, 10))
-    cor_linha = '#3498db'
-    cor_area = '#3498db'
-    cor_ponto = '#2980b9'
+    line = alt.Chart(df_acum).mark_line(point=True, size=3).encode(
+        x=alt.X('DataFormatada:N', title='Data', axis=alt.Axis(labelAngle=-45)),
+        y=alt.Y('Total Acumulado:Q', title='Capital Acumulado (R$)'),
+        tooltip=['DataFormatada', 'Total Acumulado']
+    ).properties(
+        title='Acúmulo de Capital ao Longo do Tempo',
+        width=600,
+        height=400
+    ).configure_title(
+        fontSize=20,
+        anchor='middle'
+    ).configure_axis(
+        labelFontSize=12,
+        titleFontSize=14
+    )
     
-    x = np.arange(len(df_acum['DataFormatada']))
-    y = df_acum['Total Acumulado']
+    points = line.mark_point(
+        filled=True,
+        size=100,
+        color='#3498db'
+    ).encode(
+        color=alt.value('#2980b9'),
+        stroke=alt.value('white'),
+        strokeWidth=alt.value(2)
+    )
     
-    ax.fill_between(x, y, alpha=0.3, color=cor_area)
-    linha = ax.plot(x, y, marker='o', linestyle='-', linewidth=3, 
-             markersize=10, color=cor_linha, markerfacecolor=cor_ponto, 
-             markeredgecolor='white', markeredgewidth=2)
-    
-    for i, valor in enumerate(y):
-        ax.annotate(f'R${valor:.0f}', 
-                   (x[i], valor), 
-                   xytext=(0, 10),
-                   textcoords='offset points',
-                   ha='center',
-                   fontsize=12,
-                   fontweight='bold')
-    
-    ax.set_ylabel('Capital Acumulado (R$)', fontsize=18, fontweight='bold')
-    ax.set_title('Acúmulo de Capital ao Longo do Tempo', fontsize=22, fontweight='bold', pad=20)
-    ax.set_xticks(x)
-    ax.set_xticklabels(df_acum['DataFormatada'], rotation=45, ha='right')
-    ax.grid(True, linestyle='--', alpha=0.7)
-    ax.set_axisbelow(True)
-    
-    for spine in ax.spines.values():
-        spine.set_visible(False)
-    
-    fig.tight_layout()
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png', dpi=300, bbox_inches='tight', facecolor='white')
-    plt.close()
-    return buf
+    return line + points
 
 def generate_pdf_report(df_filtered):
-    """Função para gerar o relatório em PDF com gráficos e estatísticas"""
+    """Função para gerar o relatório em PDF com gráficos Altair"""
     try:
         stats = generate_sales_stats(df_filtered)
         temp_dir = tempfile.mkdtemp()
         
-        pie_chart_buf = create_pie_chart_matplotlib(df_filtered)
-        bar_chart_buf = create_bar_chart_matplotlib(df_filtered)
-        line_chart_buf = create_line_chart_matplotlib(df_filtered)
+        # Gerar gráficos Altair e salvar como PNG
+        pie_chart = create_pie_chart_altair(df_filtered)
+        bar_chart = create_bar_chart_altair(df_filtered)
+        line_chart = create_line_chart_altair(df_filtered)
         
         pie_chart_path = os.path.join(temp_dir, "pie_chart.png")
         bar_chart_path = os.path.join(temp_dir, "bar_chart.png")
         line_chart_path = os.path.join(temp_dir, "line_chart.png")
         
-        with open(pie_chart_path, 'wb') as f:
-            f.write(pie_chart_buf.getvalue())
-        with open(bar_chart_path, 'wb') as f:
-            f.write(bar_chart_buf.getvalue())
-        with open(line_chart_path, 'wb') as f:
-            f.write(line_chart_buf.getvalue())
+        # Salvar gráficos Altair como PNG
+        pie_chart.save(pie_chart_path, scale_factor=2.0)
+        bar_chart.save(bar_chart_path, scale_factor=2.0)
+        line_chart.save(line_chart_path, scale_factor=2.0)
         
+        # Criar o PDF
         pdf_path = os.path.join(temp_dir, "analise_vendas.pdf")
         doc = SimpleDocTemplate(pdf_path, pagesize=A4)
         elements = []
@@ -548,70 +496,20 @@ def main():
                              f"{max(stats['perc_cartao'], stats['perc_dinheiro'], stats['perc_pix']):.1f}%")
                 
                 st.subheader("💳 Distribuição por Método de Pagamento")
-                payment_data = pd.DataFrame({
-                    'Método': ['Cartão', 'Dinheiro', 'PIX'],
-                    'Valor': [stats['total_cartao'], stats['total_dinheiro'], stats['total_pix']],
-                    'Participação': [stats['perc_cartao'], stats['perc_dinheiro'], stats['perc_pix']]
-                })
+                pie_chart = create_pie_chart_altair(df_filtered)
+                st.altair_chart(pie_chart, use_container_width=True)
                 
-                col_chart, col_table = st.columns([2, 1])
-                with col_chart:
-                    fig, ax = plt.subplots(figsize=(8, 6))
-                    wedges, texts, autotexts = ax.pie(
-                        payment_data['Valor'], 
-                        labels=payment_data['Método'], 
-                        autopct='%1.1f%%',
-                        startangle=90,
-                        colors=['#3498db', '#f39c12', '#2ecc71'],
-                        explode=(0.05, 0.05, 0.05),
-                        shadow=True
-                    )
-                    plt.setp(autotexts, size=12, weight="bold", color="white")
-                    ax.set_title('Participação nos Pagamentos', fontsize=16)
-                    st.pyplot(fig)
+                st.subheader("Vendas Diárias por Método de Pagamento")
+                bar_chart = create_bar_chart_altair(df_filtered)
+                st.altair_chart(bar_chart, use_container_width=True)
                 
-                with col_table:
-                    st.dataframe(
-                        payment_data.style.format({
-                            'Valor': 'R$ {:.2f}',
-                            'Participação': '{:.1f}%'
-                        }),
-                        use_container_width=True
-                    )
+                st.subheader("Acúmulo de Capital ao Longo do Tempo")
+                line_chart = create_line_chart_altair(df_filtered)
+                st.altair_chart(line_chart, use_container_width=True)
                 
                 st.subheader("Dados Filtrados")
                 st.dataframe(df_filtered[['DataFormatada', 'Cartão', 'Dinheiro', 'Pix', 'Total']]
                              if 'DataFormatada' in df_filtered.columns else df_filtered, use_container_width=True)
-
-                st.subheader("Vendas Diárias por Método de Pagamento")
-                date_column_filtered = 'DataFormatada' if 'DataFormatada' in df_filtered.columns else 'Data'
-                daily_filtered = df_filtered.groupby(date_column_filtered)[['Cartão', 'Dinheiro', 'Pix']].sum().reset_index()
-                daily_filtered_long = pd.melt(daily_filtered, id_vars=[date_column_filtered],
-                                                value_vars=['Cartão', 'Dinheiro', 'Pix'],
-                                                var_name='Método', value_name='Valor')
-                bar_chart_filtered = alt.Chart(daily_filtered_long).mark_bar().encode(
-                    x=alt.X(f'{date_column_filtered}:N', title='Data', sort=None, axis=alt.Axis(labelAngle=-45)),
-                    y=alt.Y('sum(Valor):Q', title='Valor (R$)'),
-                    color=alt.Color('Método:N', legend=alt.Legend(title="Pagamento")),
-                    tooltip=[date_column_filtered, 'Método', 'Valor']
-                ).properties(
-                    width=600,
-                    height=400,
-                )
-                st.altair_chart(bar_chart_filtered, use_container_width=True)
-
-                st.subheader("Acúmulo de Capital ao Longo do Tempo")
-                df_accumulated = df_filtered.sort_values('Data').copy()
-                df_accumulated['Total Acumulado'] = df_accumulated['Total'].cumsum()
-                acum_chart = alt.Chart(df_accumulated).mark_line(point=True).encode(
-                    x=alt.X('Data:T', title='Data'), 
-                    y=alt.Y('Total Acumulado:Q', title='Capital Acumulado (R$)'),
-                    tooltip=['DataFormatada', 'Total Acumulado']
-                ).properties(
-                    width=600,
-                    height=400,
-                )
-                st.altair_chart(acum_chart, use_container_width=True)
 
                 if st.button("Exportar Análise para PDF"):
                     with st.spinner("Gerando PDF... Isso pode levar alguns segundos."):
