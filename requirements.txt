@@ -1,7 +1,7 @@
 numpy
 streamlit
 pandas
-altair
+altair>=5.0.0  # Especificando uma versão mínima que suporta .to_svg()
 gspread
 google-api-python-client
 google-auth
