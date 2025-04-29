@@ -11,10 +11,12 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
 import os
 import io
-from PIL import Image as PILImage, ImageDraw, ImageFont
-
-# Instale esses pacotes se ainda não tiver:
-# pip install altair selenium pillow
+import tempfile
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+import time
 
 # Configuração da página
 st.set_page_config(page_title="Sistema de Registro de Vendas", layout="centered")
@@ -74,118 +76,115 @@ def process_data(df):
                 st.error(f"Erro ao processar a coluna 'Data': {e}")
     return df
 
-def save_chart_as_png(chart, filename, scale_factor=2.0):
-    """Salva um gráfico Altair como imagem PNG usando vega_embed e selenium"""
+def save_chart_as_png(chart, filename, width=800, height=600):
+    """Salva um gráfico Altair como imagem PNG usando Selenium"""
     try:
-        # Usando a função to_html do Altair para gerar HTML
-        import tempfile
-        from selenium import webdriver
-        from selenium.webdriver.chrome.options import Options
-        import time
-        import base64
+        # Criar um arquivo HTML temporário com o gráfico
+        temp_html = tempfile.NamedTemporaryFile(suffix='.html', delete=False)
+        chart_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Chart</title>
+            <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
+            <script src="https://cdn.jsdelivr.net/npm/vega-lite@5"></script>
+            <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
+            <style>
+                body {{ margin: 0; overflow: hidden; }}
+                #vis {{ width: {width}px; height: {height}px; }}
+            </style>
+        </head>
+        <body>
+            <div id="vis"></div>
+            <script>
+                const spec = {chart.to_json()};
+                vegaEmbed('#vis', spec).then(result => {{
+                    document.body.style.width = '{width}px';
+                    document.body.style.height = '{height}px';
+                }}).catch(console.error);
+            </script>
+        </body>
+        </html>
+        """
         
-        # Create a temporary HTML file
-        with tempfile.NamedTemporaryFile(suffix='.html', delete=False) as tmpfile:
-            html_content = f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
-                <script src="https://cdn.jsdelivr.net/npm/vega-lite@5"></script>
-                <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
-            </head>
-            <body>
-                <div id="vis"></div>
-                <script>
-                    const spec = {chart.to_json()};
-                    vegaEmbed('#vis', spec);
-                </script>
-            </body>
-            </html>
-            """
-            tmpfile.write(html_content.encode())
-            html_path = tmpfile.name
+        with open(temp_html.name, 'w', encoding='utf-8') as f:
+            f.write(chart_html)
         
-        # Configure headless browser
-        chrome_options = Options()
-        chrome_options.add_argument("--headless")
-        chrome_options.add_argument("--disable-gpu")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        driver = webdriver.Chrome(options=chrome_options)
+        # Configurar o navegador headless
+        options = Options()
+        options.add_argument('--headless')
+        options.add_argument('--disable-gpu')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+        options.add_argument(f'--window-size={width},{height}')
         
-        # Open the HTML file
-        driver.get(f"file://{html_path}")
-        time.sleep(2)  # Wait for the chart to render
+        # Iniciar o navegador e capturar a screenshot
+        try:
+            # Tente usar o ChromeDriverManager primeiro
+            driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+        except:
+            # Fallback para o caminho padrão do Chrome
+            driver = webdriver.Chrome(options=options)
         
-        # Take screenshot
-        png_data = driver.get_screenshot_as_png()
+        driver.get(f'file://{temp_html.name}')
+        # Aguardar que o gráfico seja renderizado
+        time.sleep(3)
+        
+        # Capturar a screenshot
+        driver.save_screenshot(filename)
         driver.quit()
         
-        # Clean up
-        os.unlink(html_path)
+        # Limpar o arquivo temporário
+        os.unlink(temp_html.name)
         
-        # Save the image
-        with open(filename, 'wb') as f:
-            f.write(png_data)
-            
         return True
     except Exception as e:
         st.error(f"Erro ao salvar o gráfico como PNG: {e}")
         return False
 
-# Método alternativo usando st.altair_chart para renderizar e capturar a tela
-def altair_to_png(chart, width=800, height=600):
-    """Converte um gráfico Altair para PNG usando uma abordagem simplificada"""
-    try:
-        # Cria uma versão serializável do gráfico para uso offline
-        chart_json = chart.to_json()
-        
-        # Cria um arquivo temporário para armazenar a imagem
-        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
-            filename = tmp.name
-            
-            # Essa é uma simulação simplificada - na prática, você precisaria renderizar
-            # o gráfico em um ambiente headless e capturar a imagem
-            img = PILImage.new('RGB', (width, height), color='white')
-            img.save(filename)
-            
-            # Adicione texto informativo à imagem
-            from PIL import ImageDraw, ImageFont
-            draw = ImageDraw.Draw(img)
-            try:
-                font = ImageFont.truetype("arial.ttf", 20)
-            except IOError:
-                font = ImageFont.load_default()
-            
-            draw.text((50, 50), "Gráfico gerado pelo sistema", fill="black", font=font)
-            img.save(filename)
-            
-            return filename
-    except Exception as e:
-        st.error(f"Erro ao converter gráfico para PNG: {e}")
-        return None
-
 def generate_pdf_report(df_filtered, pie_chart, bar_chart, acum_chart):
-    """Função para gerar o relatório em PDF"""
+    """Função para gerar o relatório em PDF com gráficos"""
     try:
-        doc = SimpleDocTemplate("analise_vendas.pdf", pagesize=letter)
+        # Criar diretório temporário para os gráficos
+        temp_dir = tempfile.mkdtemp()
+        
+        # Caminhos dos arquivos para os gráficos
+        pie_chart_path = os.path.join(temp_dir, "pie_chart.png")
+        bar_chart_path = os.path.join(temp_dir, "bar_chart.png")
+        acum_chart_path = os.path.join(temp_dir, "acum_chart.png")
+        
+        # Salvar os gráficos como PNG
+        save_chart_as_png(pie_chart, pie_chart_path)
+        save_chart_as_png(bar_chart, bar_chart_path)
+        save_chart_as_png(acum_chart, acum_chart_path)
+        
+        # Criar o PDF
+        pdf_path = os.path.join(temp_dir, "analise_vendas.pdf")
+        doc = SimpleDocTemplate(pdf_path, pagesize=letter)
         elements = []
         styles = getSampleStyleSheet()
 
+        # Título e introdução
         elements.append(Paragraph("Análise Detalhada de Vendas", styles['Heading1']))
         elements.append(Spacer(1, 12))
 
-        # Preparar dados para a tabela
+        # Tabela de dados
         if 'DataFormatada' in df_filtered.columns:
             data_cols = ['DataFormatada', 'Cartão', 'Dinheiro', 'Pix', 'Total']
             table_data = [[col for col in data_cols]]  # Cabeçalho
-            for _, row in df_filtered[data_cols].iterrows():
+            
+            # Limitar a 20 linhas para evitar PDFs gigantes
+            max_rows = min(20, len(df_filtered))
+            for i in range(max_rows):
+                row = df_filtered.iloc[i]
                 table_data.append([str(row[col]) for col in data_cols])
+            
+            if len(df_filtered) > max_rows:
+                table_data.append(['...e mais registros', '', '', '', ''])
         else:
             table_data = [df_filtered.columns.tolist()] + df_filtered.values.tolist()
 
-        # Criar tabela
+        # Criar e estilizar a tabela
         table = Table(table_data)
         table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
@@ -199,67 +198,50 @@ def generate_pdf_report(df_filtered, pie_chart, bar_chart, acum_chart):
         elements.append(table)
         elements.append(Spacer(1, 12))
 
-        # ATENÇÃO: Método alternativo para gráficos - você precisará instalar selenium
-        try:
-            # Função para criar gráficos estáticos
-            def create_chart_image(title, description):
-                img = PILImage.new('RGB', (600, 400), color='white')
-                draw = ImageDraw.Draw(img)
-                font = ImageFont.load_default()
-                draw.text((50, 150), title, fill="black", font=font)
-                draw.text((50, 200), description, fill="black", font=font)
-                img_path = f"{title.replace(' ', '_').replace('/', '_')}.png"
-                img.save(img_path)
-                return img_path
-            
-            # Criar imagens dos gráficos com texto explicativo
-            pie_chart_path = create_chart_image("Distribuição por Método", "Gráfico de pizza mostrando a distribuição de vendas por método de pagamento")
-            bar_chart_path = create_chart_image("Vendas Diárias", "Gráfico de barras mostrando vendas diárias por método de pagamento")
-            acum_chart_path = create_chart_image("Capital Acumulado", "Gráfico de linha mostrando o acúmulo de capital ao longo do tempo")
-            
-            # Adicionar ao PDF
+        # Adicionar gráficos ao PDF (verificando se existem)
+        if os.path.exists(pie_chart_path):
             elements.append(Paragraph("Distribuição por Método de Pagamento", styles['Heading2']))
-            elements.append(Image(pie_chart_path, width=400, height=300))
+            elements.append(Image(pie_chart_path, width=450, height=300))
             elements.append(Spacer(1, 12))
-            
+        
+        if os.path.exists(bar_chart_path):
             elements.append(Paragraph("Vendas Diárias por Método de Pagamento", styles['Heading2']))
-            elements.append(Image(bar_chart_path, width=400, height=300))
+            elements.append(Image(bar_chart_path, width=450, height=300))
             elements.append(Spacer(1, 12))
-            
+        
+        if os.path.exists(acum_chart_path):
             elements.append(Paragraph("Acúmulo de Capital ao Longo do Tempo", styles['Heading2']))
-            elements.append(Image(acum_chart_path, width=400, height=300))
-            
-            # Limpar arquivos temporários depois
-            files_to_remove = [pie_chart_path, bar_chart_path, acum_chart_path]
-        except Exception as chart_error:
-            st.error(f"Erro ao criar imagens dos gráficos: {chart_error}")
-            # Alternativa de segurança: apenas texto explicativo
-            elements.append(Paragraph("Nota: Não foi possível incluir os gráficos no PDF.", styles['Heading2']))
-            elements.append(Paragraph("Por favor, consulte os gráficos na interface do aplicativo.", styles['Normal']))
-            files_to_remove = []
+            elements.append(Image(acum_chart_path, width=450, height=300))
         
         # Construir o PDF
         doc.build(elements)
         
         # Ler o PDF gerado
-        with open("analise_vendas.pdf", "rb") as pdf_file:
+        with open(pdf_path, "rb") as pdf_file:
             PDFbyte = pdf_file.read()
         
         # Limpar arquivos temporários
-        os.remove("analise_vendas.pdf")
-        for temp_file in files_to_remove:
-            if os.path.exists(temp_file):
-                os.remove(temp_file)
+        for file_path in [pie_chart_path, bar_chart_path, acum_chart_path, pdf_path]:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        
+        # Tentar remover o diretório temporário
+        try:
+            os.rmdir(temp_dir)
+        except:
+            pass
         
         return PDFbyte
     
     except Exception as e:
         st.error(f"Erro ao gerar PDF: {e}")
+        import traceback
+        st.error(traceback.format_exc())
         return None
 
 def main():
     st.title("📊 Sistema de Registro de Vendas")
-    tab1, tab3 = st.tabs(["Registrar Venda", "Análise Detalhada"]) # Removendo tab2
+    tab1, tab3 = st.tabs(["Registrar Venda", "Análise Detalhada"])
 
     with tab1:
         st.header("Registrar Nova Venda")
@@ -345,7 +327,7 @@ def main():
                     df_accumulated = df_filtered.sort_values('Data').copy()
                     df_accumulated['Total Acumulado'] = df_accumulated['Total'].cumsum()
                     acum_chart = alt.Chart(df_accumulated).mark_line(point=True).encode(
-                        x=alt.X('Data:T', title='Data'), # Usando o tipo 'T' para temporal
+                        x=alt.X('Data:T', title='Data'), 
                         y=alt.Y('Total Acumulado:Q', title='Capital Acumulado (R$)'),
                         tooltip=['DataFormatada', 'Total Acumulado']
                     ).properties(
@@ -356,10 +338,11 @@ def main():
 
                     # Botão para gerar e baixar o PDF
                     if st.button("Exportar Análise para PDF"):
-                        with st.spinner("Gerando PDF..."):
+                        with st.spinner("Gerando PDF... Isso pode levar alguns segundos."):
                             try:
                                 pdf_bytes = generate_pdf_report(df_filtered, final_pie, bar_chart_filtered, acum_chart)
                                 if pdf_bytes:
+                                    st.success("PDF gerado com sucesso!")
                                     st.download_button(
                                         label="Baixar PDF",
                                         data=pdf_bytes,
@@ -370,6 +353,8 @@ def main():
                                     st.error("Não foi possível gerar o PDF. Verifique os logs para mais detalhes.")
                             except Exception as e:
                                 st.error(f"Erro ao gerar ou baixar o PDF: {e}")
+                                import traceback
+                                st.error(traceback.format_exc())
 
                 else:
                     st.info("Não há dados de data para análise.")
