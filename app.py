@@ -4,481 +4,541 @@ import pandas as pd
 import altair as alt
 from datetime import datetime
 from google.oauth2.service_account import Credentials
-from gspread.exceptions import SpreadsheetNotFound, APIError
-import locale
-from tenacity import retry, stop_after_attempt, wait_exponential
+from gspread.exceptions import SpreadsheetNotFound
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle, PageBreak
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
+from reportlab.lib.units import inch
+import os
+import io
+import tempfile
+from PIL import Image as PILImage, ImageDraw, ImageFont
+import base64
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib as mpl
 
-# --- Constants ---
-SCOPES = [
-    'https://www.googleapis.com/auth/spreadsheets',
-    'https://www.googleapis.com/auth/drive.readonly'
-]
-SPREADSHEET_ID = '1NTScbiIna-iE7roQ9XBdjUOssRihTFFby4INAAQNXTg'
-WORKSHEET_NAME = 'Vendas'
-REQUIRED_COLS = ['Cartão', 'Dinheiro', 'Pix', 'Data']
-PAYMENT_METHODS = ['Cartão', 'Dinheiro', 'Pix']
-WEEKDAY_ORDER = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 
-                'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo']
+# Configuração da página
+st.set_page_config(page_title="Sistema de Registro de Vendas", layout="centered")
 
-# --- Initial Setup ---
-def setup_locale():
-    """Configure locale settings for currency formatting"""
+# Configurando estilo dos gráficos matplotlib para serem mais atraentes
+plt.style.use('ggplot')
+mpl.rcParams['font.size'] = 14
+mpl.rcParams['figure.figsize'] = (12, 9)  # Gráficos maiores
+mpl.rcParams['figure.facecolor'] = 'white'
+mpl.rcParams['axes.facecolor'] = '#f0f0f0'
+mpl.rcParams['axes.grid'] = True
+mpl.rcParams['grid.alpha'] = 0.3
+mpl.rcParams['axes.labelsize'] = 16
+mpl.rcParams['axes.titlesize'] = 20
+mpl.rcParams['xtick.labelsize'] = 14
+mpl.rcParams['ytick.labelsize'] = 14
+
+def read_google_sheet():
+    """Função para ler os dados da planilha Google Sheets"""
     try:
-        locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')
-    except locale.Error:
-        st.warning("Locale 'pt_BR.UTF-8' not available. Using default locale.")
-
-def setup_page_config():
-    """Configure Streamlit page settings"""
-    st.set_page_config(
-        page_title="Sistema de Registro e Análise de Vendas",
-        layout="wide",
-        menu_items={
-            'Get Help': 'https://example.com/help',
-            'Report a bug': 'https://example.com/bug',
-            'About': "Sistema de análise de vendas v1.0"
-        }
-    )
-
-# --- Google Sheets Functions ---
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
-def get_google_client():
-    """Authenticate with Google Sheets API with retry logic"""
-    try:
+        SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/spreadsheets.readonly', 'https://www.googleapis.com/auth/drive.readonly']
         credentials_dict = st.secrets["google_credentials"]
         creds = Credentials.from_service_account_info(credentials_dict, scopes=SCOPES)
-        return gspread.authorize(creds)
-    except KeyError:
-        st.error("Credenciais 'google_credentials' não encontradas nos segredos do Streamlit.")
-        return None
+        gc = gspread.authorize(creds)
+        spreadsheet_id = '1NTScbiIna-iE7roQ9XBdjUOssRihTFFby4INAAQNXTg'
+        worksheet_name = 'Vendas'
+        try:
+            spreadsheet = gc.open_by_key(spreadsheet_id)
+            worksheet = spreadsheet.worksheet(worksheet_name)
+            rows = worksheet.get_all_records()
+            df = pd.DataFrame(rows)
+            return df, worksheet
+        except SpreadsheetNotFound:
+            st.error(f"Planilha com ID {spreadsheet_id} não encontrada.")
+            return pd.DataFrame(), None
     except Exception as e:
         st.error(f"Erro de autenticação: {e}")
-        return None
+        return pd.DataFrame(), None
 
-@st.cache_data(ttl=600)
-def load_sheet_data():
-    """Load data from Google Sheets with caching"""
+def add_data_to_sheet(date, cartao, dinheiro, pix, worksheet):
+    """Função para adicionar dados à planilha Google Sheets"""
+    if worksheet is None:
+        st.error("Não foi possível acessar a planilha.")
+        return
     try:
-        gc = get_google_client()
-        if not gc:
-            return pd.DataFrame()
-        
-        worksheet = gc.open_by_key(SPREADSHEET_ID).worksheet(WORKSHEET_NAME)
-        rows = worksheet.get_all_records()
-        
-        if not rows:
-            st.warning("A planilha está vazia.")
-            return pd.DataFrame()
-            
-        df = pd.DataFrame(rows)
-        df.columns = [col.strip().title() for col in df.columns]
-        return df
-        
-    except SpreadsheetNotFound:
-        st.error(f"Planilha com ID {SPREADSHEET_ID} não encontrada.")
-        return pd.DataFrame()
-    except APIError as e:
-        st.error(f"Erro na API do Google Sheets: {e}")
-        return pd.DataFrame()
+        new_row = [date, float(cartao), float(dinheiro), float(pix)]
+        worksheet.append_row(new_row)
+        st.success("Dados registrados com sucesso!")
     except Exception as e:
-        st.error(f"Erro inesperado ao carregar dados: {e}")
-        return pd.DataFrame()
+        st.error(f"Erro ao adicionar dados: {e}")
 
-def get_worksheet_for_writing():
-    """Get worksheet object for writing data"""
-    gc = get_google_client()
-    if not gc:
-        return None
-    try:
-        return gc.open_by_key(SPREADSHEET_ID).worksheet(WORKSHEET_NAME)
-    except Exception as e:
-        st.error(f"Erro ao acessar planilha para escrita: {e}")
-        return None
-
-def add_sale_record(date_str, cartao, dinheiro, pix, worksheet):
-    """Add a new sale record to the worksheet"""
-    if not worksheet:
-        return False
-    
-    try:
-        new_row = [date_str, float(cartao), float(dinheiro), float(pix)]
-        worksheet.append_row(new_row, value_input_option='USER_ENTERED')
-        return True
-    except APIError as e:
-        st.error(f"Erro na API ao adicionar dados: {e}")
-        return False
-    except Exception as e:
-        st.error(f"Erro ao registrar venda: {e}")
-        return False
-
-# --- Data Processing ---
-def process_dates(df):
-    """Process and validate date columns"""
-    if 'Data' not in df.columns:
-        st.error("Coluna 'Data' não encontrada.")
-        return df
-    
-    try:
-        df['Data'] = pd.to_datetime(df['Data'], format='%d/%m/%Y', errors='coerce')
-        
-        # Count parsing errors
-        original_non_empty = df['Data'].notna().sum()
-        parsed_nulls = df['Data'].isna().sum()
-        
-        if parsed_nulls > 0:
-            st.warning(f"{parsed_nulls} datas não puderam ser reconhecidas (formato DD/MM/YYYY)")
-        
-        # Add date components
-        df['Ano'] = df['Data'].dt.year
-        df['Mês'] = df['Data'].dt.month
-        df['MêsNome'] = df['Data'].dt.strftime('%B').str.capitalize()
-        df['AnoMês'] = df['Data'].dt.strftime('%Y-%m')
-        df['DataFormatada'] = df['Data'].dt.strftime('%d/%m/%Y')
-        df['DiaSemana'] = df['Data'].dt.strftime('%A').str.capitalize()
-        df['DiaSemanaNum'] = df['Data'].dt.dayofweek
-        
-        return df
-        
-    except Exception as e:
-        st.error(f"Erro ao processar datas: {e}")
-        return df
-
-def process_payments(df):
-    """Process payment columns"""
-    for method in PAYMENT_METHODS:
-        if method in df.columns:
-            df[method] = pd.to_numeric(df[method], errors='coerce').fillna(0)
-        else:
-            st.warning(f"Coluna '{method}' não encontrada - definindo como zero")
-            df[method] = 0
-    
-    df['Total'] = df[PAYMENT_METHODS].sum(axis=1)
-    return df
-
-@st.cache_data
 def process_data(df):
-    """Main data processing pipeline"""
-    if df.empty:
-        return df
-    
-    # Validate required columns
-    missing_cols = [col for col in REQUIRED_COLS if col not in df.columns]
-    if missing_cols:
-        st.error(f"Colunas obrigatórias faltando: {missing_cols}")
-        return pd.DataFrame()
-    
-    df = process_dates(df)
-    df = process_payments(df)
-    
+    """Função para processar e preparar os dados"""
+    if not df.empty:
+        for col in ['Cartão', 'Dinheiro', 'Pix']:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+        df['Total'] = df['Cartão'].fillna(0) + df['Dinheiro'].fillna(0) + df['Pix'].fillna(0)
+        if 'Data' in df.columns:
+            try:
+                df['Data'] = pd.to_datetime(df['Data'], format='%d/%m/%Y', errors='coerce')
+                df['Ano'] = df['Data'].dt.year
+                df['Mês'] = df['Data'].dt.month
+                df['MêsNome'] = df['Data'].dt.strftime('%B')
+                df['AnoMês'] = df['Data'].dt.strftime('%Y-%m')
+                df['DataFormatada'] = df['Data'].dt.strftime('%d/%m/%Y')
+            except ValueError:
+                st.warning("Formato de data inconsistente na planilha.")
+            except Exception as e:
+                st.error(f"Erro ao processar a coluna 'Data': {e}")
     return df
 
-# --- Visualization Functions ---
-def create_payment_pie_chart(data):
-    """Create pie chart of payment method distribution"""
-    payment_data = pd.DataFrame({
-        'Método': PAYMENT_METHODS,
-        'Valor': [data[method].sum() for method in PAYMENT_METHODS]
-    }).query('Valor > 0')
+def create_pie_chart_matplotlib(df_filtered):
+    """Cria gráfico de pizza usando matplotlib - versão melhorada"""
+    valores = [df_filtered['Cartão'].sum(), df_filtered['Dinheiro'].sum(), df_filtered['Pix'].sum()]
+    labels = ['Cartão', 'Dinheiro', 'PIX']
     
-    if payment_data.empty:
-        return None
+    # Cores mais vibrantes e agradáveis
+    cores = ['#3498db', '#f39c12', '#2ecc71']
     
-    pie = alt.Chart(payment_data).mark_arc(outerRadius=140, innerRadius=60).encode(
-        theta=alt.Theta("Valor:Q", stack=True),
-        color=alt.Color("Método:N", scale=alt.Scale(scheme='category10'),
-        tooltip=[
-            alt.Tooltip("Método:N"),
-            alt.Tooltip("Valor:Q", format=",.2f", title="Valor (R$)")
-        ]
+    # Criar figura com tamanho maior
+    plt.figure(figsize=(12, 9))
+    
+    # Criar o gráfico de pizza com efeito de explosão para destacar as fatias
+    explode = (0.05, 0.05, 0.05)  # Destacar todas as fatias levemente
+    wedges, texts, autotexts = plt.pie(
+        valores, 
+        labels=labels, 
+        autopct='%1.1f%%', 
+        startangle=90, 
+        colors=cores,
+        explode=explode,
+        shadow=True,
+        textprops={'fontsize': 16, 'fontweight': 'bold'},
+        wedgeprops={'edgecolor': 'white', 'linewidth': 2}
     )
     
-    return pie
+    # Personalizar os textos das porcentagens
+    for autotext in autotexts:
+        autotext.set_color('white')
+        autotext.set_fontsize(14)
+        autotext.set_fontweight('bold')
+    
+    plt.axis('equal')  # Manter o aspecto circular
+    plt.title('Distribuição por Método de Pagamento', fontsize=24, pad=20, fontweight='bold')
+    
+    # Adicionar um círculo branco no meio para efeito de donut
+    centre_circle = plt.Circle((0, 0), 0.5, fc='white')
+    plt.gca().add_artist(centre_circle)
+    
+    # Adicionar legenda com valores absolutos
+    total = sum(valores)
+    legendas = [f'{l}: R$ {v:.2f} ({v/total*100:.1f}%)' for l, v in zip(labels, valores)]
+    plt.legend(legendas, loc="center", bbox_to_anchor=(0.5, -0.1), fontsize=14)
+    
+    # Salvar em buffer
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=300, bbox_inches='tight', facecolor='white')
+    plt.close()
+    
+    return buf
 
-def create_daily_sales_chart(data):
-    """Create bar chart of daily sales by payment method"""
-    daily_data = data.groupby('DataFormatada')[PAYMENT_METHODS].sum().reset_index()
-    daily_long = daily_data.melt(
-        id_vars=['DataFormatada'],
-        value_vars=PAYMENT_METHODS,
-        var_name='Método',
-        value_name='Valor'
-    ).query('Valor > 0')
+def create_bar_chart_matplotlib(df_filtered):
+    """Cria gráfico de barras usando matplotlib - versão melhorada"""
+    date_column = 'DataFormatada' if 'DataFormatada' in df_filtered.columns else 'Data'
     
-    if daily_long.empty:
-        return None
+    # Agrupar por data
+    daily = df_filtered.groupby(date_column)[['Cartão', 'Dinheiro', 'Pix']].sum().reset_index()
     
-    daily_long['Data'] = pd.to_datetime(daily_long['DataFormatada'], format='%d/%m/%Y')
+    # Cores bonitas para cada método de pagamento
+    cores = ['#3498db', '#f39c12', '#2ecc71']
     
-    chart = alt.Chart(daily_long).mark_bar().encode(
-        x=alt.X('Data:T', title='Data', axis=alt.Axis(format="%d/%m")),
-        y=alt.Y('sum(Valor):Q', title='Valor (R$)'),
-        color=alt.Color('Método:N', scale=alt.Scale(scheme='category10')),
-        tooltip=[
-            alt.Tooltip('DataFormatada', title='Data'),
-            alt.Tooltip('Método:N'),
-            alt.Tooltip('sum(Valor):Q', title='Valor (R$)', format=',.2f')
-        ]
-    ).interactive()
+    # Configuração do gráfico com estilo moderno
+    fig, ax = plt.subplots(figsize=(14, 10))
     
-    return chart
+    # Posições das barras
+    x = np.arange(len(daily[date_column]))
+    width = 0.25
+    
+    # Plotar barras para cada método de pagamento
+    rects1 = ax.bar(x - width, daily['Cartão'], width, label='Cartão', color=cores[0], 
+                    edgecolor='white', linewidth=1.5, alpha=0.9)
+    rects2 = ax.bar(x, daily['Dinheiro'], width, label='Dinheiro', color=cores[1],
+                   edgecolor='white', linewidth=1.5, alpha=0.9)
+    rects3 = ax.bar(x + width, daily['Pix'], width, label='PIX', color=cores[2],
+                   edgecolor='white', linewidth=1.5, alpha=0.9)
+    
+    # Adicionar valor no topo de cada barra
+    def add_value_labels(rects):
+        for rect in rects:
+            height = rect.get_height()
+            if height > 0:  # Apenas mostrar valor se for maior que zero
+                ax.text(rect.get_x() + rect.get_width()/2., height + 5,
+                        f'R${height:.0f}', ha='center', va='bottom', 
+                        fontsize=12, fontweight='bold')
+    
+    add_value_labels(rects1)
+    add_value_labels(rects2)
+    add_value_labels(rects3)
+    
+    # Configurações adicionais
+    ax.set_ylabel('Valor (R$)', fontsize=18, fontweight='bold')
+    ax.set_title('Vendas Diárias por Método de Pagamento', fontsize=22, fontweight='bold', pad=20)
+    ax.set_xticks(x)
+    ax.set_xticklabels(daily[date_column], rotation=45, ha='right')
+    
+    # Adicionar grade apenas no eixo y para facilitar a leitura
+    ax.yaxis.grid(True, linestyle='--', alpha=0.7)
+    ax.set_axisbelow(True)
+    
+    # Remover bordas
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    
+    # Legenda melhorada
+    ax.legend(fontsize=14, frameon=True, facecolor='white', edgecolor='#dddddd')
+    
+    fig.tight_layout()
+    
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=300, bbox_inches='tight', facecolor='white')
+    plt.close()
+    
+    return buf
 
-def create_cumulative_chart(data):
-    """Create line chart of cumulative sales"""
-    df_sorted = data.sort_values('Data')
-    daily_total = df_sorted.groupby('Data')['Total'].sum().reset_index()
-    daily_total['Total Acumulado'] = daily_total['Total'].cumsum()
+def create_line_chart_matplotlib(df_filtered):
+    """Cria gráfico de linha usando matplotlib - versão melhorada"""
+    # Ordenar por data
+    df_acum = df_filtered.sort_values('Data').copy()
+    df_acum['Total Acumulado'] = df_acum['Total'].cumsum()
     
-    if daily_total.empty:
-        return None
+    # Configuração do gráfico
+    fig, ax = plt.subplots(figsize=(14, 10))
     
-    chart = alt.Chart(daily_total).mark_line(point=True).encode(
-        x=alt.X('Data:T', title='Data'),
-        y=alt.Y('Total Acumulado:Q', title='Capital Acumulado (R$)'),
-        tooltip=[
-            alt.Tooltip('Data:T', format='%d/%m/%Y'),
-            alt.Tooltip('Total Acumulado:Q', format=',.2f')
-        ]
-    ).interactive()
+    # Cores e estilo moderno
+    cor_linha = '#3498db'
+    cor_area = '#3498db'
+    cor_ponto = '#2980b9'
     
-    return chart
+    # Plotar linha com área sombreada abaixo e pontos destacados
+    x = np.arange(len(df_acum['DataFormatada']))
+    y = df_acum['Total Acumulado']
+    
+    # Adicionar área sombreada sob a linha
+    ax.fill_between(x, y, alpha=0.3, color=cor_area)
+    
+    # Adicionar linha principal
+    linha = ax.plot(x, y, marker='o', linestyle='-', linewidth=3, 
+             markersize=10, color=cor_linha, markerfacecolor=cor_ponto, 
+             markeredgecolor='white', markeredgewidth=2)
+    
+    # Adicionar rótulos nos pontos
+    for i, valor in enumerate(y):
+        ax.annotate(f'R${valor:.0f}', 
+                   (x[i], valor), 
+                   xytext=(0, 10),
+                   textcoords='offset points',
+                   ha='center',
+                   fontsize=12,
+                   fontweight='bold')
+    
+    # Configurações adicionais
+    ax.set_ylabel('Capital Acumulado (R$)', fontsize=18, fontweight='bold')
+    ax.set_title('Acúmulo de Capital ao Longo do Tempo', fontsize=22, fontweight='bold', pad=20)
+    
+    # Configurar eixo X com as datas formatadas
+    ax.set_xticks(x)
+    ax.set_xticklabels(df_acum['DataFormatada'], rotation=45, ha='right')
+    
+    # Adicionar grade para facilitar a leitura
+    ax.grid(True, linestyle='--', alpha=0.7)
+    ax.set_axisbelow(True)
+    
+    # Remover bordas
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    
+    fig.tight_layout()
+    
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=300, bbox_inches='tight', facecolor='white')
+    plt.close()
+    
+    return buf
 
-def create_monthly_trend_chart(data):
-    """Create bar chart of monthly sales"""
-    monthly_data = data.groupby(['AnoMês', 'Ano', 'Mês'])['Total'].sum().reset_index()
-    monthly_data = monthly_data.sort_values(['Ano', 'Mês'])
-    
-    if monthly_data.empty:
-        return None
-    
-    chart = alt.Chart(monthly_data).mark_bar().encode(
-        x=alt.X('AnoMês', title='Mês/Ano', sort=monthly_data['AnoMês'].tolist()),
-        y=alt.Y('Total:Q', title='Total Vendido (R$)'),
-        tooltip=[
-            alt.Tooltip('AnoMês', title='Mês/Ano'),
-            alt.Tooltip('Total:Q', format=",.2f")
-        ]
-    ).interactive()
-    
-    return chart
-
-def create_weekday_chart(data):
-    """Create bar chart of sales by weekday"""
-    if 'DiaSemana' not in data.columns:
-        return None
-    
-    weekday_data = data.groupby(['DiaSemanaNum', 'DiaSemana'])['Total'].mean().reset_index()
-    
-    if weekday_data.empty:
-        return None
-    
-    chart = alt.Chart(weekday_data).mark_bar().encode(
-        x=alt.X('DiaSemana', title='Dia da Semana', sort=WEEKDAY_ORDER),
-        y=alt.Y('Total:Q', title='Média de Vendas (R$)'),
-        color=alt.Color('DiaSemana', legend=None, scale=alt.Scale(scheme='category10')),
-        tooltip=[
-            alt.Tooltip('DiaSemana', title='Dia da Semana'),
-            alt.Tooltip('Total:Q', format=",.2f")
-        ]
-    )
-    
-    return chart
-
-# --- UI Components ---
-def show_sales_form():
-    """Render the sales registration form"""
-    with st.form("venda_form"):
-        date = st.date_input("Data", datetime.now())
-        cols = st.columns(3)
+def generate_pdf_report(df_filtered):
+    """Função para gerar o relatório em PDF com gráficos em páginas separadas"""
+    try:
+        # Criar diretório temporário para os gráficos
+        temp_dir = tempfile.mkdtemp()
         
-        cartao = cols[0].number_input("Cartão (R$)", min_value=0.0, format="%.2f")
-        dinheiro = cols[1].number_input("Dinheiro (R$)", min_value=0.0, format="%.2f")
-        pix = cols[2].number_input("PIX (R$)", min_value=0.0, format="%.2f")
+        # Gerar gráficos usando matplotlib
+        pie_chart_buf = create_pie_chart_matplotlib(df_filtered)
+        bar_chart_buf = create_bar_chart_matplotlib(df_filtered)
+        line_chart_buf = create_line_chart_matplotlib(df_filtered)
         
-        total = cartao + dinheiro + pix
-        st.markdown(f"**Total da venda: R$ {total:,.2f}**".replace(",", "#").replace(".", ",").replace("#", "."))
+        # Salvar buffers como arquivos PNG
+        pie_chart_path = os.path.join(temp_dir, "pie_chart.png")
+        bar_chart_path = os.path.join(temp_dir, "bar_chart.png")
+        line_chart_path = os.path.join(temp_dir, "line_chart.png")
         
-        if st.form_submit_button("Registrar Venda"):
-            if total > 0:
-                worksheet = get_worksheet_for_writing()
-                if add_sale_record(
-                    date.strftime('%d/%m/%Y'),
-                    cartao,
-                    dinheiro,
-                    pix,
-                    worksheet
-                ):
-                    st.cache_data.clear()
-                    st.rerun()
-            else:
-                st.warning("O valor total da venda deve ser maior que zero.")
+        # Salvar os buffers como arquivos PNG
+        with open(pie_chart_path, 'wb') as f:
+            f.write(pie_chart_buf.getvalue())
+        
+        with open(bar_chart_path, 'wb') as f:
+            f.write(bar_chart_buf.getvalue())
+        
+        with open(line_chart_path, 'wb') as f:
+            f.write(line_chart_buf.getvalue())
+        
+        # Criar o PDF
+        pdf_path = os.path.join(temp_dir, "analise_vendas.pdf")
+        doc = SimpleDocTemplate(pdf_path, pagesize=A4)  # Usando A4 para ter mais espaço
+        elements = []
+        
+        # Criar estilos personalizados
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=24,
+            alignment=1,  # Centralizado
+            spaceAfter=30,
+            textColor=colors.darkblue
+        )
+        
+        subtitle_style = ParagraphStyle(
+            'CustomSubtitle',
+            parent=styles['Heading2'],
+            fontSize=20,
+            alignment=1,  # Centralizado
+            spaceAfter=20,
+            textColor=colors.darkblue
+        )
+        
+        # Página de capa com título
+        elements.append(Spacer(1, 2*inch))  # Espaço no topo
+        elements.append(Paragraph("Análise Detalhada de Vendas", title_style))
+        elements.append(Spacer(1, 0.5*inch))
+        elements.append(Paragraph(f"Relatório gerado em {datetime.now().strftime('%d/%m/%Y')}", styles['Italic']))
+        elements.append(PageBreak())  # Nova página após a capa
+        
+        # Página com tabela de dados
+        elements.append(Paragraph("Resumo dos Dados", subtitle_style))
+        elements.append(Spacer(1, 0.5*inch))
+        
+        # Tabela de resumo
+        total_cartao = df_filtered['Cartão'].sum()
+        total_dinheiro = df_filtered['Dinheiro'].sum()
+        total_pix = df_filtered['Pix'].sum()
+        total_geral = total_cartao + total_dinheiro + total_pix
+        
+        data = [
+            ["Método de Pagamento", "Valor Total (R$)", "Percentual (%)"],
+            ["Cartão", f"R$ {total_cartao:.2f}", f"{(total_cartao/total_geral*100):.1f}%"],
+            ["Dinheiro", f"R$ {total_dinheiro:.2f}", f"{(total_dinheiro/total_geral*100):.1f}%"],
+            ["PIX", f"R$ {total_pix:.2f}", f"{(total_pix/total_geral*100):.1f}%"],
+            ["TOTAL", f"R$ {total_geral:.2f}", "100.0%"]
+        ]
+        
+        table = Table(data, colWidths=[doc.width/3.0]*3)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 14),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, -1), (-1, -1), colors.lightgrey),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE')
+        ]))
+        
+        elements.append(table)
+        elements.append(Spacer(1, 1*inch))
+        
+        # Informações gerais
+        elements.append(Paragraph(f"Período da análise: {df_filtered['DataFormatada'].min()} a {df_filtered['DataFormatada'].max()}", styles['Normal']))
+        elements.append(Paragraph(f"Total de dias analisados: {len(df_filtered['DataFormatada'].unique())}", styles['Normal']))
+        elements.append(Paragraph(f"Média diária de vendas: R$ {(total_geral / len(df_filtered['DataFormatada'].unique())):.2f}", styles['Normal']))
+        
+        elements.append(PageBreak())  # Nova página antes do próximo gráfico
+        
+        # Página 1: Gráfico de Pizza
+        if os.path.exists(pie_chart_path):
+            elements.append(Paragraph("Distribuição por Método de Pagamento", subtitle_style))
+            elements.append(Spacer(1, 0.5*inch))
+            img = Image(pie_chart_path)
+            img.drawHeight = 6*inch  # Altura fixa para garantir tamanho adequado
+            img.drawWidth = 6*inch   # Largura fixa para garantir tamanho adequado
+            elements.append(img)
+            elements.append(PageBreak())  # Nova página após este gráfico
+        
+        # Página 2: Gráfico de Barras
+        if os.path.exists(bar_chart_path):
+            elements.append(Paragraph("Vendas Diárias por Método de Pagamento", subtitle_style))
+            elements.append(Spacer(1, 0.5*inch))
+            img = Image(bar_chart_path)
+            img.drawHeight = 6*inch
+            img.drawWidth = 8*inch
+            elements.append(img)
+            elements.append(PageBreak())  # Nova página após este gráfico
+        
+        # Página 3: Gráfico de Linha
+        if os.path.exists(line_chart_path):
+            elements.append(Paragraph("Acúmulo de Capital ao Longo do Tempo", subtitle_style))
+            elements.append(Spacer(1, 0.5*inch))
+            img = Image(line_chart_path)
+            img.drawHeight = 6*inch
+            img.drawWidth = 8*inch
+            elements.append(img)
+        
+        # Construir o PDF
+        doc.build(elements)
+        
+        # Ler o PDF gerado
+        with open(pdf_path, "rb") as pdf_file:
+            PDFbyte = pdf_file.read()
+        
+        # Limpar arquivos temporários
+        for file_path in [pie_chart_path, bar_chart_path, line_chart_path, pdf_path]:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        
+        # Tentar remover o diretório temporário
+        try:
+            os.rmdir(temp_dir)
+        except:
+            pass
+        
+        return PDFbyte
+    
+    except Exception as e:
+        st.error(f"Erro ao gerar PDF: {e}")
+        import traceback
+        st.error(traceback.format_exc())
+        return None
 
-def show_global_stats(df):
-    """Display global statistics"""
-    if df.empty:
-        st.info("Não há dados suficientes para exibir estatísticas.")
-        return
-    
-    st.subheader("Estatísticas Gerais")
-    
-    total_sales = df['Total'].sum()
-    num_days = df['DataFormatada'].nunique()
-    daily_avg = total_sales / num_days if num_days > 0 else 0
-    
-    # Best/worst day
-    daily_sum = df.groupby('DataFormatada')['Total'].sum().reset_index()
-    best_day = daily_sum.loc[daily_sum['Total'].idxmax()] if not daily_sum.empty else None
-    worst_day = daily_sum[daily_sum['Total'] > 0].loc[daily_sum['Total'].idxmin()] if not daily_sum[daily_sum['Total'] > 0].empty else None
-    
-    # Payment totals
-    payment_totals = {method: df[method].sum() for method in PAYMENT_METHODS}
-    most_used = max(payment_totals, key=payment_totals.get) if any(payment_totals.values()) else "N/A"
-    
-    # Best month
-    monthly_sum = df.groupby('AnoMês')['Total'].sum().reset_index()
-    best_month = monthly_sum.loc[monthly_sum['Total'].idxmax()] if not monthly_sum.empty else None
-    
-    # Display metrics
-    cols = st.columns(3)
-    cols[0].metric("Vendas Totais", f"R$ {total_sales:,.2f}".replace(",", "#").replace(".", ",").replace("#", "."))
-    cols[1].metric("Média Diária", f"R$ {daily_avg:,.2f}".replace(",", "#").replace(".", ",").replace("#", "."))
-    cols[2].metric("Dias Registrados", num_days)
-    
-    st.divider()
-    
-    cols = st.columns(3)
-    if best_day is not None:
-        cols[0].metric("Melhor Dia", best_day['DataFormatada'], f"R$ {best_day['Total']:,.2f}".replace(",", "#").replace(".", ",").replace("#", "."))
-    if worst_day is not None:
-        cols[1].metric("Pior Dia (>R$0)", worst_day['DataFormatada'], f"R$ {worst_day['Total']:,.2f}".replace(",", "#").replace(".", ",").replace("#", "."))
-    cols[2].metric("Pagamento Mais Usado", most_used, f"R$ {payment_totals.get(most_used, 0):,.2f}".replace(",", "#").replace(".", ",").replace("#", "."))
-    
-    if best_month is not None:
-        st.metric("Melhor Mês", best_month['AnoMês'], f"R$ {best_month['Total']:,.2f}".replace(",", "#").replace(".", ",").replace("#", "."))
-
-def show_filtered_analysis(df):
-    """Show filtered data analysis"""
-    if df.empty:
-        st.info("Não há dados para análise.")
-        return
-    
-    st.subheader("Resumo do Período")
-    
-    total = df['Total'].sum()
-    days = df['DataFormatada'].nunique()
-    avg = total / days if days > 0 else 0
-    
-    cols = st.columns(3)
-    cols[0].metric("Vendas Totais", f"R$ {total:,.2f}".replace(",", "#").replace(".", ",").replace("#", "."))
-    cols[1].metric("Média Diária", f"R$ {avg:,.2f}".replace(",", "#").replace(".", ",").replace("#", "."))
-    cols[2].metric("Dias Registrados", days)
-    
-    st.divider()
-    
-    # Visualizations
-    st.subheader("Distribuição por Método de Pagamento")
-    pie_chart = create_payment_pie_chart(df)
-    st.altair_chart(pie_chart if pie_chart else st.info("Sem dados para gráfico"), use_container_width=True)
-    
-    st.subheader("Vendas Diárias por Método")
-    daily_chart = create_daily_sales_chart(df)
-    st.altair_chart(daily_chart if daily_chart else st.info("Sem dados para gráfico"), use_container_width=True)
-    
-    st.subheader("Acúmulo de Capital")
-    cum_chart = create_cumulative_chart(df)
-    st.altair_chart(cum_chart if cum_chart else st.info("Sem dados para gráfico"), use_container_width=True)
-    
-    st.subheader("Vendas Mensais")
-    monthly_chart = create_monthly_trend_chart(df)
-    st.altair_chart(monthly_chart if monthly_chart else st.info("Sem dados para gráfico"), use_container_width=True)
-    
-    st.subheader("Vendas por Dia da Semana")
-    weekday_chart = create_weekday_chart(df)
-    st.altair_chart(weekday_chart if weekday_chart else st.info("Sem dados para gráfico"), use_container_width=True)
-
-def apply_filters(df):
-    """Apply user filters to the data"""
-    if df.empty:
-        return df
-    
-    st.sidebar.header("Filtros")
-    
-    available_years = sorted(df['Ano'].dropna().unique().astype(int))
-    selected_years = st.sidebar.multiselect(
-        "Anos",
-        options=available_years,
-        default=available_years
-    )
-    
-    df_filtered = df[df['Ano'].isin(selected_years)]
-    
-    if df_filtered.empty:
-        return df_filtered
-    
-    # Month selection with names
-    month_map = {m: datetime(2020, m, 1).strftime('%B').capitalize() 
-                for m in df_filtered['Mês'].dropna().unique().astype(int)}
-    month_options = [f"{m} - {month_map[m]}" for m in month_map]
-    
-    selected_months_str = st.sidebar.multiselect(
-        "Meses",
-        options=month_options,
-        default=month_options
-    )
-    
-    selected_months = [int(m.split(" - ")[0]) for m in selected_months_str]
-    df_filtered = df_filtered[df_filtered['Mês'].isin(selected_months)]
-    
-    return df_filtered
-
-def show_data_table(df):
-    """Display filtered data in a table"""
-    if df.empty:
-        return
-    
-    st.subheader("Dados Filtrados")
-    
-    display_cols = {
-        'DataFormatada': 'Data',
-        'Cartão': 'Cartão (R$)',
-        'Dinheiro': 'Dinheiro (R$)',
-        'Pix': 'Pix (R$)',
-        'Total': 'Total (R$)'
-    }
-    
-    st.dataframe(
-        df[list(display_cols.keys())].rename(columns=display_cols),
-        use_container_width=True,
-        hide_index=True
-    )
-
-# --- Main Application ---
 def main():
-    setup_locale()
-    setup_page_config()
-    
-    st.title("📊 Sistema de Registro e Análise de Vendas")
-    
-    # Load and process data
-    with st.spinner("Carregando dados..."):
-        df_raw = load_sheet_data()
-        df_processed = process_data(df_raw)
-    
-    # Create tabs
-    tab1, tab2 = st.tabs(["📈 Registrar & Estatísticas", "🔍 Análise Detalhada"])
-    
+    st.title("📊 Sistema de Registro de Vendas")
+    tab1, tab3 = st.tabs(["Registrar Venda", "Análise Detalhada"])
+
     with tab1:
-        show_sales_form()
-        st.divider()
-        show_global_stats(df_processed)
-    
-    with tab2:
-        if df_processed.empty:
-            st.info("Não há dados suficientes para análise.")
-        else:
-            df_filtered = apply_filters(df_processed)
-            show_data_table(df_filtered)
-            st.divider()
-            show_filtered_analysis(df_filtered)
+        st.header("Registrar Nova Venda")
+        with st.form("venda_form"):
+            data = st.date_input("Data", datetime.now())
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                cartao = st.number_input("Cartão (R$)", min_value=0.0, format="%.2f")
+            with col2:
+                dinheiro = st.number_input("Dinheiro (R$)", min_value=0.0, format="%.2f")
+            with col3:
+                pix = st.number_input("PIX (R$)", min_value=0.0, format="%.2f")
+            total = cartao + dinheiro + pix
+            st.markdown(f"**Total da venda: R$ {total:.2f}**")
+            submitted = st.form_submit_button("Registrar Venda")
+            if submitted:
+                if cartao > 0 or dinheiro > 0 or pix > 0:
+                    formatted_date = data.strftime('%d/%m/%Y')
+                    _, worksheet = read_google_sheet()
+                    if worksheet:
+                        add_data_to_sheet(formatted_date, cartao, dinheiro, pix, worksheet)
+                else:
+                    st.warning("Pelo menos um valor de venda deve ser maior que zero.")
+
+    with tab3:
+        st.header("Análise Detalhada de Vendas")
+        with st.spinner("Carregando dados..."):
+            df_raw, _ = read_google_sheet()
+            if not df_raw.empty:
+                df = process_data(df_raw.copy())
+                if 'Data' in df.columns and pd.api.types.is_datetime64_any_dtype(df['Data']):
+                    anos = sorted(df['Ano'].unique())
+                    selected_anos = st.multiselect("Selecione o(s) Ano(s):", options=anos, default=anos)
+                    df_filtered = df[df['Ano'].isin(selected_anos)]
+
+                    meses_disponiveis = sorted(df_filtered['Mês'].unique())
+                    meses_nomes = {m: datetime(2020, m, 1).strftime('%B') for m in meses_disponiveis}
+                    meses_opcoes = [f"{m} - {meses_nomes[m]}" for m in meses_disponiveis]
+                    selected_meses_str = st.multiselect("Selecione o(s) Mês(es):", options=meses_opcoes, default=meses_opcoes)
+                    selected_meses = [int(m.split(" - ")[0]) for m in selected_meses_str]
+                    df_filtered = df_filtered[df_filtered['Mês'].isin(selected_meses)]
+
+                    st.subheader("Dados Filtrados")
+                    st.dataframe(df_filtered[['DataFormatada', 'Cartão', 'Dinheiro', 'Pix', 'Total']]
+                                 if 'DataFormatada' in df_filtered.columns else df_filtered, use_container_width=True)
+
+                    st.subheader("Distribuição por Método de Pagamento")
+                    payment_filtered = pd.DataFrame({
+                        'Método': ['Cartão', 'Dinheiro', 'PIX'],
+                        'Valor': [df_filtered['Cartão'].sum(), df_filtered['Dinheiro'].sum(), df_filtered['Pix'].sum()]
+                    })
+                    base_pie = alt.Chart(payment_filtered).encode(
+                        theta=alt.Theta("Valor:Q", stack=True),
+                        color=alt.Color("Método:N", legend=alt.Legend(title="Método de Pagamento")),
+                        tooltip=["Método", "Valor"]
+                    ).properties(
+                        width=400,
+                        height=400,
+                    )
+                    pie_chart = base_pie.mark_arc(outerRadius=150)
+                    text_pie = base_pie.mark_text(radius=170).encode(text=alt.Text('Valor:Q', format='.1f'))
+                    final_pie = pie_chart + text_pie
+                    st.altair_chart(final_pie, use_container_width=True)
+
+                    st.subheader("Vendas Diárias por Método de Pagamento")
+                    date_column_filtered = 'DataFormatada' if 'DataFormatada' in df_filtered.columns else 'Data'
+                    daily_filtered = df_filtered.groupby(date_column_filtered)[['Cartão', 'Dinheiro', 'Pix']].sum().reset_index()
+                    daily_filtered_long = pd.melt(daily_filtered, id_vars=[date_column_filtered],
+                                                    value_vars=['Cartão', 'Dinheiro', 'Pix'],
+                                                    var_name='Método', value_name='Valor')
+                    bar_chart_filtered = alt.Chart(daily_filtered_long).mark_bar().encode(
+                        x=alt.X(f'{date_column_filtered}:N', title='Data', sort=None, axis=alt.Axis(labelAngle=-45)),
+                        y=alt.Y('sum(Valor):Q', title='Valor (R$)'),
+                        color=alt.Color('Método:N', legend=alt.Legend(title="Pagamento")),
+                        tooltip=[date_column_filtered, 'Método', 'Valor']
+                    ).properties(
+                        width=600,
+                        height=400,
+                    )
+                    st.altair_chart(bar_chart_filtered, use_container_width=True)
+
+                    st.subheader("Acúmulo de Capital ao Longo do Tempo")
+                    df_accumulated = df_filtered.sort_values('Data').copy()
+                    df_accumulated['Total Acumulado'] = df_accumulated['Total'].cumsum()
+                    acum_chart = alt.Chart(df_accumulated).mark_line(point=True).encode(
+                        x=alt.X('Data:T', title='Data'), 
+                        y=alt.Y('Total Acumulado:Q', title='Capital Acumulado (R$)'),
+                        tooltip=['DataFormatada', 'Total Acumulado']
+                    ).properties(
+                        width=600,
+                        height=400,
+                    )
+                    st.altair_chart(acum_chart, use_container_width=True)
+
+                    # Botão para gerar e baixar o PDF
+                    if st.button("Exportar Análise para PDF"):
+                        with st.spinner("Gerando PDF... Isso pode levar alguns segundos."):
+                            try:
+                                pdf_bytes = generate_pdf_report(df_filtered)
+                                if pdf_bytes:
+                                    st.success("PDF gerado com sucesso!")
+                                    st.download_button(
+                                        label="Baixar PDF",
+                                        data=pdf_bytes,
+                                        file_name="analise_vendas.pdf",
+                                        mime="application/pdf"
+                                    )
+                                else:
+                                    st.error("Não foi possível gerar o PDF. Verifique os logs para mais detalhes.")
+                            except Exception as e:
+                                st.error(f"Erro ao gerar ou baixar o PDF: {e}")
+                                import traceback
+                                st.error(traceback.format_exc())
+
+                else:
+                    st.info("Não há dados de data para análise.")
+            else:
+                st.info("Não há dados para exibir.")
 
 if __name__ == "__main__":
     main()
