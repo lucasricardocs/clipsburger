@@ -4,16 +4,7 @@ import pandas as pd
 from datetime import datetime
 from google.oauth2.service_account import Credentials
 from gspread.exceptions import SpreadsheetNotFound
-from reportlab.lib.pagesizes import letter, A4
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle, PageBreak
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib import colors
-from reportlab.lib.units import inch
-import os
-import tempfile
-import base64
 import altair as alt
-import altair_saver
 
 # Configuração da página
 st.set_page_config(page_title="Sistema de Registro de Vendas", layout="wide")
@@ -93,7 +84,7 @@ def create_pie_chart(df_filtered):
     text = pie.mark_text(radius=140).encode(
         text=alt.Text('Valor', format='.1%'),
         order=alt.Order('Valor', sort='descending'),
-        color=alt.value('black')  # Define a cor dos rótulos para preto
+        color=alt.value('black')
     )
 
     return pie + text
@@ -132,131 +123,40 @@ def create_line_chart(df_filtered):
 
     return line_chart
 
-def generate_pdf_report(df_filtered):
-    """Função para gerar o relatório em PDF com gráficos Altair"""
-    try:
-        temp_dir = tempfile.mkdtemp()
+def create_monthly_revenue_chart(df_filtered):
+    """Cria gráfico de barras da receita mensal usando Altair"""
+    if df_filtered.empty:
+        return alt.Chart(pd.DataFrame({'AnoMês': [], 'Total': []})).mark_bar().encode(x='AnoMês', y='Total')
 
-        pie_chart = create_pie_chart(df_filtered)
-        bar_chart = create_bar_chart(df_filtered)
-        line_chart = create_line_chart(df_filtered)
+    monthly_revenue = df_filtered.groupby('AnoMês')['Total'].sum().reset_index()
 
-        pie_chart_path = os.path.join(temp_dir, "pie_chart.png")
-        bar_chart_path = os.path.join(temp_dir, "bar_chart.png")
-        line_chart_path = os.path.join(temp_dir, "line_chart.png")
+    chart = alt.Chart(monthly_revenue).mark_bar().encode(
+        x=alt.X('AnoMês', title='Mês'),
+        y=alt.Y('Total', title='Receita Total (R$)'),
+        tooltip=['AnoMês', alt.Tooltip('Total', format=",.2f")]
+    ).properties(
+        title='Receita Mensal Total'
+    ).interactive()
 
-        altair_saver.save(pie_chart, pie_chart_path)
-        altair_saver.save(bar_chart, bar_chart_path)
-        altair_saver.save(line_chart, line_chart_path)
+    return chart
 
-        pdf_path = os.path.join(temp_dir, "analise_vendas.pdf")
-        doc = SimpleDocTemplate(pdf_path, pagesize=A4)
-        elements = []
+def create_payment_type_monthly_chart(df_filtered):
+    """Cria gráfico de barras empilhadas da receita mensal por tipo de pagamento usando Altair"""
+    if df_filtered.empty:
+        return alt.Chart(pd.DataFrame({'AnoMês': [], 'Método': [], 'Valor': []})).mark_bar().encode(x='AnoMês', y='Valor', color='Método')
 
-        styles = getSampleStyleSheet()
-        title_style = ParagraphStyle(
-            'CustomTitle',
-            parent=styles['Heading1'],
-            fontSize=24,
-            alignment=1,
-            spaceAfter=30,
-            textColor=colors.darkblue
-        )
+    monthly_payment = df_filtered.groupby('AnoMês')[['Cartão', 'Dinheiro', 'Pix']].sum().reset_index().melt(id_vars=['AnoMês'], var_name='Método', value_name='Valor')
 
-        subtitle_style = ParagraphStyle(
-            'CustomSubtitle',
-            parent=styles['Heading2'],
-            fontSize=20,
-            alignment=1,
-            spaceAfter=20,
-            textColor=colors.darkblue
-        )
+    chart = alt.Chart(monthly_payment).mark_bar().encode(
+        x=alt.X('AnoMês', title='Mês'),
+        y=alt.Y('Valor', title='Valor (R$)'),
+        color='Método',
+        tooltip=['AnoMês', 'Método', alt.Tooltip('Valor', format=",.2f")]
+    ).properties(
+        title='Receita Mensal por Tipo de Pagamento'
+    ).interactive()
 
-        elements.append(Spacer(1, 2*inch))
-        elements.append(Paragraph("Análise Detalhada de Vendas", title_style))
-        elements.append(Spacer(1, 0.5*inch))
-        elements.append(Paragraph(f"Relatório gerado em {datetime.now().strftime('%d/%m/%Y')}", styles['Italic']))
-        elements.append(PageBreak())
-
-        elements.append(Paragraph("Resumo dos Dados", subtitle_style))
-        elements.append(Spacer(1, 0.5*inch))
-
-        total_cartao = df_filtered['Cartão'].sum()
-        total_dinheiro = df_filtered['Dinheiro'].sum()
-        total_pix = df_filtered['Pix'].sum()
-        total_geral = total_cartao + total_dinheiro + total_pix
-
-        data = [
-            ["Método de Pagamento", "Valor Total (R$)", "Percentual (%)"],
-            ["Cartão", f"R$ {total_cartao:.2f}", f"{(total_cartao/total_geral*100):.1f}%"],
-            ["Dinheiro", f"R$ {total_dinheiro:.2f}", f"{(total_dinheiro/total_geral*100):.1f}%"],
-            ["PIX", f"R$ {total_pix:.2f}", f"{(total_pix/total_geral*100):.1f}%"],
-            ["TOTAL", f"R$ {total_geral:.2f}", "100.0%"]
-        ]
-
-        table = Table(data, colWidths=[doc.width/3.0]*3)
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 14),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, -1), (-1, -1), colors.lightgrey),
-            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE')
-        ]))
-
-        elements.append(table)
-        elements.append(Spacer(1, 1*inch))
-
-        elements.append(Paragraph(f"Período da análise: {df_filtered['DataFormatada'].min()} a {df_filtered['DataFormatada'].max()}", styles['Normal']))
-        elements.append(Paragraph(f"Total de dias analisados: {len(df_filtered['DataFormatada'].unique())}", styles['Normal']))
-        elements.append(Paragraph(f"Média diária de vendas: R$ {(total_geral / len(df_filtered['DataFormatada'].unique())):.2f}", styles['Normal']))
-
-        elements.append(PageBreak())
-
-        if os.path.exists(pie_chart_path):
-            elements.append(Paragraph("Distribuição por Método de Pagamento", subtitle_style))
-            elements.append(Spacer(1, 0.5*inch))
-            img = Image(pie_chart_path, width=6*inch, height=6*inch)
-            elements.append(img)
-            elements.append(PageBreak())
-
-        if os.path.exists(bar_chart_path):
-            elements.append(Paragraph("Vendas Diárias por Método de Pagamento", subtitle_style))
-            elements.append(Spacer(1, 0.5*inch))
-            img = Image(bar_chart_path, width=8*inch, height=6*inch)
-            elements.append(img)
-            elements.append(PageBreak())
-
-        if os.path.exists(line_chart_path):
-            elements.append(Paragraph("Acúmulo de Capital ao Longo do Tempo", subtitle_style))
-            elements.append(Spacer(1, 0.5*inch))
-            img = Image(line_chart_path, width=8*inch, height=6*inch)
-            elements.append(img)
-
-        doc.build(elements)
-
-        with open(pdf_path, "rb") as pdf_file:
-            PDFbyte = pdf_file.read()
-
-        for file_path in [pie_chart_path, bar_chart_path, line_chart_path, pdf_path]:
-            if os.path.exists(file_path):
-                os.remove(file_path)
-        try:
-            os.rmdir(temp_dir)
-        except:
-            pass
-
-        return PDFbyte
-
-    except Exception as e:
-        st.error(f"Erro ao gerar PDF: {e}")
-        import traceback
-        st.error(traceback.format_exc())
-        return None
+    return chart
 
 def main():
     st.title("📊 Sistema de Registro de Vendas")
@@ -285,6 +185,25 @@ def main():
                 else:
                     st.warning("Pelo menos um valor de venda deve ser maior que zero.")
 
+        st.subheader("Estatísticas de Registros")
+        df_raw, _ = read_google_sheet()
+        if not df_raw.empty:
+            df = process_data(df_raw.copy())
+            if 'DataFormatada' in df.columns:
+                num_registros = len(df)
+                primeira_venda = df['DataFormatada'].min()
+                ultima_venda = df['DataFormatada'].max()
+                total_vendido = df['Total'].sum()
+
+                st.markdown(f"**Número Total de Registros:** {num_registros}")
+                st.markdown(f"**Primeira Venda Registrada:** {primeira_venda}")
+                st.markdown(f"**Última Venda Registrada:** {ultima_venda}")
+                st.markdown(f"**Total Vendido (R$):** {total_vendido:.2f}")
+            else:
+                st.info("Não há dados de data para calcular estatísticas.")
+        else:
+            st.info("Nenhum registro de venda encontrado.")
+
     with tab3:
         st.header("Análise Detalhada de Vendas")
         with st.spinner("Carregando dados..."):
@@ -305,7 +224,8 @@ def main():
 
                     st.subheader("Dados Filtrados")
                     st.dataframe(df_filtered[['DataFormatada', 'Cartão', 'Dinheiro', 'Pix', 'Total']]
-                                 if 'DataFormatada' in df_filtered.columns else df_filtered,                                 use_container_width=True)
+                                 if 'DataFormatada' in df_filtered.columns else df_filtered,
+                                 use_container_width=True)
 
                     st.subheader("Distribuição por Método de Pagamento")
                     fig_pie = create_pie_chart(df_filtered)
@@ -319,24 +239,13 @@ def main():
                     fig_line = create_line_chart(df_filtered)
                     st.altair_chart(fig_line, use_container_width=True)
 
-                    if st.button("Exportar Análise para PDF"):
-                        with st.spinner("Gerando PDF... Isso pode levar alguns segundos."):
-                            try:
-                                pdf_bytes = generate_pdf_report(df_filtered)
-                                if pdf_bytes:
-                                    st.success("PDF gerado com sucesso!")
-                                    st.download_button(
-                                        label="Baixar PDF",
-                                        data=pdf_bytes,
-                                        file_name="analise_vendas.pdf",
-                                        mime="application/pdf"
-                                    )
-                                else:
-                                    st.error("Não foi possível gerar o PDF. Verifique os logs para mais detalhes.")
-                            except Exception as e:
-                                st.error(f"Erro ao gerar ou baixar o PDF: {e}")
-                                import traceback
-                                st.error(traceback.format_exc())
+                    st.subheader("Receita Mensal Total")
+                    fig_monthly_revenue = create_monthly_revenue_chart(df_filtered)
+                    st.altair_chart(fig_monthly_revenue, use_container_width=True)
+
+                    st.subheader("Receita Mensal por Tipo de Pagamento")
+                    fig_payment_monthly = create_payment_type_monthly_chart(df_filtered)
+                    st.altair_chart(fig_payment_monthly, use_container_width=True)
 
                 else:
                     st.info("Não há dados de data para análise.")
@@ -345,4 +254,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
