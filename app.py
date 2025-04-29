@@ -1,7 +1,6 @@
 import streamlit as st
 import gspread
 import pandas as pd
-import altair as alt
 from datetime import datetime
 from google.oauth2.service_account import Credentials
 from gspread.exceptions import SpreadsheetNotFound
@@ -13,27 +12,13 @@ from reportlab.lib.units import inch
 import os
 import io
 import tempfile
-from PIL import Image as PILImage, ImageDraw, ImageFont
 import base64
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib as mpl
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 # Configuração da página
 st.set_page_config(page_title="Sistema de Registro de Vendas", layout="wide")
-
-# Configurando estilo dos gráficos matplotlib para serem mais atraentes
-plt.style.use('ggplot')
-mpl.rcParams['font.size'] = 14
-mpl.rcParams['figure.figsize'] = (12, 9)  # Gráficos maiores
-mpl.rcParams['figure.facecolor'] = 'white'
-mpl.rcParams['axes.facecolor'] = '#f0f0f0'
-mpl.rcParams['axes.grid'] = True
-mpl.rcParams['grid.alpha'] = 0.3
-mpl.rcParams['axes.labelsize'] = 16
-mpl.rcParams['axes.titlesize'] = 20
-mpl.rcParams['xtick.labelsize'] = 14
-mpl.rcParams['ytick.labelsize'] = 14
 
 def read_google_sheet():
     """Função para ler os dados da planilha Google Sheets"""
@@ -90,217 +75,152 @@ def process_data(df):
                 st.error(f"Erro ao processar a coluna 'Data': {e}")
     return df
 
-def create_pie_chart_matplotlib(df_filtered):
-    """Cria gráfico de pizza usando matplotlib - versão melhorada"""
+def create_pie_chart(df_filtered):
+    """Cria gráfico de pizza usando Plotly"""
     valores = [df_filtered['Cartão'].sum(), df_filtered['Dinheiro'].sum(), df_filtered['Pix'].sum()]
     labels = ['Cartão', 'Dinheiro', 'PIX']
     
-    # Cores mais vibrantes e agradáveis
-    cores = ['#3498db', '#f39c12', '#2ecc71']
+    fig = go.Figure(data=[go.Pie(
+        labels=labels,
+        values=valores,
+        hole=0.3,
+        marker_colors=['#3498db', '#f39c12', '#2ecc71'],
+        textinfo='percent+value',
+        texttemplate='%{label}<br>R$ %{value:,.2f}<br>(%{percent})',
+        hoverinfo='label+percent+value',
+        textfont_size=14
+    )])
     
-    # Criar figura com tamanho maior
-    plt.figure(figsize=(12, 9))
-    
-    # Criar o gráfico de pizza com efeito de explosão para destacar as fatias
-    explode = (0.05, 0.05, 0.05)  # Destacar todas as fatias levemente
-    wedges, texts, autotexts = plt.pie(
-        valores, 
-        labels=labels, 
-        autopct='%1.1f%%', 
-        startangle=90, 
-        colors=cores,
-        explode=explode,
-        shadow=True,
-        textprops={'fontsize': 16, 'fontweight': 'bold'},
-        wedgeprops={'edgecolor': 'white', 'linewidth': 2}
+    fig.update_layout(
+        title='Distribuição por Método de Pagamento',
+        title_font_size=20,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=-0.2,
+            xanchor="center",
+            x=0.5
+        ),
+        height=500,
+        margin=dict(l=50, r=50, b=100, t=100, pad=4)
     )
     
-    # Personalizar os textos das porcentagens
-    for autotext in autotexts:
-        autotext.set_color('white')
-        autotext.set_fontsize(14)
-        autotext.set_fontweight('bold')
-    
-    plt.axis('equal')  # Manter o aspecto circular
-    plt.title('Distribuição por Método de Pagamento', fontsize=24, pad=20, fontweight='bold')
-    
-    # Adicionar um círculo branco no meio para efeito de donut
-    centre_circle = plt.Circle((0, 0), 0.5, fc='white')
-    plt.gca().add_artist(centre_circle)
-    
-    # Adicionar legenda com valores absolutos
-    total = sum(valores)
-    legendas = [f'{l}: R$ {v:.2f} ({v/total*100:.1f}%)' for l, v in zip(labels, valores)]
-    plt.legend(legendas, loc="center", bbox_to_anchor=(0.5, -0.1), fontsize=14)
-    
-    # Salvar em buffer
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png', dpi=300, bbox_inches='tight', facecolor='white')
-    plt.close()
-    
-    return buf
+    return fig
 
-def create_bar_chart_matplotlib(df_filtered):
-    """Cria gráfico de barras usando matplotlib - versão melhorada"""
+def create_bar_chart(df_filtered):
+    """Cria gráfico de barras usando Plotly"""
     date_column = 'DataFormatada' if 'DataFormatada' in df_filtered.columns else 'Data'
-    
-    # Agrupar por data
     daily = df_filtered.groupby(date_column)[['Cartão', 'Dinheiro', 'Pix']].sum().reset_index()
     
-    # Cores bonitas para cada método de pagamento
-    cores = ['#3498db', '#f39c12', '#2ecc71']
+    fig = go.Figure()
     
-    # Configuração do gráfico com estilo moderno
-    fig, ax = plt.subplots(figsize=(14, 10))
+    fig.add_trace(go.Bar(
+        x=daily[date_column],
+        y=daily['Cartão'],
+        name='Cartão',
+        marker_color='#3498db',
+        text=daily['Cartão'].round(2),
+        textposition='auto'
+    ))
     
-    # Posições das barras
-    x = np.arange(len(daily[date_column]))
-    width = 0.25
+    fig.add_trace(go.Bar(
+        x=daily[date_column],
+        y=daily['Dinheiro'],
+        name='Dinheiro',
+        marker_color='#f39c12',
+        text=daily['Dinheiro'].round(2),
+        textposition='auto'
+    ))
     
-    # Plotar barras para cada método de pagamento
-    rects1 = ax.bar(x - width, daily['Cartão'], width, label='Cartão', color=cores[0], 
-                    edgecolor='white', linewidth=1.5, alpha=0.9)
-    rects2 = ax.bar(x, daily['Dinheiro'], width, label='Dinheiro', color=cores[1],
-                   edgecolor='white', linewidth=1.5, alpha=0.9)
-    rects3 = ax.bar(x + width, daily['Pix'], width, label='PIX', color=cores[2],
-                   edgecolor='white', linewidth=1.5, alpha=0.9)
+    fig.add_trace(go.Bar(
+        x=daily[date_column],
+        y=daily['Pix'],
+        name='PIX',
+        marker_color='#2ecc71',
+        text=daily['Pix'].round(2),
+        textposition='auto'
+    ))
     
-    # Adicionar valor no topo de cada barra
-    def add_value_labels(rects):
-        for rect in rects:
-            height = rect.get_height()
-            if height > 0:  # Apenas mostrar valor se for maior que zero
-                ax.text(rect.get_x() + rect.get_width()/2., height + 5,
-                        f'R${height:.0f}', ha='center', va='bottom', 
-                        fontsize=12, fontweight='bold')
+    fig.update_layout(
+        barmode='group',
+        title='Vendas Diárias por Método de Pagamento',
+        xaxis_title='Data',
+        yaxis_title='Valor (R$)',
+        legend_title='Método de Pagamento',
+        hovermode="x unified",
+        height=500,
+        margin=dict(l=50, r=50, b=100, t=100, pad=4)
+    )
     
-    add_value_labels(rects1)
-    add_value_labels(rects2)
-    add_value_labels(rects3)
+    fig.update_xaxes(tickangle=45)
     
-    # Configurações adicionais
-    ax.set_ylabel('Valor (R$)', fontsize=18, fontweight='bold')
-    ax.set_title('Vendas Diárias por Método de Pagamento', fontsize=22, fontweight='bold', pad=20)
-    ax.set_xticks(x)
-    ax.set_xticklabels(daily[date_column], rotation=45, ha='right')
-    
-    # Adicionar grade apenas no eixo y para facilitar a leitura
-    ax.yaxis.grid(True, linestyle='--', alpha=0.7)
-    ax.set_axisbelow(True)
-    
-    # Remover bordas
-    for spine in ax.spines.values():
-        spine.set_visible(False)
-    
-    # Legenda melhorada
-    ax.legend(fontsize=14, frameon=True, facecolor='white', edgecolor='#dddddd')
-    
-    fig.tight_layout()
-    
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png', dpi=300, bbox_inches='tight', facecolor='white')
-    plt.close()
-    
-    return buf
+    return fig
 
-def create_line_chart_matplotlib(df_filtered):
-    """Cria gráfico de linha usando matplotlib - versão melhorada"""
-    # Ordenar por data
+def create_line_chart(df_filtered):
+    """Cria gráfico de linha usando Plotly"""
     df_acum = df_filtered.sort_values('Data').copy()
     df_acum['Total Acumulado'] = df_acum['Total'].cumsum()
     
-    # Configuração do gráfico
-    fig, ax = plt.subplots(figsize=(14, 10))
+    fig = go.Figure()
     
-    # Cores e estilo moderno
-    cor_linha = '#3498db'
-    cor_area = '#3498db'
-    cor_ponto = '#2980b9'
+    fig.add_trace(go.Scatter(
+        x=df_acum['DataFormatada'],
+        y=df_acum['Total Acumulado'],
+        mode='lines+markers+text',
+        line=dict(width=4, color='#3498db'),
+        marker=dict(size=10, color='#2980b9'),
+        text=df_acum['Total Acumulado'].round(2),
+        textposition="top center",
+        name='Total Acumulado',
+        fill='tozeroy',
+        fillcolor='rgba(52, 152, 219, 0.2)'
+    ))
     
-    # Plotar linha com área sombreada abaixo e pontos destacados
-    x = np.arange(len(df_acum['DataFormatada']))
-    y = df_acum['Total Acumulado']
+    fig.update_layout(
+        title='Acúmulo de Capital ao Longo do Tempo',
+        xaxis_title='Data',
+        yaxis_title='Capital Acumulado (R$)',
+        height=500,
+        margin=dict(l=50, r=50, b=100, t=100, pad=4),
+        hovermode="x unified"
+    )
     
-    # Adicionar área sombreada sob a linha
-    ax.fill_between(x, y, alpha=0.3, color=cor_area)
+    fig.update_xaxes(tickangle=45)
     
-    # Adicionar linha principal
-    linha = ax.plot(x, y, marker='o', linestyle='-', linewidth=3, 
-             markersize=10, color=cor_linha, markerfacecolor=cor_ponto, 
-             markeredgecolor='white', markeredgewidth=2)
-    
-    # Adicionar rótulos nos pontos
-    for i, valor in enumerate(y):
-        ax.annotate(f'R${valor:.0f}', 
-                   (x[i], valor), 
-                   xytext=(0, 10),
-                   textcoords='offset points',
-                   ha='center',
-                   fontsize=12,
-                   fontweight='bold')
-    
-    # Configurações adicionais
-    ax.set_ylabel('Capital Acumulado (R$)', fontsize=18, fontweight='bold')
-    ax.set_title('Acúmulo de Capital ao Longo do Tempo', fontsize=22, fontweight='bold', pad=20)
-    
-    # Configurar eixo X com as datas formatadas
-    ax.set_xticks(x)
-    ax.set_xticklabels(df_acum['DataFormatada'], rotation=45, ha='right')
-    
-    # Adicionar grade para facilitar a leitura
-    ax.grid(True, linestyle='--', alpha=0.7)
-    ax.set_axisbelow(True)
-    
-    # Remover bordas
-    for spine in ax.spines.values():
-        spine.set_visible(False)
-    
-    fig.tight_layout()
-    
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png', dpi=300, bbox_inches='tight', facecolor='white')
-    plt.close()
-    
-    return buf
+    return fig
 
 def generate_pdf_report(df_filtered):
-    """Função para gerar o relatório em PDF com gráficos em páginas separadas"""
+    """Função para gerar o relatório em PDF com gráficos Plotly"""
     try:
         # Criar diretório temporário para os gráficos
         temp_dir = tempfile.mkdtemp()
         
-        # Gerar gráficos usando matplotlib
-        pie_chart_buf = create_pie_chart_matplotlib(df_filtered)
-        bar_chart_buf = create_bar_chart_matplotlib(df_filtered)
-        line_chart_buf = create_line_chart_matplotlib(df_filtered)
+        # Gerar gráficos usando Plotly
+        pie_chart = create_pie_chart(df_filtered)
+        bar_chart = create_bar_chart(df_filtered)
+        line_chart = create_line_chart(df_filtered)
         
-        # Salvar buffers como arquivos PNG
+        # Salvar gráficos como imagens
         pie_chart_path = os.path.join(temp_dir, "pie_chart.png")
         bar_chart_path = os.path.join(temp_dir, "bar_chart.png")
         line_chart_path = os.path.join(temp_dir, "line_chart.png")
         
-        # Salvar os buffers como arquivos PNG
-        with open(pie_chart_path, 'wb') as f:
-            f.write(pie_chart_buf.getvalue())
-        
-        with open(bar_chart_path, 'wb') as f:
-            f.write(bar_chart_buf.getvalue())
-        
-        with open(line_chart_path, 'wb') as f:
-            f.write(line_chart_buf.getvalue())
+        pie_chart.write_image(pie_chart_path, scale=2)
+        bar_chart.write_image(bar_chart_path, scale=2)
+        line_chart.write_image(line_chart_path, scale=2)
         
         # Criar o PDF
         pdf_path = os.path.join(temp_dir, "analise_vendas.pdf")
-        doc = SimpleDocTemplate(pdf_path, pagesize=A4)  # Usando A4 para ter mais espaço
+        doc = SimpleDocTemplate(pdf_path, pagesize=A4)
         elements = []
         
-        # Criar estilos personalizados
+        # Estilos personalizados
         styles = getSampleStyleSheet()
         title_style = ParagraphStyle(
             'CustomTitle',
             parent=styles['Heading1'],
             fontSize=24,
-            alignment=1,  # Centralizado
+            alignment=1,
             spaceAfter=30,
             textColor=colors.darkblue
         )
@@ -309,23 +229,22 @@ def generate_pdf_report(df_filtered):
             'CustomSubtitle',
             parent=styles['Heading2'],
             fontSize=20,
-            alignment=1,  # Centralizado
+            alignment=1,
             spaceAfter=20,
             textColor=colors.darkblue
         )
         
-        # Página de capa com título
-        elements.append(Spacer(1, 2*inch))  # Espaço no topo
+        # Página de capa
+        elements.append(Spacer(1, 2*inch))
         elements.append(Paragraph("Análise Detalhada de Vendas", title_style))
         elements.append(Spacer(1, 0.5*inch))
         elements.append(Paragraph(f"Relatório gerado em {datetime.now().strftime('%d/%m/%Y')}", styles['Italic']))
-        elements.append(PageBreak())  # Nova página após a capa
+        elements.append(PageBreak())
         
         # Página com tabela de dados
         elements.append(Paragraph("Resumo dos Dados", subtitle_style))
         elements.append(Spacer(1, 0.5*inch))
         
-        # Tabela de resumo
         total_cartao = df_filtered['Cartão'].sum()
         total_dinheiro = df_filtered['Dinheiro'].sum()
         total_pix = df_filtered['Pix'].sum()
@@ -361,35 +280,29 @@ def generate_pdf_report(df_filtered):
         elements.append(Paragraph(f"Total de dias analisados: {len(df_filtered['DataFormatada'].unique())}", styles['Normal']))
         elements.append(Paragraph(f"Média diária de vendas: R$ {(total_geral / len(df_filtered['DataFormatada'].unique())):.2f}", styles['Normal']))
         
-        elements.append(PageBreak())  # Nova página antes do próximo gráfico
+        elements.append(PageBreak())
         
-        # Página 1: Gráfico de Pizza
+        # Página com gráfico de pizza
         if os.path.exists(pie_chart_path):
             elements.append(Paragraph("Distribuição por Método de Pagamento", subtitle_style))
             elements.append(Spacer(1, 0.5*inch))
-            img = Image(pie_chart_path)
-            img.drawHeight = 6*inch  # Altura fixa para garantir tamanho adequado
-            img.drawWidth = 6*inch   # Largura fixa para garantir tamanho adequado
+            img = Image(pie_chart_path, width=6*inch, height=6*inch)
             elements.append(img)
-            elements.append(PageBreak())  # Nova página após este gráfico
+            elements.append(PageBreak())
         
-        # Página 2: Gráfico de Barras
+        # Página com gráfico de barras
         if os.path.exists(bar_chart_path):
             elements.append(Paragraph("Vendas Diárias por Método de Pagamento", subtitle_style))
             elements.append(Spacer(1, 0.5*inch))
-            img = Image(bar_chart_path)
-            img.drawHeight = 6*inch
-            img.drawWidth = 8*inch
+            img = Image(bar_chart_path, width=8*inch, height=6*inch)
             elements.append(img)
-            elements.append(PageBreak())  # Nova página após este gráfico
+            elements.append(PageBreak())
         
-        # Página 3: Gráfico de Linha
+        # Página com gráfico de linha
         if os.path.exists(line_chart_path):
             elements.append(Paragraph("Acúmulo de Capital ao Longo do Tempo", subtitle_style))
             elements.append(Spacer(1, 0.5*inch))
-            img = Image(line_chart_path)
-            img.drawHeight = 6*inch
-            img.drawWidth = 8*inch
+            img = Image(line_chart_path, width=8*inch, height=6*inch)
             elements.append(img)
         
         # Construir o PDF
@@ -404,7 +317,6 @@ def generate_pdf_report(df_filtered):
             if os.path.exists(file_path):
                 os.remove(file_path)
         
-        # Tentar remover o diretório temporário
         try:
             os.rmdir(temp_dir)
         except:
@@ -468,52 +380,16 @@ def main():
                                  if 'DataFormatada' in df_filtered.columns else df_filtered, use_container_width=True)
 
                     st.subheader("Distribuição por Método de Pagamento")
-                    payment_filtered = pd.DataFrame({
-                        'Método': ['Cartão', 'Dinheiro', 'PIX'],
-                        'Valor': [df_filtered['Cartão'].sum(), df_filtered['Dinheiro'].sum(), df_filtered['Pix'].sum()]
-                    })
-                    base_pie = alt.Chart(payment_filtered).encode(
-                        theta=alt.Theta("Valor:Q", stack=True),
-                        color=alt.Color("Método:N", legend=alt.Legend(title="Método de Pagamento")),
-                        tooltip=["Método", "Valor"]
-                    ).properties(
-                        width=400,
-                        height=400,
-                    )
-                    pie_chart = base_pie.mark_arc(outerRadius=150)
-                    text_pie = base_pie.mark_text(radius=170).encode(text=alt.Text('Valor:Q', format='.1f'))
-                    final_pie = pie_chart + text_pie
-                    st.altair_chart(final_pie, use_container_width=True)
+                    fig_pie = create_pie_chart(df_filtered)
+                    st.plotly_chart(fig_pie, use_container_width=True)
 
                     st.subheader("Vendas Diárias por Método de Pagamento")
-                    date_column_filtered = 'DataFormatada' if 'DataFormatada' in df_filtered.columns else 'Data'
-                    daily_filtered = df_filtered.groupby(date_column_filtered)[['Cartão', 'Dinheiro', 'Pix']].sum().reset_index()
-                    daily_filtered_long = pd.melt(daily_filtered, id_vars=[date_column_filtered],
-                                                    value_vars=['Cartão', 'Dinheiro', 'Pix'],
-                                                    var_name='Método', value_name='Valor')
-                    bar_chart_filtered = alt.Chart(daily_filtered_long).mark_bar().encode(
-                        x=alt.X(f'{date_column_filtered}:N', title='Data', sort=None, axis=alt.Axis(labelAngle=-45)),
-                        y=alt.Y('sum(Valor):Q', title='Valor (R$)'),
-                        color=alt.Color('Método:N', legend=alt.Legend(title="Pagamento")),
-                        tooltip=[date_column_filtered, 'Método', 'Valor']
-                    ).properties(
-                        width=600,
-                        height=400,
-                    )
-                    st.altair_chart(bar_chart_filtered, use_container_width=True)
+                    fig_bar = create_bar_chart(df_filtered)
+                    st.plotly_chart(fig_bar, use_container_width=True)
 
                     st.subheader("Acúmulo de Capital ao Longo do Tempo")
-                    df_accumulated = df_filtered.sort_values('Data').copy()
-                    df_accumulated['Total Acumulado'] = df_accumulated['Total'].cumsum()
-                    acum_chart = alt.Chart(df_accumulated).mark_line(point=True).encode(
-                        x=alt.X('Data:T', title='Data'), 
-                        y=alt.Y('Total Acumulado:Q', title='Capital Acumulado (R$)'),
-                        tooltip=['DataFormatada', 'Total Acumulado']
-                    ).properties(
-                        width=600,
-                        height=400,
-                    )
-                    st.altair_chart(acum_chart, use_container_width=True)
+                    fig_line = create_line_chart(df_filtered)
+                    st.plotly_chart(fig_line, use_container_width=True)
 
                     # Botão para gerar e baixar o PDF
                     if st.button("Exportar Análise para PDF"):
