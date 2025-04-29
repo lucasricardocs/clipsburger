@@ -70,7 +70,7 @@ def process_data(df):
     return df
 
 def generate_pdf_report(df_filtered, pie_chart, bar_chart, acum_chart):
-    """Função para gerar o relatório em PDF"""
+    """Função para gerar o relatório em PDF (usando PNG para os gráficos)"""
     doc = SimpleDocTemplate("analise_vendas.pdf", pagesize=letter)
     elements = []
     styles = getSampleStyleSheet()
@@ -97,29 +97,23 @@ def generate_pdf_report(df_filtered, pie_chart, bar_chart, acum_chart):
     elements.append(table)
     elements.append(Spacer(1, 12))
 
-    # Salvar gráficos Altair como SVG em memória e adicionar como imagens
-    pie_chart_svg = pie_chart.to_svg()
-    with open("pie_chart.svg", "w") as f:
-        f.write(pie_chart_svg)
+    # Salvar gráficos Altair como PNG e adicionar como imagens
+    pie_chart.save('pie_chart.png')
     elements.append(Paragraph("Distribuição por Método de Pagamento", styles['h2']))
-    elements.append(Image("pie_chart.svg", width=400, height=400))
+    elements.append(Image("pie_chart.png", width=400, height=400))
     elements.append(Spacer(1, 12))
-    os.remove("pie_chart.svg") # Limpar arquivo temporário
+    os.remove("pie_chart.png") # Limpar arquivo temporário
 
-    bar_chart_svg = bar_chart.to_svg()
-    with open("bar_chart.svg", "w") as f:
-        f.write(bar_chart_svg)
+    bar_chart_filtered.save('bar_chart.png')
     elements.append(Paragraph("Vendas Diárias por Método de Pagamento", styles['h2']))
-    elements.append(Image("bar_chart.svg", width=600, height=400))
+    elements.append(Image("bar_chart.png", width=600, height=400))
     elements.append(Spacer(1, 12))
-    os.remove("bar_chart.svg") # Limpar arquivo temporário
+    os.remove("bar_chart.png") # Limpar arquivo temporário
 
-    acum_chart_svg = acum_chart.to_svg()
-    with open("acum_chart.svg", "w") as f:
-        f.write(acum_chart_svg)
+    acum_chart.save('acum_chart.png')
     elements.append(Paragraph("Acúmulo de Capital ao Longo do Tempo", styles['h2']))
-    elements.append(Image("acum_chart.svg", width=600, height=400))
-    os.remove("acum_chart.svg") # Limpar arquivo temporário
+    elements.append(Image("acum_chart.png", width=600, height=400))
+    os.remove("acum_chart.png") # Limpar arquivo temporário
 
     doc.build(elements)
 
