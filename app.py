@@ -104,7 +104,7 @@ def generate_pdf_report(df_filtered, pie_chart, bar_chart, acum_chart):
     elements.append(Spacer(1, 12))
     os.remove("pie_chart.png") # Limpar arquivo temporário
 
-    bar_chart_filtered.save('bar_chart.png')
+    bar_chart.save('bar_chart.png')
     elements.append(Paragraph("Vendas Diárias por Método de Pagamento", styles['h2']))
     elements.append(Image("bar_chart.png", width=600, height=400))
     elements.append(Spacer(1, 12))
@@ -223,7 +223,7 @@ def main():
                     # Botão para gerar e baixar o PDF
                     if st.button("Exportar Análise para PDF"):
                         with st.spinner("Gerando PDF..."):
-                            pdf_bytes = generate_pdf_report(df_filtered, final_pie, bar_chart_filtered, acum_chart)
+                            pdf_bytes = generate_pdf_report(df_filtered, pie_chart, bar_chart_filtered, acum_chart)
                             st.download_button(
                                 label="Baixar PDF",
                                 data=pdf_bytes,
