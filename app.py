@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 
 # Configuração da página
-st.set_page_config(page_title="Sistema de Registro de Vendas", layout="centered")
+st.set_page_config(page_title="Sistema de Registro de Vendas", layout="wide")
 
 # Configurando estilo dos gráficos matplotlib para serem mais atraentes
 plt.style.use('ggplot')
