@@ -12,11 +12,10 @@ from reportlab.lib import colors
 import os
 import io
 import tempfile
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
-import time
+from PIL import Image as PILImage, ImageDraw, ImageFont
+import base64
+import numpy as np
+import matplotlib.pyplot as plt
 
 # Configuração da página
 st.set_page_config(page_title="Sistema de Registro de Vendas", layout="centered")
@@ -76,87 +75,107 @@ def process_data(df):
                 st.error(f"Erro ao processar a coluna 'Data': {e}")
     return df
 
-def save_chart_as_png(chart, filename, width=800, height=600):
-    """Salva um gráfico Altair como imagem PNG usando Selenium"""
-    try:
-        # Criar um arquivo HTML temporário com o gráfico
-        temp_html = tempfile.NamedTemporaryFile(suffix='.html', delete=False)
-        chart_html = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Chart</title>
-            <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
-            <script src="https://cdn.jsdelivr.net/npm/vega-lite@5"></script>
-            <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
-            <style>
-                body {{ margin: 0; overflow: hidden; }}
-                #vis {{ width: {width}px; height: {height}px; }}
-            </style>
-        </head>
-        <body>
-            <div id="vis"></div>
-            <script>
-                const spec = {chart.to_json()};
-                vegaEmbed('#vis', spec).then(result => {{
-                    document.body.style.width = '{width}px';
-                    document.body.style.height = '{height}px';
-                }}).catch(console.error);
-            </script>
-        </body>
-        </html>
-        """
-        
-        with open(temp_html.name, 'w', encoding='utf-8') as f:
-            f.write(chart_html)
-        
-        # Configurar o navegador headless
-        options = Options()
-        options.add_argument('--headless')
-        options.add_argument('--disable-gpu')
-        options.add_argument('--no-sandbox')
-        options.add_argument('--disable-dev-shm-usage')
-        options.add_argument(f'--window-size={width},{height}')
-        
-        # Iniciar o navegador e capturar a screenshot
-        try:
-            # Tente usar o ChromeDriverManager primeiro
-            driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-        except:
-            # Fallback para o caminho padrão do Chrome
-            driver = webdriver.Chrome(options=options)
-        
-        driver.get(f'file://{temp_html.name}')
-        # Aguardar que o gráfico seja renderizado
-        time.sleep(3)
-        
-        # Capturar a screenshot
-        driver.save_screenshot(filename)
-        driver.quit()
-        
-        # Limpar o arquivo temporário
-        os.unlink(temp_html.name)
-        
-        return True
-    except Exception as e:
-        st.error(f"Erro ao salvar o gráfico como PNG: {e}")
-        return False
+def create_pie_chart_matplotlib(df_filtered):
+    """Cria gráfico de pizza usando matplotlib"""
+    valores = [df_filtered['Cartão'].sum(), df_filtered['Dinheiro'].sum(), df_filtered['Pix'].sum()]
+    labels = ['Cartão', 'Dinheiro', 'PIX']
+    cores = ['#1f77b4', '#ff7f0e', '#2ca02c']
+    
+    plt.figure(figsize=(8, 6))
+    plt.pie(valores, labels=labels, autopct='%1.1f%%', startangle=90, colors=cores)
+    plt.axis('equal')
+    plt.title('Distribuição por Método de Pagamento')
+    
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=100, bbox_inches='tight')
+    plt.close()
+    
+    return buf
 
-def generate_pdf_report(df_filtered, pie_chart, bar_chart, acum_chart):
+def create_bar_chart_matplotlib(df_filtered):
+    """Cria gráfico de barras usando matplotlib"""
+    date_column = 'DataFormatada' if 'DataFormatada' in df_filtered.columns else 'Data'
+    
+    # Agrupar por data
+    daily = df_filtered.groupby(date_column)[['Cartão', 'Dinheiro', 'Pix']].sum().reset_index()
+    
+    # Configuração do gráfico
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    # Posições das barras
+    x = np.arange(len(daily[date_column]))
+    width = 0.25
+    
+    # Plotar barras para cada método de pagamento
+    rects1 = ax.bar(x - width, daily['Cartão'], width, label='Cartão')
+    rects2 = ax.bar(x, daily['Dinheiro'], width, label='Dinheiro')
+    rects3 = ax.bar(x + width, daily['Pix'], width, label='PIX')
+    
+    # Configurações adicionais
+    ax.set_ylabel('Valor (R$)')
+    ax.set_title('Vendas Diárias por Método de Pagamento')
+    ax.set_xticks(x)
+    ax.set_xticklabels(daily[date_column], rotation=45, ha='right')
+    ax.legend()
+    
+    fig.tight_layout()
+    
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=100, bbox_inches='tight')
+    plt.close()
+    
+    return buf
+
+def create_line_chart_matplotlib(df_filtered):
+    """Cria gráfico de linha usando matplotlib"""
+    # Ordenar por data
+    df_acum = df_filtered.sort_values('Data').copy()
+    df_acum['Total Acumulado'] = df_acum['Total'].cumsum()
+    
+    # Configuração do gráfico
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    # Plotar linha
+    ax.plot(df_acum['DataFormatada'], df_acum['Total Acumulado'], marker='o', linestyle='-')
+    
+    # Configurações adicionais
+    ax.set_ylabel('Capital Acumulado (R$)')
+    ax.set_title('Acúmulo de Capital ao Longo do Tempo')
+    plt.xticks(rotation=45, ha='right')
+    
+    fig.tight_layout()
+    
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=100, bbox_inches='tight')
+    plt.close()
+    
+    return buf
+
+def generate_pdf_report(df_filtered):
     """Função para gerar o relatório em PDF com gráficos"""
     try:
         # Criar diretório temporário para os gráficos
         temp_dir = tempfile.mkdtemp()
         
-        # Caminhos dos arquivos para os gráficos
+        # Gerar gráficos usando matplotlib
+        pie_chart_buf = create_pie_chart_matplotlib(df_filtered)
+        bar_chart_buf = create_bar_chart_matplotlib(df_filtered)
+        line_chart_buf = create_line_chart_matplotlib(df_filtered)
+        
+        # Salvar buffers como arquivos PNG
         pie_chart_path = os.path.join(temp_dir, "pie_chart.png")
         bar_chart_path = os.path.join(temp_dir, "bar_chart.png")
-        acum_chart_path = os.path.join(temp_dir, "acum_chart.png")
+        line_chart_path = os.path.join(temp_dir, "line_chart.png")
         
-        # Salvar os gráficos como PNG
-        save_chart_as_png(pie_chart, pie_chart_path)
-        save_chart_as_png(bar_chart, bar_chart_path)
-        save_chart_as_png(acum_chart, acum_chart_path)
+        # Salvar os buffers como arquivos PNG
+        with open(pie_chart_path, 'wb') as f:
+            f.write(pie_chart_buf.getvalue())
+        
+        with open(bar_chart_path, 'wb') as f:
+            f.write(bar_chart_buf.getvalue())
+        
+        with open(line_chart_path, 'wb') as f:
+            f.write(line_chart_buf.getvalue())
         
         # Criar o PDF
         pdf_path = os.path.join(temp_dir, "analise_vendas.pdf")
@@ -198,7 +217,7 @@ def generate_pdf_report(df_filtered, pie_chart, bar_chart, acum_chart):
         elements.append(table)
         elements.append(Spacer(1, 12))
 
-        # Adicionar gráficos ao PDF (verificando se existem)
+        # Adicionar gráficos ao PDF
         if os.path.exists(pie_chart_path):
             elements.append(Paragraph("Distribuição por Método de Pagamento", styles['Heading2']))
             elements.append(Image(pie_chart_path, width=450, height=300))
@@ -209,9 +228,9 @@ def generate_pdf_report(df_filtered, pie_chart, bar_chart, acum_chart):
             elements.append(Image(bar_chart_path, width=450, height=300))
             elements.append(Spacer(1, 12))
         
-        if os.path.exists(acum_chart_path):
+        if os.path.exists(line_chart_path):
             elements.append(Paragraph("Acúmulo de Capital ao Longo do Tempo", styles['Heading2']))
-            elements.append(Image(acum_chart_path, width=450, height=300))
+            elements.append(Image(line_chart_path, width=450, height=300))
         
         # Construir o PDF
         doc.build(elements)
@@ -221,7 +240,7 @@ def generate_pdf_report(df_filtered, pie_chart, bar_chart, acum_chart):
             PDFbyte = pdf_file.read()
         
         # Limpar arquivos temporários
-        for file_path in [pie_chart_path, bar_chart_path, acum_chart_path, pdf_path]:
+        for file_path in [pie_chart_path, bar_chart_path, line_chart_path, pdf_path]:
             if os.path.exists(file_path):
                 os.remove(file_path)
         
@@ -340,7 +359,7 @@ def main():
                     if st.button("Exportar Análise para PDF"):
                         with st.spinner("Gerando PDF... Isso pode levar alguns segundos."):
                             try:
-                                pdf_bytes = generate_pdf_report(df_filtered, final_pie, bar_chart_filtered, acum_chart)
+                                pdf_bytes = generate_pdf_report(df_filtered)
                                 if pdf_bytes:
                                     st.success("PDF gerado com sucesso!")
                                     st.download_button(
