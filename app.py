@@ -11,7 +11,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
 import os
 import io
-from PIL import Image as PILImage
+from PIL import Image as PILImage, ImageDraw, ImageFont
 
 # Instale esses pacotes se ainda não tiver:
 # pip install altair selenium pillow
@@ -208,7 +208,7 @@ def generate_pdf_report(df_filtered, pie_chart, bar_chart, acum_chart):
                 font = ImageFont.load_default()
                 draw.text((50, 150), title, fill="black", font=font)
                 draw.text((50, 200), description, fill="black", font=font)
-                img_path = f"{title.replace(' ', '_')}.png"
+                img_path = f"{title.replace(' ', '_').replace('/', '_')}.png"
                 img.save(img_path)
                 return img_path
             
