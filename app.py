@@ -86,7 +86,7 @@ def read_google_sheet():
 
 def add_data_to_sheet(date, cartao, dinheiro, pix, worksheet):
     """Função para adicionar dados à planilha Google Sheets"""
-    if not all(isinstance(val, (int, float)) for val in [cartao, dinheiro, pix]:
+    if not all(isinstance(val, (int, float)) for val in [cartao, dinheiro, pix]):
         st.error("Valores devem ser numéricos")
         return
     if cartao < 0 or dinheiro < 0 or pix < 0:
