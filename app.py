@@ -14,7 +14,6 @@ CONFIG = {
     "page_title": "Gestão - Clips Burger",
     "layout": "wide",
     "sidebar_state": "expanded",
-    "excel_file": "recebimentos.xlsx",
     "logo_path": "logo.png"
 }
 
