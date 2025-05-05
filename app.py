@@ -6,6 +6,7 @@ import random
 import gspread
 from google.oauth2.service_account import Credentials
 from gspread.exceptions import SpreadsheetNotFound
+import logging
 
 # --- CONSTANTES E CONFIGURAÇÕES ---
 CONFIG = {
@@ -59,6 +60,10 @@ FORMAS_PAGAMENTO = {
     'débito visa': 'Débito Visa',
     'pix': 'PIX'
 }
+
+# Configuração de logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # --- FUNÇÕES UTILITÁRIAS ---
 def format_currency(value):
@@ -137,16 +142,11 @@ def genetic_algorithm(item_prices, target_value, population_size=50, generations
         
         population = new_population
     
-    # Retorna o melhor indivíduo
-    best_individual = min(population, key=lambda x: evaluate_fitness(x, item_prices, target_value))
-    return best_individual
+    return min(population, key=lambda x: evaluate_fitness(x, item_prices, target_value))
 
 # --- FUNÇÕES PARA GRÁFICOS ---
 def create_payment_method_chart(data):
     """Cria gráfico de pizza para formas de pagamento"""
-    if data.empty:
-        return alt.Chart().mark_text().encode(text=alt.value("Sem dados disponíveis"))
-    
     base = alt.Chart(data).encode(
         theta=alt.Theta('Valor:Q', stack=True),
         color=alt.Color('Forma:N', legend=alt.Legend(title="Forma de Pagamento")),
@@ -164,9 +164,6 @@ def create_payment_method_chart(data):
 
 def create_daily_sales_chart(data):
     """Cria gráfico de linhas para vendas diárias"""
-    if data.empty:
-        return alt.Chart().mark_text().encode(text=alt.value("Sem dados disponíveis"))
-    
     return alt.Chart(data).mark_line(point=True).encode(
         x=alt.X('Data:T', title='Data'),
         y=alt.Y('Valor:Q', title='Valor (R$)'),
@@ -179,9 +176,6 @@ def create_daily_sales_chart(data):
 
 def create_payment_trend_chart(data):
     """Cria gráfico de tendência por forma de pagamento"""
-    if data.empty:
-        return alt.Chart().mark_text().encode(text=alt.value("Sem dados disponíveis"))
-    
     return alt.Chart(data).mark_line(point=True).encode(
         x='Data:T',
         y='Valor:Q',
@@ -194,33 +188,19 @@ def create_payment_trend_chart(data):
     ).interactive()
 
 # --- FUNÇÕES PARA GOOGLE SHEETS ---
-@st.cache_resource
-def get_google_client():
-    """Retorna o cliente autenticado do Google Sheets"""
+def get_google_sheet():
+    """Conecta e retorna a planilha do Google Sheets"""
     try:
         SCOPES = ['https://www.googleapis.com/auth/spreadsheets',
                  'https://www.googleapis.com/auth/drive']
         
         creds = Credentials.from_service_account_info(st.secrets["google_credentials"], scopes=SCOPES)
         gc = gspread.authorize(creds)
-        return gc
+        spreadsheet = gc.open_by_key(st.secrets["spreadsheet_id"])
+        worksheet = spreadsheet.worksheet('Vendas')
+        return worksheet
     except Exception as e:
-        st.error(f"Erro ao conectar com Google API: {e}")
-        return None
-
-def get_google_sheet():
-    """Conecta e retorna a planilha do Google Sheets"""
-    try:
-        gc = get_google_client()
-        if gc:
-            spreadsheet = gc.open_by_key(st.secrets["spreadsheet_id"])
-            worksheet = spreadsheet.worksheet('Vendas')
-            return worksheet
-        return None
-    except SpreadsheetNotFound:
-        st.error("Planilha não encontrada. Verifique o ID da planilha.")
-        return None
-    except Exception as e:
+        logger.error(f"Erro ao conectar com Google Sheets: {str(e)}", exc_info=True)
         st.error(f"Erro ao conectar com Google Sheets: {e}")
         return None
 
@@ -230,11 +210,9 @@ def get_sheet_data():
     worksheet = get_google_sheet()
     if worksheet:
         try:
-            data = worksheet.get_all_records()
-            if not data:
-                return pd.DataFrame()
-            return pd.DataFrame(data)
+            return pd.DataFrame(worksheet.get_all_records())
         except Exception as e:
+            logger.error(f"Erro ao ler dados: {str(e)}", exc_info=True)
             st.error(f"Erro ao ler dados: {e}")
     return pd.DataFrame()
 
@@ -245,7 +223,6 @@ def add_sale_to_sheet(date, payment_method, amount, observation=""):
         try:
             date_str = date.strftime('%d/%m/%Y')
             
-            # Processando a forma de pagamento
             if "débito" in payment_method.lower():
                 payment_type = "débito"
                 brand = payment_method.split()[-1].lower()
@@ -256,7 +233,6 @@ def add_sale_to_sheet(date, payment_method, amount, observation=""):
                 payment_type = payment_method.lower()
                 brand = ""
             
-            # Adicionando a nova linha
             worksheet.append_row([
                 date_str,
                 payment_type,
@@ -265,352 +241,372 @@ def add_sale_to_sheet(date, payment_method, amount, observation=""):
                 observation
             ])
             
-            # Limpando o cache para forçar recarregamento dos dados
             get_sheet_data.clear()
             return True
         except Exception as e:
+            logger.error(f"Erro ao adicionar venda: {str(e)}", exc_info=True)
             st.error(f"Erro ao adicionar venda: {e}")
     return False
 
 # --- INTERFACE PRINCIPAL ---
-def main():
-    st.set_page_config(
-        page_title=CONFIG["page_title"],
-        layout=CONFIG["layout"],
-        initial_sidebar_state=CONFIG["sidebar_state"]
-    )
+st.set_page_config(
+    page_title=CONFIG["page_title"],
+    layout=CONFIG["layout"],
+    initial_sidebar_state=CONFIG["sidebar_state"]
+)
 
-    # Sidebar
-    with st.sidebar:
-        st.header("⚙️ Configurações")
-        drink_percentage = st.slider("Percentual para Bebidas (%) 🍹", 0, 100, 20, 5)
-        st.caption(f"({100-drink_percentage}% para Sanduíches 🍔)")
-        
-        algoritmo = st.radio("Algoritmo para Combinações", ["Busca Local", "Algoritmo Genético"])
-        
-        if algoritmo == "Busca Local":
-            max_iterations = st.select_slider("Qualidade da Otimização ✨", 
-                                            options=[1000, 5000, 10000, 20000, 50000],
-                                            value=10000)
-        else:
-            population_size = st.slider("Tamanho da População", 20, 200, 50, 10)
-            generations = st.slider("Número de Gerações", 10, 500, 100, 10)
+# Sidebar
+with st.sidebar:
+    st.header("⚙️ Configurações")
+    drink_percentage = st.slider("Percentual para Bebidas (%) 🍹", 0, 100, 20, 5)
+    st.caption(f"({100-drink_percentage}% para Sanduíches 🍔)")
+    
+    algoritmo = st.radio("Algoritmo para Combinações", ["Busca Local", "Algoritmo Genético"])
+    
+    if algoritmo == "Busca Local":
+        max_iterations = st.select_slider("Qualidade da Otimização ✨", 
+                                        options=[1000, 5000, 10000, 20000, 50000],
+                                        value=10000)
+    else:
+        population_size = st.slider("Tamanho da População", 20, 200, 50, 10)
+        generations = st.slider("Número de Gerações", 10, 500, 100, 10)
 
-    # Tabs
-    tab1, tab2, tab3 = st.tabs(["📊 Painel de Vendas", "🧩 Análise de Combinações", "💰 Cadastrar Vendas"])
+# Tabs
+tab1, tab2, tab3 = st.tabs(["📊 Painel de Vendas", "🧩 Análise de Combinações", "💰 Cadastrar Vendas"])
 
-    with tab1:
-        st.header("📤 Upload de Dados de Vendas")
-        
-        uploaded_file = st.file_uploader("Carregue seu arquivo de vendas (CSV)", type="csv")
-        
-        if uploaded_file:
-            try:
-                df = pd.read_csv(uploaded_file)
-                
-                # Verifica as colunas necessárias
-                required_columns = ['Data', 'Tipo', 'Bandeira', 'Valor']
-                if not all(col in df.columns for col in required_columns):
-                    st.error("O arquivo deve conter as colunas: Data, Tipo, Bandeira, Valor")
-                    return
-                
-                # Processamento dos dados
-                df['Tipo'] = df['Tipo'].astype(str).str.lower().str.strip()
-                df['Bandeira'] = df['Bandeira'].astype(str).str.lower().str.strip()
-                
-                # Converte o valor para numérico
-                df['Valor'] = df['Valor'].astype(str).str.replace(',', '.').astype(float)
-                df = df.dropna(subset=['Valor'])
-                
-                df['Forma'] = df.apply(lambda x: f"{x['Tipo']} {x['Bandeira']}" if x['Bandeira'] else x['Tipo'], axis=1)
-                
-                # Mapeia as formas de pagamento para o formato padrão
-                df['Forma'] = df['Forma'].map(lambda x: FORMAS_PAGAMENTO.get(x, x))
-                
-                # Adicionar valor manual do PIX
-                st.subheader("🔹 Valor Mensal do PIX")
-                pix_value = st.number_input("Insira o valor total recebido via PIX no período:", 
-                                        min_value=0.0, value=0.0, step=100.0)
-                
-                if pix_value > 0:
-                    pix_row = pd.DataFrame([{
-                        'Data': df['Data'].iloc[-1] if not df.empty else "01/01/2025",
-                        'Tipo': 'pix',
-                        'Bandeira': '',
-                        'Valor': pix_value,
-                        'Forma': 'PIX'
-                    }])
-                    df = pd.concat([df, pix_row], ignore_index=True)
-                
-                # Salva os dados na sessão
-                st.session_state.df_vendas = df
-                st.session_state.vendas_por_forma = df.groupby('Forma')['Valor'].sum().reset_index()
-                st.session_state.total_vendas = df['Valor'].sum()
-                
-                # Exibe métricas
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("Faturamento Total", format_currency(st.session_state.total_vendas))
-                with col2:
-                    st.metric("Número de Vendas", len(df))
-                with col3:
-                    st.metric("Ticket Médio", format_currency(df['Valor'].mean()))
-                
-                # Gráficos
-                st.subheader("📈 Visualizações")
-                
-                # Gráfico de distribuição
-                st.altair_chart(create_payment_method_chart(st.session_state.vendas_por_forma), use_container_width=True)
-                
-                # Gráfico de vendas diárias
+with tab1:
+    st.header("📤 Upload de Dados de Vendas")
+    
+    uploaded_file = st.file_uploader("Carregue seu arquivo de vendas (CSV)", type="csv")
+    
+    if uploaded_file is None:
+        st.warning("Por favor, faça upload de um arquivo CSV primeiro.")
+        st.stop()
+
+    if not uploaded_file.name.lower().endswith('.csv'):
+        st.error("Por favor, envie um arquivo CSV válido.")
+        st.stop()
+
+    try:
+        with st.spinner("Processando seu arquivo..."):
+            # Tentar ler com diferentes codificações e delimitadores
+            encodings = ['utf-8', 'latin-1', 'iso-8859-1', 'cp1252']
+            
+            for encoding in encodings:
                 try:
-                    df['Data'] = pd.to_datetime(df['Data'], format='%d/%m/%Y', errors='coerce')
-                    df_daily = df.groupby('Data')['Valor'].sum().reset_index()
-                    st.altair_chart(create_daily_sales_chart(df_daily), use_container_width=True)
-                except Exception as e:
-                    st.error(f"Erro ao processar datas: {e}")
-                    st.warning("Verifique se o formato da data está correto no arquivo (DD/MM/AAAA)")
-            except Exception as e:
-                st.error(f"Erro ao processar o arquivo: {e}")
-                st.warning("Verifique se o arquivo está no formato correto")
-
-    with tab2:
-        st.header("🧩 Análise de Combinações")
-        
-        if 'vendas_por_forma' in st.session_state and not st.session_state.vendas_por_forma.empty:
-            vendas = st.session_state.vendas_por_forma
-            total_vendas = st.session_state.total_vendas
+                    uploaded_file.seek(0)
+                    df = pd.read_csv(
+                        uploaded_file,
+                        encoding=encoding,
+                        delimiter=None,
+                        engine='python',
+                        on_bad_lines='warn'
+                    )
+                    break
+                except (UnicodeDecodeError, pd.errors.ParserError):
+                    continue
             
-            forma_selecionada = st.selectbox(
-                "Selecione a forma de pagamento para análise:",
-                options=vendas['Forma'].unique(),
-                format_func=lambda x: f"{x} ({format_currency(vendas.loc[vendas['Forma'] == x, 'Valor'].iloc[0])})"
-            )
-            
-            valor_total = vendas.loc[vendas['Forma'] == forma_selecionada, 'Valor'].iloc[0]
-            valor_sanduiches = valor_total * (1 - drink_percentage/100)
-            valor_bebidas = valor_total * (drink_percentage/100)
-            
-            st.write(f"**Valor total para combinações:** {format_currency(valor_total)}")
-            st.write(f"**Distribuição:** {format_currency(valor_sanduiches)} em sanduíches ({100-drink_percentage}%) e {format_currency(valor_bebidas)} em bebidas ({drink_percentage}%)")
-            
-            if st.button("🔍 Gerar Combinações"):
-                with st.spinner("Calculando melhores combinações..."):
+            # Se ainda não carregou, tentar delimitadores específicos
+            if 'df' not in locals() or df.empty:
+                delimiters = [',', ';', '\t', '|']
+                for delim in delimiters:
                     try:
-                        # Algoritmo genético ou busca local
-                        if algoritmo == "Algoritmo Genético":
-                            combinacao_sanduiches = genetic_algorithm(
-                                CARDAPIOS["sanduiches"], 
-                                valor_sanduiches,
-                                population_size=population_size,
-                                generations=generations
-                            )
-                            combinacao_bebidas = genetic_algorithm(
-                                CARDAPIOS["bebidas"], 
-                                valor_bebidas,
-                                population_size=population_size,
-                                generations=generations
-                            )
-                        else:
-                            combinacao_sanduiches = {}
-                            best_diff = float('inf')
-                            for _ in range(max_iterations):
-                                candidate = create_individual(CARDAPIOS["sanduiches"])
-                                current_diff = evaluate_fitness(candidate, CARDAPIOS["sanduiches"], valor_sanduiches)
-                                if current_diff < best_diff:
-                                    combinacao_sanduiches = candidate
-                                    best_diff = current_diff
-                            
-                            combinacao_bebidas = {}
-                            best_diff = float('inf')
-                            for _ in range(max_iterations):
-                                candidate = create_individual(CARDAPIOS["bebidas"])
-                                current_diff = evaluate_fitness(candidate, CARDAPIOS["bebidas"], valor_bebidas)
-                                if current_diff < best_diff:
-                                    combinacao_bebidas = candidate
-                                    best_diff = current_diff
-                        
-                        # Exibe os resultados
-                        col1, col2 = st.columns(2)
-                        
-                        with col1:
-                            st.subheader("🍔 Sanduíches")
-                            if combinacao_sanduiches:
-                                df_sand = pd.DataFrame({
-                                    'Item': combinacao_sanduiches.keys(),
-                                    'Quantidade': combinacao_sanduiches.values(),
-                                    'Preço Unitário': [CARDAPIOS["sanduiches"][k] for k in combinacao_sanduiches.keys()],
-                                    'Subtotal': [combinacao_sanduiches[k] * CARDAPIOS["sanduiches"][k] for k in combinacao_sanduiches.keys()]
-                                })
-                                st.dataframe(df_sand)
-                                total_sand = df_sand['Subtotal'].sum()
-                                st.metric("Total Sanduíches", format_currency(total_sand), 
-                                        delta=format_currency(total_sand - valor_sanduiches))
-                        
-                        with col2:
-                            st.subheader("🍹 Bebidas")
-                            if combinacao_bebidas:
-                                df_beb = pd.DataFrame({
-                                    'Item': combinacao_bebidas.keys(),
-                                    'Quantidade': combinacao_bebidas.values(),
-                                    'Preço Unitário': [CARDAPIOS["bebidas"][k] for k in combinacao_bebidas.keys()],
-                                    'Subtotal': [combinacao_bebidas[k] * CARDAPIOS["bebidas"][k] for k in combinacao_bebidas.keys()]
-                                })
-                                st.dataframe(df_beb)
-                                total_beb = df_beb['Subtotal'].sum()
-                                st.metric("Total Bebidas", format_currency(total_beb),
-                                        delta=format_currency(total_beb - valor_bebidas))
-                        
-                        if combinacao_sanduiches and combinacao_bebidas:
-                            st.success(f"🔹 Combinação total: {format_currency(total_sand + total_beb)} (Diferença: {format_currency((total_sand + total_beb) - valor_total)})")
-                    except Exception as e:
-                        st.error(f"Erro ao calcular combinações: {e}")
-        else:
-            st.info("Por favor, carregue os dados de vendas na primeira aba.")
+                        uploaded_file.seek(0)
+                        df = pd.read_csv(
+                            uploaded_file,
+                            encoding='utf-8',
+                            delimiter=delim,
+                            engine='python',
+                            on_bad_lines='warn'
+                        )
+                        if not df.empty:
+                            break
+                    except:
+                        continue
+            
+            if 'df' not in locals() or df.empty:
+                st.error("Não foi possível processar o arquivo enviado. Verifique o formato e tente novamente.")
+                st.stop()
 
-    with tab3:
-        st.header("💰 Cadastrar Vendas Manualmente")
+            # Validar colunas obrigatórias
+            required_columns = ['Data', 'Tipo', 'Bandeira', 'Valor']
+            if not all(col in df.columns for col in required_columns):
+                missing = [col for col in required_columns if col not in df.columns]
+                st.error(f"Colunas obrigatórias ausentes: {', '.join(missing)}")
+                st.stop()
+
+            # Processamento dos dados
+            df['Tipo'] = df['Tipo'].str.lower().str.strip()
+            df['Bandeira'] = df['Bandeira'].str.lower().str.strip()
+            df['Valor'] = pd.to_numeric(df['Valor'].str.replace(',', '.'), errors='coerce')
+            df = df.dropna(subset=['Valor'])
+            
+            df['Forma'] = df.apply(lambda x: f"{x['Tipo']} {x['Bandeira']}" if x['Bandeira'] else x['Tipo'], axis=1)
+            df['Forma'] = df['Forma'].map(FORMAS_PAGAMENTO)
+            df = df.dropna(subset=['Forma'])
+            
+            # Adicionar valor manual do PIX
+            st.subheader("🔹 Valor Mensal do PIX")
+            pix_value = st.number_input("Insira o valor total recebido via PIX no período:", 
+                                      min_value=0.0, value=0.0, step=100.0)
+            
+            if pix_value > 0:
+                pix_row = pd.DataFrame([{
+                    'Data': df['Data'].max(),
+                    'Tipo': 'pix',
+                    'Bandeira': '',
+                    'Valor': pix_value,
+                    'Forma': 'PIX'
+                }])
+                df = pd.concat([df, pix_row], ignore_index=True)
+            
+            # Salva os dados na sessão
+            st.session_state.df_vendas = df
+            st.session_state.vendas_por_forma = df.groupby('Forma')['Valor'].sum().reset_index()
+            st.session_state.total_vendas = df['Valor'].sum()
+            
+            # Exibe métricas
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Faturamento Total", format_currency(st.session_state.total_vendas))
+            with col2:
+                st.metric("Número de Vendas", len(df))
+            with col3:
+                st.metric("Ticket Médio", format_currency(df['Valor'].mean()))
+            
+            # Gráficos
+            st.subheader("📈 Visualizações")
+            
+            # Gráfico de distribuição
+            st.altair_chart(create_payment_method_chart(st.session_state.vendas_por_forma), use_container_width=True)
+            
+            # Gráfico de vendas diárias
+            df_daily = df.groupby('Data')['Valor'].sum().reset_index()
+            st.altair_chart(create_daily_sales_chart(df_daily), use_container_width=True)
+
+    except Exception as e:
+        logger.error(f"Erro ao processar arquivo: {str(e)}", exc_info=True)
+        st.error(f"Ocorreu um erro ao processar o arquivo: {str(e)}")
+        st.stop()
+
+with tab2:
+    st.header("🧩 Análise de Combinações")
+    
+    if 'vendas_por_forma' in st.session_state:
+        vendas = st.session_state.vendas_por_forma
+        total_vendas = st.session_state.total_vendas
         
-        # Formulário de cadastro
-        with st.form("sales_form"):
-            cols = st.columns(3)
-            with cols[0]:
-                sale_date = st.date_input("Data da Venda", value=datetime.now())
-            with cols[1]:
-                payment_method = st.selectbox(
-                    "Forma de Pagamento",
-                    options=list(FORMAS_PAGAMENTO.values()),
-                    index=7  # PIX como padrão
-                )
-            with cols[2]:
-                amount = st.number_input("Valor (R$)", min_value=0.01, step=0.01, format="%.2f")
-            
-            observation = st.text_input("Observação (opcional)", max_chars=100)
-            
-            submitted = st.form_submit_button("💾 Salvar Venda")
-            
-            if submitted:
-                if amount <= 0:
-                    st.error("O valor da venda deve ser maior que zero!")
+        forma_selecionada = st.selectbox(
+            "Selecione a forma de pagamento para análise:",
+            options=vendas['Forma'].unique(),
+            format_func=lambda x: f"{x} ({format_currency(vendas.loc[vendas['Forma'] == x, 'Valor'].iloc[0])})"
+        )
+        
+        valor_total = vendas.loc[vendas['Forma'] == forma_selecionada, 'Valor'].iloc[0]
+        valor_sanduiches = valor_total * (1 - drink_percentage/100)
+        valor_bebidas = valor_total * (drink_percentage/100)
+        
+        st.write(f"**Valor total para combinações:** {format_currency(valor_total)}")
+        st.write(f"**Distribuição:** {format_currency(valor_sanduiches)} em sanduíches ({100-drink_percentage}%) e {format_currency(valor_bebidas)} em bebidas ({drink_percentage}%)")
+        
+        if st.button("🔍 Gerar Combinações"):
+            with st.spinner("Calculando melhores combinações..."):
+                if algoritmo == "Algoritmo Genético":
+                    combinacao_sanduiches = genetic_algorithm(
+                        CARDAPIOS["sanduiches"], 
+                        valor_sanduiches,
+                        population_size=population_size,
+                        generations=generations
+                    )
+                    combinacao_bebidas = genetic_algorithm(
+                        CARDAPIOS["bebidas"], 
+                        valor_bebidas,
+                        population_size=population_size,
+                        generations=generations
+                    )
                 else:
-                    success = add_sale_to_sheet(sale_date, payment_method, amount, observation)
-                    if success:
-                        st.success("Venda cadastrada com sucesso no Google Sheets!")
-                        st.balloons()
-                    else:
-                        st.error("Erro ao cadastrar venda. Verifique a conexão.")
-
-        # Seção de análise
-        st.header("📊 Análise de Vendas Cadastradas")
-        sales_data = get_sheet_data()
-        
-        if not sales_data.empty:
-            try:
-                # Processamento dos dados
-                sales_data['Data'] = pd.to_datetime(sales_data['Data'], format='%d/%m/%Y', errors='coerce')
-                sales_data['Forma'] = sales_data.apply(
-                    lambda x: f"{x['Tipo']} {x['Bandeira']}" if pd.notna(x['Bandeira']) and x['Bandeira'] else x['Tipo'], 
-                    axis=1
-                )
+                    combinacao_sanduiches = {}
+                    best_diff = float('inf')
+                    for _ in range(max_iterations):
+                        candidate = create_individual(CARDAPIOS["sanduiches"])
+                        current_diff = evaluate_fitness(candidate, CARDAPIOS["sanduiches"], valor_sanduiches)
+                        if current_diff < best_diff:
+                            combinacao_sanduiches = candidate
+                            best_diff = current_diff
+                    
+                    combinacao_bebidas = {}
+                    best_diff = float('inf')
+                    for _ in range(max_iterations):
+                        candidate = create_individual(CARDAPIOS["bebidas"])
+                        current_diff = evaluate_fitness(candidate, CARDAPIOS["bebidas"], valor_bebidas)
+                        if current_diff < best_diff:
+                            combinacao_bebidas = candidate
+                            best_diff = current_diff
                 
-                # Mapeia as formas de pagamento
-                sales_data['Forma'] = sales_data['Forma'].map(lambda x: FORMAS_PAGAMENTO.get(x.lower(), x) if isinstance(x, str) else x)
-                
-                # Filtros
-                st.subheader("Filtros")
+                # Exibe os resultados
                 col1, col2 = st.columns(2)
+                
                 with col1:
-                    min_date = sales_data['Data'].min().date() if not sales_data['Data'].isna().all() else datetime.now().date()
-                    max_date = sales_data['Data'].max().date() if not sales_data['Data'].isna().all() else datetime.now().date()
-                    date_range = st.date_input(
-                        "Selecione o período:",
-                        value=(min_date, max_date),
-                        min_value=min_date,
-                        max_value=max_date
-                    )
+                    st.subheader("🍔 Sanduíches")
+                    if combinacao_sanduiches:
+                        df_sand = pd.DataFrame({
+                            'Item': combinacao_sanduiches.keys(),
+                            'Quantidade': combinacao_sanduiches.values(),
+                            'Preço Unitário': [CARDAPIOS["sanduiches"][k] for k in combinacao_sanduiches.keys()],
+                            'Subtotal': [combinacao_sanduiches[k] * CARDAPIOS["sanduiches"][k] for k in combinacao_sanduiches.keys()]
+                        })
+                        st.dataframe(df_sand)
+                        total_sand = df_sand['Subtotal'].sum()
+                        st.metric("Total Sanduíches", format_currency(total_sand), 
+                                delta=format_currency(total_sand - valor_sanduiches))
+                
                 with col2:
-                    unique_forms = sales_data['Forma'].dropna().unique()
-                    payment_filter = st.multiselect(
-                        "Formas de pagamento:",
-                        options=unique_forms,
-                        default=unique_forms
-                    )
+                    st.subheader("🍹 Bebidas")
+                    if combinacao_bebidas:
+                        df_beb = pd.DataFrame({
+                            'Item': combinacao_bebidas.keys(),
+                            'Quantidade': combinacao_bebidas.values(),
+                            'Preço Unitário': [CARDAPIOS["bebidas"][k] for k in combinacao_bebidas.keys()],
+                            'Subtotal': [combinacao_bebidas[k] * CARDAPIOS["bebidas"][k] for k in combinacao_bebidas.keys()]
+                        })
+                        st.dataframe(df_beb)
+                        total_beb = df_beb['Subtotal'].sum()
+                        st.metric("Total Bebidas", format_currency(total_beb),
+                                delta=format_currency(total_beb - valor_bebidas))
                 
-                # Aplicar filtros
-                filtered_data = sales_data.copy()
-                if len(date_range) == 2:
-                    filtered_data = filtered_data[
-                        (filtered_data['Data'] >= pd.to_datetime(date_range[0])) &
-                        (filtered_data['Data'] <= pd.to_datetime(date_range[1]))
-                    ]
-                
-                if payment_filter:
-                    filtered_data = filtered_data[filtered_data['Forma'].isin(payment_filter)]
-                
-                # Gráficos
-                if not filtered_data.empty:
-                    st.subheader("Visualizações")
-                    
-                    tab1, tab2, tab3 = st.tabs(["Distribuição", "Vendas Diárias", "Tendência"])
-                    
-                    with tab1:
-                        vendas_por_forma = filtered_data.groupby('Forma')['Valor'].sum().reset_index()
-                        st.altair_chart(create_payment_method_chart(vendas_por_forma), use_container_width=True)
-                    
-                    with tab2:
-                        vendas_diarias = filtered_data.groupby('Data')['Valor'].sum().reset_index()
-                        st.altair_chart(create_daily_sales_chart(vendas_diarias), use_container_width=True)
-                    
-                    with tab3:
-                        tendencia = filtered_data.groupby(['Data', 'Forma'])['Valor'].sum().reset_index()
-                        st.altair_chart(create_payment_trend_chart(tendencia), use_container_width=True)
-                    
-                    # Tabela de dados
-                    st.subheader("Dados Detalhados")
-                    st.dataframe(
-                        filtered_data.sort_values('Data', ascending=False)[
-                            ['Data', 'Forma', 'Valor', 'Observação']
-                        ].rename(columns={
-                            'Data': 'Data',
-                            'Forma': 'Forma de Pagamento',
-                            'Valor': 'Valor (R$)',
-                            'Observação': 'Obs'
-                        }),
-                        column_config={
-                            "Data": st.column_config.DateColumn(format="DD/MM/YYYY"),
-                            "Valor (R$)": st.column_config.NumberColumn(format="%.2f")
-                        },
-                        hide_index=True,
-                        use_container_width=True,
-                        height=400
-                    )
-                    
-                    # Métricas
-                    st.subheader("Métricas")
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.metric("Total no Período", format_currency(filtered_data['Valor'].sum()))
-                    with col2:
-                        media_diaria = filtered_data.groupby('Data')['Valor'].sum().mean() if not filtered_data.empty else 0
-                        st.metric("Média Diária", format_currency(media_diaria))
-                    with col3:
-                        maior_venda = filtered_data['Valor'].max() if not filtered_data.empty else 0
-                        st.metric("Maior Venda", format_currency(maior_venda))
-                else:
-                    st.warning("Nenhum dado encontrado para os filtros selecionados.")
-            except Exception as e:
-                st.error(f"Erro ao processar dados: {e}")
-                st.warning("Verifique se os dados estão no formato correto.")
-        else:
-            st.info("Nenhuma venda cadastrada ainda.")
+                if combinacao_sanduiches and combinacao_bebidas:
+                    st.success(f"🔹 Combinação total: {format_currency(total_sand + total_beb)} (Diferença: {format_currency((total_sand + total_beb) - valor_total)}")
+    else:
+        st.info("Por favor, carregue os dados de vendas na primeira aba.")
 
-    # Adicionar rodapé
-    st.divider()
-    st.markdown(
-        """
-        <div style='text-align: center; color: gray; font-size: small;'>
-            © 2025 Clips Burger - Sistema de Gestão | Desenvolvido com ❤️ e Streamlit
-        </div>
-        """, 
-        unsafe_allow_html=True
-    )
+with tab3:
+    st.header("💰 Cadastrar Vendas Manualmente")
+    
+    # Formulário de cadastro
+    with st.form("sales_form"):
+        cols = st.columns(3)
+        with cols[0]:
+            sale_date = st.date_input("Data da Venda", value=datetime.now())
+        with cols[1]:
+            payment_method = st.selectbox(
+                "Forma de Pagamento",
+                options=list(FORMAS_PAGAMENTO.values()),
+                index=7  # PIX como padrão
+            )
+        with cols[2]:
+            amount = st.number_input("Valor (R$)", min_value=0.01, step=0.01, format="%.2f")
+        
+        observation = st.text_input("Observação (opcional)", max_chars=100)
+        
+        submitted = st.form_submit_button("💾 Salvar Venda")
+        
+        if submitted:
+            if amount <= 0:
+                st.error("O valor da venda deve ser maior que zero!")
+            else:
+                success = add_sale_to_sheet(sale_date, payment_method, amount, observation)
+                if success:
+                    st.success("Venda cadastrada com sucesso no Google Sheets!")
+                    st.balloons()
+                else:
+                    st.error("Erro ao cadastrar venda. Verifique a conexão.")
+
+    # Seção de análise
+    st.header("📊 Análise de Vendas Cadastradas")
+    sales_data = get_sheet_data()
+    
+    if not sales_data.empty:
+        # Processamento dos dados
+        sales_data['Data'] = pd.to_datetime(sales_data['Data'], format='%d/%m/%Y', errors='coerce')
+        sales_data['Forma'] = sales_data.apply(
+            lambda x: f"{x['Tipo']} {x['Bandeira']}" if x['Bandeira'] else x['Tipo'], 
+            axis=1
+        )
+        sales_data['Forma'] = sales_data['Forma'].map(FORMAS_PAGAMENTO)
+        
+        # Filtros
+        st.subheader("Filtros")
+        col1, col2 = st.columns(2)
+        with col1:
+            date_range = st.date_input(
+                "Selecione o período:",
+                value=(sales_data['Data'].min().date(), sales_data['Data'].max().date()),
+                min_value=sales_data['Data'].min().date(),
+                max_value=sales_data['Data'].max().date()
+            )
+        with col2:
+            payment_filter = st.multiselect(
+                "Formas de pagamento:",
+                options=sales_data['Forma'].unique(),
+                default=sales_data['Forma'].unique()
+            )
+        
+        # Aplicar filtros
+        if len(date_range) == 2:
+            filtered_data = sales_data[
+                (sales_data['Data'] >= pd.to_datetime(date_range[0])) &
+                (sales_data['Data'] <= pd.to_datetime(date_range[1])) &
+                (sales_data['Forma'].isin(payment_filter))
+            ].copy()
+        else:
+            filtered_data = sales_data[sales_data['Forma'].isin(payment_filter)].copy()
+        
+        # Gráficos
+        st.subheader("Visualizações")
+        
+        tab1, tab2, tab3 = st.tabs(["Distribuição", "Vendas Diárias", "Tendência"])
+        
+        with tab1:
+            vendas_por_forma = filtered_data.groupby('Forma')['Valor'].sum().reset_index()
+            st.altair_chart(create_payment_method_chart(vendas_por_forma), use_container_width=True)
+        
+        with tab2:
+            vendas_diarias = filtered_data.groupby('Data')['Valor'].sum().reset_index()
+            st.altair_chart(create_daily_sales_chart(vendas_diarias), use_container_width=True)
+        
+        with tab3:
+            tendencia = filtered_data.groupby(['Data', 'Forma'])['Valor'].sum().reset_index()
+            st.altair_chart(create_payment_trend_chart(tendencia), use_container_width=True)
+        
+        # Tabela de dados
+        st.subheader("Dados Detalhados")
+        st.dataframe(
+            filtered_data.sort_values('Data', ascending=False)[
+                ['Data', 'Forma', 'Valor', 'Observação']
+            ].rename(columns={
+                'Data': 'Data',
+                'Forma': 'Forma de Pagamento',
+                'Valor': 'Valor (R$)',
+                'Observação': 'Obs'
+            }),
+            column_config={
+                "Data": st.column_config.DateColumn(format="DD/MM/YYYY"),
+                "Valor (R$)": st.column_config.NumberColumn(format="%.2f")
+            },
+            hide_index=True,
+            use_container_width=True,
+            height=400
+        )
+        
+        # Métricas
+        st.subheader("Métricas")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total no Período", format_currency(filtered_data['Valor'].sum()))
+        with col2:
+            st.metric("Média Diária", format_currency(filtered_data.groupby('Data')['Valor'].sum().mean()))
+        with col3:
+            st.metric("Maior Venda", format_currency(filtered_data['Valor'].max()))
+    else:
+        st.info("Nenhuma venda cadastrada ainda.")
+
+# Rodapé
+st.divider()
+st.markdown(
+    """
+    <div style='text-align: center; color: gray; font-size: small;'>
+        © 2025 Clips Burger - Sistema de Gestão | Desenvolvido com ❤️ e Streamlit
+    </div>
+    """, 
+    unsafe_allow_html=True
+)
