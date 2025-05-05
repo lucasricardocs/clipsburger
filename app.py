@@ -72,16 +72,11 @@ def calculate_combination_value(combination, item_prices):
     return sum(item_prices.get(name, 0) * quantity for name, quantity in combination.items())
 
 # --- FUNÇÕES PARA ALGORITMO GENÉTICO ---
-def create_individual(item_prices, combination_size):
+def create_individual(item_prices, combination_size=5):
     """Cria uma combinação aleatória de itens."""
     items = list(item_prices.keys())
-    size = min(combination_size, len(items))
-    selected_items = random.sample(items, size)
-    
-    return {
-        name: random.randint(1, 10)  # Quantidade entre 1 e 10
-        for name in selected_items
-    }
+    selected_items = random.sample(items, min(combination_size, len(items)))
+    return {name: random.randint(1, 10) for name in selected_items}
 
 def evaluate_fitness(individual, item_prices, target_value):
     """Avalia quão boa é a combinação."""
@@ -92,12 +87,10 @@ def crossover(parent1, parent2):
     """Combina duas soluções para gerar uma nova."""
     child = {}
     for key in set(parent1.keys()).union(set(parent2.keys())):
-        if random.random() < 0.5:
-            if key in parent1:
-                child[key] = parent1[key]
-        else:
-            if key in parent2:
-                child[key] = parent2[key]
+        if random.random() < 0.5 and key in parent1:
+            child[key] = parent1[key]
+        elif key in parent2:
+            child[key] = parent2[key]
     return child
 
 def mutate(individual, item_prices, mutation_rate=0.1):
@@ -125,7 +118,7 @@ def mutate(individual, item_prices, mutation_rate=0.1):
 
 def genetic_algorithm(item_prices, target_value, population_size=50, generations=100):
     """Executa o algoritmo genético para encontrar combinações."""
-    population = [create_individual(item_prices, 5) for _ in range(population_size)]
+    population = [create_individual(item_prices) for _ in range(population_size)]
     
     for _ in range(generations):
         # Avaliação
@@ -138,17 +131,56 @@ def genetic_algorithm(item_prices, target_value, population_size=50, generations
         
         # Reprodução
         while len(new_population) < population_size:
-            parent1 = random.choice(best)[0]
-            parent2 = random.choice(best)[0]
-            child = crossover(parent1, parent2)
-            child = mutate(child, item_prices)
+            parent1, parent2 = random.choice(best)[0], random.choice(best)[0]
+            child = mutate(crossover(parent1, parent2), item_prices)
             new_population.append(child)
         
         population = new_population
     
-    # Retorna a melhor combinação
-    best_combination = min(population, key=lambda x: evaluate_fitness(x, item_prices, target_value))
-    return {k: v for k, v in best_combination.items() if v > 0}
+    return min(population, key=lambda x: evaluate_fitness(x, item_prices, target_value))
+
+# --- FUNÇÕES PARA GRÁFICOS ---
+def create_payment_method_chart(data):
+    """Cria gráfico de pizza para formas de pagamento"""
+    base = alt.Chart(data).encode(
+        theta=alt.Theta('Valor:Q', stack=True),
+        color=alt.Color('Forma:N', legend=alt.Legend(title="Forma de Pagamento")),
+        tooltip=['Forma:N', 'Valor:Q']
+    )
+    
+    pie = base.mark_arc(innerRadius=50)
+    text = base.mark_text(radius=150, size=14).encode(text='Valor:Q')
+    
+    return (pie + text).properties(
+        width=600,
+        height=500,
+        title='Distribuição por Forma de Pagamento'
+    )
+
+def create_daily_sales_chart(data):
+    """Cria gráfico de linhas para vendas diárias"""
+    return alt.Chart(data).mark_line(point=True).encode(
+        x=alt.X('Data:T', title='Data'),
+        y=alt.Y('Valor:Q', title='Valor (R$)'),
+        tooltip=['Data:T', 'Valor:Q']
+    ).properties(
+        width=800,
+        height=400,
+        title='Vendas Diárias'
+    ).interactive()
+
+def create_payment_trend_chart(data):
+    """Cria gráfico de tendência por forma de pagamento"""
+    return alt.Chart(data).mark_line(point=True).encode(
+        x='Data:T',
+        y='Valor:Q',
+        color='Forma:N',
+        tooltip=['Data:T', 'Forma:N', 'Valor:Q']
+    ).properties(
+        width=800,
+        height=400,
+        title='Tendência por Forma de Pagamento'
+    ).interactive()
 
 # --- FUNÇÕES PARA GOOGLE SHEETS ---
 def get_google_sheet():
@@ -172,45 +204,43 @@ def get_sheet_data():
     worksheet = get_google_sheet()
     if worksheet:
         try:
-            records = worksheet.get_all_records()
-            return pd.DataFrame(records)
+            return pd.DataFrame(worksheet.get_all_records())
         except Exception as e:
             st.error(f"Erro ao ler dados: {e}")
     return pd.DataFrame()
 
-def add_sale_to_sheet(data, forma_pagamento, valor, observacao=""):
+def add_sale_to_sheet(date, payment_method, amount, observation=""):
     """Adiciona uma nova venda à planilha"""
     worksheet = get_google_sheet()
     if worksheet:
         try:
-            data_formatada = data.strftime('%d/%m/%Y')
+            date_str = date.strftime('%d/%m/%Y')
             
-            if "débito" in forma_pagamento.lower():
-                tipo = "débito"
-                bandeira = forma_pagamento.split()[-1].lower()
-            elif "crédito" in forma_pagamento.lower():
-                tipo = "crédito"
-                bandeira = forma_pagamento.split()[-1].lower()
+            if "débito" in payment_method.lower():
+                payment_type = "débito"
+                brand = payment_method.split()[-1].lower()
+            elif "crédito" in payment_method.lower():
+                payment_type = "crédito"
+                brand = payment_method.split()[-1].lower()
             else:
-                tipo = forma_pagamento.lower()
-                bandeira = ""
+                payment_type = payment_method.lower()
+                brand = ""
             
-            new_row = [
-                data_formatada,
-                tipo,
-                bandeira,
-                float(valor),
-                observacao
-            ]
+            worksheet.append_row([
+                date_str,
+                payment_type,
+                brand,
+                float(amount),
+                observation
+            ])
             
-            worksheet.append_row(new_row)
             get_sheet_data.clear()
             return True
         except Exception as e:
             st.error(f"Erro ao adicionar venda: {e}")
     return False
 
-# --- INTERFACE STREAMLIT ---
+# --- INTERFACE PRINCIPAL ---
 st.set_page_config(
     page_title=CONFIG["page_title"],
     layout=CONFIG["layout"],
@@ -221,7 +251,7 @@ st.set_page_config(
 with st.sidebar:
     st.header("⚙️ Configurações")
     drink_percentage = st.slider("Percentual para Bebidas (%) 🍹", 0, 100, 20, 5)
-    st.caption(f"({100 - drink_percentage}% para Sanduíches 🍔)")
+    st.caption(f"({100-drink_percentage}% para Sanduíches 🍔)")
     
     algoritmo = st.radio("Algoritmo para Combinações", ["Busca Local", "Algoritmo Genético"])
     
@@ -239,7 +269,6 @@ tab1, tab2, tab3 = st.tabs(["📊 Painel de Vendas", "🧩 Análise de Combinaç
 with tab1:
     st.header("📤 Upload de Dados de Vendas")
     
-    # Upload do arquivo CSV
     uploaded_file = st.file_uploader("Carregue seu arquivo de vendas (CSV)", type="csv")
     
     if uploaded_file:
@@ -258,10 +287,9 @@ with tab1:
         # Adicionar valor manual do PIX
         st.subheader("🔹 Valor Mensal do PIX")
         pix_value = st.number_input("Insira o valor total recebido via PIX no período:", 
-                                   min_value=0.0, value=0.0, step=100.0)
+                                  min_value=0.0, value=0.0, step=100.0)
         
         if pix_value > 0:
-            # Adiciona o PIX como uma linha adicional
             pix_row = pd.DataFrame([{
                 'Data': df['Data'].max(),
                 'Tipo': 'pix',
@@ -271,39 +299,35 @@ with tab1:
             }])
             df = pd.concat([df, pix_row], ignore_index=True)
         
-        # Agrupa por forma de pagamento
-        vendas_por_forma = df.groupby('Forma')['Valor'].sum().reset_index()
-        total_vendas = vendas_por_forma['Valor'].sum()
+        # Salva os dados na sessão
+        st.session_state.df_vendas = df
+        st.session_state.vendas_por_forma = df.groupby('Forma')['Valor'].sum().reset_index()
+        st.session_state.total_vendas = df['Valor'].sum()
         
         # Exibe métricas
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("Faturamento Total", format_currency(total_vendas))
+            st.metric("Faturamento Total", format_currency(st.session_state.total_vendas))
         with col2:
             st.metric("Número de Vendas", len(df))
         with col3:
             st.metric("Ticket Médio", format_currency(df['Valor'].mean()))
         
-        # Gráfico de vendas por forma de pagamento
-        st.subheader("📈 Distribuição por Forma de Pagamento")
-        chart = alt.Chart(vendas_por_forma).mark_bar().encode(
-            x='Forma:N',
-            y='Valor:Q',
-            color='Forma:N',
-            tooltip=['Forma', 'Valor']
-        ).properties(height=400)
-        st.altair_chart(chart, use_container_width=True)
+        # Gráficos
+        st.subheader("📈 Visualizações")
         
-        # Salva os dados na sessão para uso nas outras abas
-        st.session_state.vendas_data = vendas_por_forma
-        st.session_state.total_vendas = total_vendas
-        st.session_state.df_vendas = df
+        # Gráfico de distribuição
+        st.altair_chart(create_payment_method_chart(st.session_state.vendas_por_forma), use_container_width=True)
+        
+        # Gráfico de vendas diárias
+        df_daily = df.groupby('Data')['Valor'].sum().reset_index()
+        st.altair_chart(create_daily_sales_chart(df_daily), use_container_width=True)
 
 with tab2:
     st.header("🧩 Análise de Combinações")
     
-    if 'vendas_data' in st.session_state and not st.session_state.vendas_data.empty:
-        vendas = st.session_state.vendas_data
+    if 'vendas_por_forma' in st.session_state:
+        vendas = st.session_state.vendas_por_forma
         total_vendas = st.session_state.total_vendas
         
         forma_selecionada = st.selectbox(
@@ -335,11 +359,10 @@ with tab2:
                         generations=generations
                     )
                 else:
-                    # Implementação simplificada de busca local
                     combinacao_sanduiches = {}
                     best_diff = float('inf')
                     for _ in range(max_iterations):
-                        candidate = create_individual(CARDAPIOS["sanduiches"], 5)
+                        candidate = create_individual(CARDAPIOS["sanduiches"])
                         current_diff = evaluate_fitness(candidate, CARDAPIOS["sanduiches"], valor_sanduiches)
                         if current_diff < best_diff:
                             combinacao_sanduiches = candidate
@@ -348,7 +371,7 @@ with tab2:
                     combinacao_bebidas = {}
                     best_diff = float('inf')
                     for _ in range(max_iterations):
-                        candidate = create_individual(CARDAPIOS["bebidas"], 3)
+                        candidate = create_individual(CARDAPIOS["bebidas"])
                         current_diff = evaluate_fitness(candidate, CARDAPIOS["bebidas"], valor_bebidas)
                         if current_diff < best_diff:
                             combinacao_bebidas = candidate
@@ -363,9 +386,9 @@ with tab2:
                         df_sand = pd.DataFrame({
                             'Item': combinacao_sanduiches.keys(),
                             'Quantidade': combinacao_sanduiches.values(),
-                            'Preço Unitário': [CARDAPIOS["sanduiches"][k] for k in combinacao_sanduiches.keys()]
+                            'Preço Unitário': [CARDAPIOS["sanduiches"][k] for k in combinacao_sanduiches.keys()],
+                            'Subtotal': [combinacao_sanduiches[k] * CARDAPIOS["sanduiches"][k] for k in combinacao_sanduiches.keys()]
                         })
-                        df_sand['Subtotal'] = df_sand['Quantidade'] * df_sand['Preço Unitário']
                         st.dataframe(df_sand)
                         total_sand = df_sand['Subtotal'].sum()
                         st.metric("Total Sanduíches", format_currency(total_sand), 
@@ -377,9 +400,9 @@ with tab2:
                         df_beb = pd.DataFrame({
                             'Item': combinacao_bebidas.keys(),
                             'Quantidade': combinacao_bebidas.values(),
-                            'Preço Unitário': [CARDAPIOS["bebidas"][k] for k in combinacao_bebidas.keys()]
+                            'Preço Unitário': [CARDAPIOS["bebidas"][k] for k in combinacao_bebidas.keys()],
+                            'Subtotal': [combinacao_bebidas[k] * CARDAPIOS["bebidas"][k] for k in combinacao_bebidas.keys()]
                         })
-                        df_beb['Subtotal'] = df_beb['Quantidade'] * df_beb['Preço Unitário']
                         st.dataframe(df_beb)
                         total_beb = df_beb['Subtotal'].sum()
                         st.metric("Total Bebidas", format_currency(total_beb),
@@ -393,6 +416,7 @@ with tab2:
 with tab3:
     st.header("💰 Cadastrar Vendas Manualmente")
     
+    # Formulário de cadastro
     with st.form("sales_form"):
         cols = st.columns(3)
         with cols[0]:
@@ -421,28 +445,92 @@ with tab3:
                 else:
                     st.error("Erro ao cadastrar venda. Verifique a conexão.")
 
-    # Mostrar últimas vendas cadastradas
-    st.header("Últimas Vendas")
+    # Seção de análise
+    st.header("📊 Análise de Vendas Cadastradas")
     sales_data = get_sheet_data()
     
     if not sales_data.empty:
+        # Processamento dos dados
         sales_data['Data'] = pd.to_datetime(sales_data['Data'], format='%d/%m/%Y', errors='coerce')
-        sales_data['Forma de Pagamento'] = sales_data.apply(
-            lambda x: f"{x['Tipo'].title()} {x['Bandeira'].title()}" if x['Bandeira'] else x['Tipo'].title(),
+        sales_data['Forma'] = sales_data.apply(
+            lambda x: f"{x['Tipo']} {x['Bandeira']}" if x['Bandeira'] else x['Tipo'], 
             axis=1
         )
+        sales_data['Forma'] = sales_data['Forma'].map(FORMAS_PAGAMENTO)
         
+        # Filtros
+        st.subheader("Filtros")
+        col1, col2 = st.columns(2)
+        with col1:
+            date_range = st.date_input(
+                "Selecione o período:",
+                value=(sales_data['Data'].min().date(), sales_data['Data'].max().date()),
+                min_value=sales_data['Data'].min().date(),
+                max_value=sales_data['Data'].max().date()
+            )
+        with col2:
+            payment_filter = st.multiselect(
+                "Formas de pagamento:",
+                options=sales_data['Forma'].unique(),
+                default=sales_data['Forma'].unique()
+            )
+        
+        # Aplicar filtros
+        if len(date_range) == 2:
+            filtered_data = sales_data[
+                (sales_data['Data'] >= pd.to_datetime(date_range[0])) &
+                (sales_data['Data'] <= pd.to_datetime(date_range[1])) &
+                (sales_data['Forma'].isin(payment_filter))
+            ].copy()
+        else:
+            filtered_data = sales_data[sales_data['Forma'].isin(payment_filter)].copy()
+        
+        # Gráficos
+        st.subheader("Visualizações")
+        
+        tab1, tab2, tab3 = st.tabs(["Distribuição", "Vendas Diárias", "Tendência"])
+        
+        with tab1:
+            vendas_por_forma = filtered_data.groupby('Forma')['Valor'].sum().reset_index()
+            st.altair_chart(create_payment_method_chart(vendas_por_forma), use_container_width=True)
+        
+        with tab2:
+            vendas_diarias = filtered_data.groupby('Data')['Valor'].sum().reset_index()
+            st.altair_chart(create_daily_sales_chart(vendas_diarias), use_container_width=True)
+        
+        with tab3:
+            tendencia = filtered_data.groupby(['Data', 'Forma'])['Valor'].sum().reset_index()
+            st.altair_chart(create_payment_trend_chart(tendencia), use_container_width=True)
+        
+        # Tabela de dados
+        st.subheader("Dados Detalhados")
         st.dataframe(
-            sales_data.sort_values('Data', ascending=False).head(10)[
-                ['Data', 'Forma de Pagamento', 'Valor', 'Observação']
-            ],
+            filtered_data.sort_values('Data', ascending=False)[
+                ['Data', 'Forma', 'Valor', 'Observação']
+            ].rename(columns={
+                'Data': 'Data',
+                'Forma': 'Forma de Pagamento',
+                'Valor': 'Valor (R$)',
+                'Observação': 'Obs'
+            }),
             column_config={
                 "Data": st.column_config.DateColumn(format="DD/MM/YYYY"),
-                "Valor": st.column_config.NumberColumn(format="%.2f")
+                "Valor (R$)": st.column_config.NumberColumn(format="%.2f")
             },
             hide_index=True,
-            use_container_width=True
+            use_container_width=True,
+            height=400
         )
+        
+        # Métricas
+        st.subheader("Métricas")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total no Período", format_currency(filtered_data['Valor'].sum()))
+        with col2:
+            st.metric("Média Diária", format_currency(filtered_data.groupby('Data')['Valor'].sum().mean()))
+        with col3:
+            st.metric("Maior Venda", format_currency(filtered_data['Valor'].max()))
     else:
         st.info("Nenhuma venda cadastrada ainda.")
 
