@@ -6,6 +6,7 @@ from datetime import datetime
 import random
 import os
 import reportlab
+import matplotlib.pyplot
 import numpy as np
 from reportlab.lib.pagesizes import letter, A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
