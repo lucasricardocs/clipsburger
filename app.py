@@ -604,11 +604,13 @@ def main():
         else:
             st.info("Nenhuma venda cadastrada ainda.")
 
-    # Rodapé
+    # Adicionar rodapé
     st.divider()
     st.markdown(
         """
         <div style='text-align: center; color: gray; font-size: small;'>
             © 2025 Clips Burger - Sistema de Gestão | Desenvolvido com ❤️ e Streamlit
         </div>
-        """,
+        """, 
+        unsafe_allow_html=True
+    )
