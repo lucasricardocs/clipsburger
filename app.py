@@ -881,11 +881,9 @@ with tab2:
         
     else:
         st.info("Faça o upload de dados na aba 'Resumo das Vendas' para visualizar possíveis combinações.")
-
-with tab3:
     
 
-with tab4:
+with tab3:
     import streamlit as st
     import gspread
     import pandas as pd
