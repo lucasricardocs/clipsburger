@@ -767,7 +767,8 @@ with tab1:
         except Exception as e:
             st.error(f"Ocorreu um erro ao processar o arquivo: {str(e)}")
             st.exception(e)
-    else
+    else:
+
 with tab2:
     st.header("🧩 Análise de Combinações")
     
