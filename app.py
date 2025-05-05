@@ -5,9 +5,6 @@ from datetime import datetime
 import random
 import os
 import numpy as np
-import matplotlib.pyplot as plt
-import io
-import base64
 import gspread
 from google.oauth2.service_account import Credentials
 from gspread.exceptions import SpreadsheetNotFound
