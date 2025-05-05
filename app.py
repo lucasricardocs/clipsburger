@@ -105,22 +105,33 @@ def main():
                 df = process_data(df_raw.copy()) if not df_raw.empty else pd.DataFrame()
 
                 if not df.empty and 'Data' in df.columns:
+                    # Obter mês e ano atual
+                    current_month = datetime.now().month
+                    current_year = datetime.now().year
+                    
                     # Filtro de Ano
                     anos = sorted(df['Ano'].unique())
+                    # Por padrão, selecionar o ano atual se disponível, senão todos os anos
+                    default_anos = [current_year] if current_year in anos else anos
                     selected_anos = st.multiselect(
                         "Selecione o(s) Ano(s):",
                         options=anos,
-                        default=anos
+                        default=default_anos
                     )
 
                     # Filtro de Mês
                     meses_disponiveis = sorted(df[df['Ano'].isin(selected_anos)]['Mês'].unique()) if selected_anos else []
                     meses_nomes = {m: datetime(2020, m, 1).strftime('%B') for m in meses_disponiveis}
                     meses_opcoes = [f"{m} - {meses_nomes[m]}" for m in meses_disponiveis]
+                    
+                    # Por padrão, selecionar apenas o mês atual se disponível
+                    default_mes_opcao = [f"{current_month} - {datetime(2020, current_month, 1).strftime('%B')}"]
+                    default_meses = [m for m in meses_opcoes if m.startswith(f"{current_month} -")]
+                    
                     selected_meses_str = st.multiselect(
                         "Selecione o(s) Mês(es):",
                         options=meses_opcoes,
-                        default=meses_opcoes
+                        default=default_meses if default_meses else meses_opcoes
                     )
                     selected_meses = [int(m.split(" - ")[0]) for m in selected_meses_str]
 
