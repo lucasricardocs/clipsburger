@@ -223,12 +223,19 @@ def main():
             menor_venda = df_filtered['Total'].min() if total_vendas > 0 else 0
             
             # Exibição em linha única das métricas principais
-            cols = st.columns(5)
-            cols[0].metric("🔢 Total de Vendas", f"{total_vendas}")
-            cols[1].metric("💵 Faturamento Total", f"R$ {total_faturamento:.2f}")
-            cols[2].metric("📈 Média por Venda", f"R$ {media_por_venda:.2f}")
-            cols[3].metric("⬆️ Maior Venda", f"R$ {maior_venda:.2f}")
-            cols[4].metric("⬇️ Menor Venda", f"R$ {menor_venda:.2f}")
+            # Primeira linha
+            cols1 = st.columns(2)
+            cols1[0].metric("🔢 Total de Vendas", f"{total_vendas}")
+            cols1[1].metric("💵 Faturamento Total", f"R$ {total_faturamento:,.2f}")
+            
+            # Segunda linha
+            cols2 = st.columns(2)
+            cols2[0].metric("📈 Média por Venda", f"R$ {media_por_venda:,.2f}")
+            cols2[1].metric("⬆️ Maior Venda", f"R$ {maior_venda:,.2f}")
+            
+            # Terceira linha (centralizada)
+            cols3 = st.columns([1,2,1])  # Margens + coluna central
+            cols3[1].metric("⬇️ Menor Venda", f"R$ {menor_venda:,.2f}")
             
             # Métodos de pagamento
             st.markdown("---")
@@ -362,11 +369,15 @@ def main():
                 iqr = q3 - q1
                 
                 # Mostra medidas de distribuição em uma linha
-                dist_cols = st.columns(4)
-                dist_cols[0].markdown(f"**↔️ Mediana:** R$ {mediana:.2f}")
-                dist_cols[1].markdown(f"**🔄 Desvio Padrão:** R$ {desvio_padrao:.2f}")
-                dist_cols[2].markdown(f"**📏 Coef. Variação:** {cv:.1f}%")
-                dist_cols[3].markdown(f"**🔍 Amplitude Interquartil:** R$ {iqr:.2f}")
+                # Linha 1
+                dist_cols1 = st.columns(2)
+                dist_cols1[0].markdown(f"**↔️ Mediana:** R$ {mediana:.2f}")
+                dist_cols1[1].markdown(f"**🔄 Desvio Padrão:** R$ {desvio_padrao:.2f}")
+                
+                # Linha 2
+                dist_cols2 = st.columns(2)
+                dist_cols2[0].markdown(f"**📏 Coef. Variação:** {cv:.1f}%")
+                dist_cols2[1].markdown(f"**🔍 Amplitude Interquartil:** R$ {iqr:.2f}")
                 
                 # Histograma de distribuição dos valores de venda
                 if len(df_filtered) >= 5:  # Pelo menos 5 registros para um histograma significativo
@@ -629,123 +640,6 @@ def main():
                 else:
                     st.info("Dados temporais insuficientes para calcular KPIs comparativos. Registre vendas por pelo menos dois meses para visualizar estes indicadores.")
             
-            # Análise de Pareto
-            st.markdown("---")
-            st.subheader("📈 Análise de Pareto")
-            
-            if not df_filtered.empty and len(df_filtered) >= 5:
-                st.markdown("""
-                A análise de Pareto, também conhecida como regra 80/20, identifica quais elementos são responsáveis 
-                pela maior parte dos resultados. Abaixo, analisamos a concentração de suas vendas.
-                """)
-                
-                # Análise por dia da semana
-                if 'DiaSemana' in df_filtered.columns:
-                    st.markdown("### 📆 Pareto por Dia da Semana")
-                    
-                    # Agrupa por dia da semana e calcula a soma
-                    pareto_dia = df_filtered.groupby('DiaSemana')['Total'].sum().reset_index()
-                    # Ordena em ordem decrescente
-                    pareto_dia = pareto_dia.sort_values('Total', ascending=False)
-                    # Calcula porcentagem do total
-                    total_geral = pareto_dia['Total'].sum()
-                    pareto_dia['Porcentagem'] = pareto_dia['Total'] / total_geral * 100
-                    # Calcula porcentagem acumulada
-                    pareto_dia['Acumulado'] = pareto_dia['Porcentagem'].cumsum()
-                    
-                    # Criar gráfico de Pareto
-                    base = alt.Chart(pareto_dia).encode(
-                        x=alt.X('DiaSemana:N', sort='-y', title='Dia da Semana')
-                    )
-                    
-                    bars = base.mark_bar().encode(
-                        y=alt.Y('Total:Q', title='Valor Total (R$)'),
-                        tooltip=['DiaSemana', 'Total', 'Porcentagem', 'Acumulado']
-                    )
-                    
-                    line = base.mark_line(color='red', strokeWidth=2).encode(
-                        y=alt.Y('Acumulado:Q', title='% Acumulada', axis=alt.Axis(titleColor='red')),
-                    )
-                    
-                    # Linha de 80%
-                    rule = alt.Chart(pd.DataFrame({'y': [80]})).mark_rule(color='gray', strokeDash=[5, 5]).encode(y='y:Q')
-                    
-                    # Combinar no mesmo gráfico
-                    pareto_chart = alt.layer(bars, line, rule).resolve_scale(
-                        y=alt.ResolveScale('independent')
-                    ).properties(
-                        width=600,
-                        height=350,
-                        title='Análise de Pareto - Vendas por Dia da Semana'
-                    )
-                    
-                    st.altair_chart(pareto_chart, use_container_width=True)
-                    
-                    # Encontrar dias que compõem 80% das vendas
-                    dias_80pct = pareto_dia[pareto_dia['Acumulado'] <= 80]
-                    if not dias_80pct.empty:
-                        st.markdown(f"**🔍 {len(dias_80pct)} dia(s) da semana representam cerca de 80% do seu faturamento.**")
-                        dias_80pct_list = ', '.join(dias_80pct['DiaSemana'].tolist())
-                        st.markdown(f"**📊 Dias principais:** {dias_80pct_list}")
-                
-                # Análise por método de pagamento
-                st.markdown("### 💸 Pareto por Método de Pagamento")
-                
-                # Calcula o total por método de pagamento
-                pareto_metodos = pd.DataFrame({
-                    'Método': ['Cartão', 'Dinheiro', 'PIX'],
-                    'Total': [cartao_total, dinheiro_total, pix_total]
-                })
-                
-                # Ordena em ordem decrescente
-                pareto_metodos = pareto_metodos.sort_values('Total', ascending=False)
-                
-                # Calcula porcentagens e acumulado
-                total_metodos = pareto_metodos['Total'].sum()
-                pareto_metodos['Porcentagem'] = pareto_metodos['Total'] / total_metodos * 100
-                pareto_metodos['Acumulado'] = pareto_metodos['Porcentagem'].cumsum()
-                
-                # Cria gráfico de Pareto
-                base_metodo = alt.Chart(pareto_metodos).encode(
-                    x=alt.X('Método:N', sort='-y', title='Método de Pagamento')
-                )
-                
-                bars_metodo = base_metodo.mark_bar().encode(
-                    y=alt.Y('Total:Q', title='Valor Total (R$)'),
-                    tooltip=['Método', 'Total', 'Porcentagem', 'Acumulado']
-                )
-                
-                line_metodo = base_metodo.mark_line(color='red', strokeWidth=2).encode(
-                    y=alt.Y('Acumulado:Q', title='% Acumulada', axis=alt.Axis(titleColor='red')),
-                )
-                
-                # Linha de 80%
-                rule_metodo = alt.Chart(pd.DataFrame({'y': [80]})).mark_rule(color='gray', strokeDash=[5, 5]).encode(y='y:Q')
-                
-                # Combina os gráficos
-                pareto_metodo_chart = alt.layer(bars_metodo, line_metodo, rule_metodo).resolve_scale(
-                    y=alt.ResolveScale('independent')
-                ).properties(
-                    width=600,
-                    height=350,
-                    title='Análise de Pareto - Vendas por Método de Pagamento'
-                )
-                
-                st.altair_chart(pareto_metodo_chart, use_container_width=True)
-                
-                # Identifica métodos que compõem 80% das vendas
-                metodos_80pct = pareto_metodos[pareto_metodos['Acumulado'] <= 80]
-                if not metodos_80pct.empty:
-                    st.markdown(f"**🔍 {len(metodos_80pct)} método(s) representam cerca de 80% do seu faturamento.**")
-                    metodos_list = ', '.join(metodos_80pct['Método'].tolist())
-                    st.markdown(f"**💡 Métodos principais:** {metodos_list}")
-                    st.markdown("""
-                    **Dica:** Considere oferecer incentivos para os métodos predominantes ou 
-                    analisar se há dependência excessiva em um único método.
-                    """)
-            
-        else:
-            st.warning("⚠️ Dados insuficientes para análises detalhadas. Verifique os filtros ou importe mais dados.")
             
 if __name__ == "__main__":
     main()
