@@ -7,7 +7,7 @@ from google.oauth2.service_account import Credentials
 from gspread.exceptions import SpreadsheetNotFound
 
 # Configuração da página
-st.set_page_config(page_title="Sistema de Registro do Clips Burger", layout="centered")
+st.set_page_config(page_title="Clips Burger - Sistema de Gestão", layout="centered")
 
 def read_google_sheet():
     """Função para ler os dados da planilha Google Sheets"""
@@ -55,37 +55,65 @@ def process_data(df):
     return df
 
 def main():
-    st.title("📊 Sistema de Registro do Clips Burger")
-    st.image("logo.png", width=200)
+    st.title("Clips Burger - Sistema de Gestão")
+    st.image("logo.png", width=100)
     
     tab1, tab2, tab3 = st.tabs(["Registrar Vendas e Compras", "Análise de Vendas", "Análise de Compras"])
-    
+
     with tab1:
         st.header("Registrar Nova Venda ou Compra")
-        with st.expander("Clique para expandir o formulário"):
-            with st.form("registro_form"):
-                data = st.date_input("Data", datetime.now())
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    cartao = st.number_input("Cartão (R$)", min_value=0.0, format="%.2f")
-                with col2:
-                    dinheiro = st.number_input("Dinheiro (R$)", min_value=0.0, format="%.2f")
-                with col3:
-                    pix = st.number_input("PIX (R$)", min_value=0.0, format="%.2f")
-                total = cartao + dinheiro + pix
-                st.markdown(f"**Total da venda/compra: R$ {total:.2f}**")
-                submitted = st.form_submit_button("Registrar")
-                if submitted:
-                    if cartao > 0 or dinheiro > 0 or pix > 0:
-                        formatted_date = data.strftime('%d/%m/%Y')
-                        _, worksheet = read_google_sheet()
-                        if worksheet:
-                            # Função para registrar na planilha, pode ser para vendas ou compras
-                            new_row = [formatted_date, float(cartao), float(dinheiro), float(pix)]
-                            worksheet.append_row(new_row)
-                            st.success("Dados registrados com sucesso!")
-                    else:
-                        st.warning("Pelo menos um valor de venda/compra deve ser maior que zero.")
+        
+        # Caixa de Registro de Vendas
+        st.subheader("Registrar Venda")
+        with st.form("venda_form"):
+            data_venda = st.date_input("Data da Venda", datetime.now())
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                cartao = st.number_input("Cartão (R$)", min_value=0.0, format="%.2f")
+            with col2:
+                dinheiro = st.number_input("Dinheiro (R$)", min_value=0.0, format="%.2f")
+            with col3:
+                pix = st.number_input("PIX (R$)", min_value=0.0, format="%.2f")
+            total_venda = cartao + dinheiro + pix
+            st.markdown(f"**Total da Venda: R$ {total_venda:.2f}**")
+            submitted_venda = st.form_submit_button("Registrar Venda")
+            if submitted_venda:
+                if cartao > 0 or dinheiro > 0 or pix > 0:
+                    formatted_date = data_venda.strftime('%d/%m/%Y')
+                    _, worksheet = read_google_sheet()
+                    if worksheet:
+                        # Registrar venda na planilha
+                        new_row_venda = [formatted_date, float(cartao), float(dinheiro), float(pix)]
+                        worksheet.append_row(new_row_venda)
+                        st.success("Venda registrada com sucesso!")
+                else:
+                    st.warning("Pelo menos um valor de venda deve ser maior que zero.")
+        
+        # Caixa de Registro de Compras
+        st.subheader("Registrar Compra")
+        with st.form("compra_form"):
+            data_compra = st.date_input("Data da Compra", datetime.now())
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                cartao_compra = st.number_input("Cartão (R$)", min_value=0.0, format="%.2f")
+            with col2:
+                dinheiro_compra = st.number_input("Dinheiro (R$)", min_value=0.0, format="%.2f")
+            with col3:
+                pix_compra = st.number_input("PIX (R$)", min_value=0.0, format="%.2f")
+            total_compra = cartao_compra + dinheiro_compra + pix_compra
+            st.markdown(f"**Total da Compra: R$ {total_compra:.2f}**")
+            submitted_compra = st.form_submit_button("Registrar Compra")
+            if submitted_compra:
+                if cartao_compra > 0 or dinheiro_compra > 0 or pix_compra > 0:
+                    formatted_date = data_compra.strftime('%d/%m/%Y')
+                    _, worksheet = read_google_sheet()
+                    if worksheet:
+                        # Registrar compra na planilha
+                        new_row_compra = [formatted_date, float(cartao_compra), float(dinheiro_compra), float(pix_compra)]
+                        worksheet.append_row(new_row_compra)
+                        st.success("Compra registrada com sucesso!")
+                else:
+                    st.warning("Pelo menos um valor de compra deve ser maior que zero.")
     
     with tab2:
         st.header("Análise de Vendas")
