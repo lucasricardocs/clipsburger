@@ -79,7 +79,9 @@ def main():
         df_compras_raw, _ = read_google_sheet('Compras')
         df_compras = process_compras(df_compras_raw.copy()) if not df_compras_raw.empty else pd.DataFrame()
 
-        anos = sorted(set(df_vendas['Ano'].unique()).union(df_compras['Ano'].unique()))
+        anos_vendas = df_vendas['Ano'].unique() if 'Ano' in df_vendas.columns else []
+        anos_compras = df_compras['Ano'].unique() if 'Ano' in df_compras.columns else []
+        anos = sorted(set(anos_vendas).union(anos_compras))
         selected_anos = st.multiselect("Ano(s):", anos, default=anos)
         meses = sorted(set(df_vendas['Mês'].unique()).union(df_compras['Mês'].unique()))
         selected_meses = st.multiselect("Mês(es):", meses, default=meses)
