@@ -141,7 +141,7 @@ def process_compras(df):
         # Processar datas
         if 'Data' in df.columns:
             try:
-                date_mask = df['Data'].apply(lambda x: validate_date_format(str(x)) if pd.notnull(x) else False
+                date_mask = df['Data'].apply(lambda x: validate_date_format(str(x)) if pd.notnull(x) else False)
                 df.loc[date_mask, 'Data'] = pd.to_datetime(df.loc[date_mask, 'Data'], format='%d/%m/%Y')
                 
                 df['Ano'] = df['Data'].dt.year
