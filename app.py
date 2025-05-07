@@ -220,10 +220,109 @@ def main():
             st.info("Não há dados para exibir.")
 
     with tab3:
-        st.header("Análise de Compras")
-        # O código da análise de compras será similar ao de vendas
-        # Basta duplicar a lógica da tab2 para análise de compras
+    st.header("Análise de Compras")
+    
+    # Filtros na sidebar (mesmo filtro de vendas, mas para compras)
+    with st.sidebar:
+        st.header("🔍 Filtros")
+        with st.spinner("Carregando dados..."):
+            df_raw, _ = read_google_sheet()
+            df = process_data(df_raw.copy()) if not df_raw.empty else pd.DataFrame()
 
+            if not df.empty and 'Data' in df.columns:
+                # Obter mês e ano atual
+                current_month = datetime.now().month
+                current_year = datetime.now().year
+                
+                # Filtro de Ano
+                anos = sorted(df['Ano'].unique())
+                default_anos = [current_year] if current_year in anos else anos
+                selected_anos = st.multiselect(
+                    "Selecione o(s) Ano(s):",
+                    options=anos,
+                    default=default_anos
+                )
+
+                # Filtro de Mês
+                meses_disponiveis = sorted(df[df['Ano'].isin(selected_anos)]['Mês'].unique()) if selected_anos else []
+                meses_nomes = {m: datetime(2020, m, 1).strftime('%B') for m in meses_disponiveis}
+                meses_opcoes = [f"{m} - {meses_nomes[m]}" for m in meses_disponiveis]
+                
+                # Seleção de mês
+                selected_meses_str = st.multiselect(
+                    "Selecione o(s) Mês(es):",
+                    options=meses_opcoes,
+                    default=meses_opcoes
+                )
+                selected_meses = [int(m.split(" - ")[0]) for m in selected_meses_str]
+
+    # Conteúdo principal da análise
+    if not df_raw.empty:
+        if 'Data' in df.columns and pd.api.types.is_datetime64_any_dtype(df['Data']):
+            # Aplicar filtros
+            df_filtered = df[df['Ano'].isin(selected_anos)] if selected_anos else df
+            df_filtered = df_filtered[df_filtered['Mês'].isin(selected_meses)] if selected_meses else df_filtered
+
+            st.subheader("Dados Filtrados")
+            st.dataframe(df_filtered[['DataFormatada', 'Cartão', 'Dinheiro', 'Pix', 'Total']]
+                         if 'DataFormatada' in df_filtered.columns else df_filtered, 
+                         use_container_width=True,
+                         height=300)
+
+            # Gráficos
+            st.subheader("Distribuição por Método de Pagamento")
+            payment_filtered = pd.DataFrame({
+                'Método': ['Cartão', 'Dinheiro', 'PIX'],
+                'Valor': [df_filtered['Cartão'].sum(), df_filtered['Dinheiro'].sum(), df_filtered['Pix'].sum()]
+            })
+            
+            pie_chart = alt.Chart(payment_filtered).mark_arc(innerRadius=50).encode(
+                theta=alt.Theta("Valor:Q", stack=True),
+                color=alt.Color("Método:N", legend=alt.Legend(title="Método")),
+                tooltip=["Método", "Valor"]
+            ).properties(
+                width=700,
+                height=500
+            )
+            text = pie_chart.mark_text(radius=120, size=16).encode(text="Valor:Q")
+            st.altair_chart(pie_chart + text, use_container_width=True)
+
+            st.subheader("Compras Diárias por Método de Pagamento")
+            date_column = 'DataFormatada' if 'DataFormatada' in df_filtered.columns else 'Data'
+            daily_data = df_filtered.melt(id_vars=[date_column], 
+                                        value_vars=['Cartão', 'Dinheiro', 'Pix'],
+                                        var_name='Método', 
+                                        value_name='Valor')
+            
+            bar_chart = alt.Chart(daily_data).mark_bar(size=30).encode(
+                x=alt.X(f'{date_column}:N', title='Data', axis=alt.Axis(labelAngle=-45)),
+                y=alt.Y('Valor:Q', title='Valor (R$)'),
+                color=alt.Color('Método:N', legend=alt.Legend(title="Método")),
+                tooltip=[date_column, 'Método', 'Valor']
+            ).properties(
+                width=700,
+                height=500
+            )
+            st.altair_chart(bar_chart, use_container_width=True)
+
+            st.subheader("Acúmulo de Capital ao Longo do Tempo")
+            df_accumulated = df_filtered.sort_values('Data').copy()
+            df_accumulated['Total Acumulado'] = df_accumulated['Total'].cumsum()
+            
+            line_chart = alt.Chart(df_accumulated).mark_line(point=True, strokeWidth=3).encode(
+                x=alt.X('Data:T', title='Data'),
+                y=alt.Y('Total Acumulado:Q', title='Capital Acumulado (R$)'),
+                tooltip=['DataFormatada', 'Total Acumulado']
+            ).properties(
+                width=700,
+                height=500
+            )
+            st.altair_chart(line_chart, use_container_width=True)
+
+        else:
+            st.info("Não há dados de data para análise.")
+    else:
+        st.info("Não há dados para exibir.")
     # Adicionar rodapé
     st.divider()
     st.markdown(
