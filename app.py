@@ -125,7 +125,9 @@ def main():
 
     # ========== REGISTRO ==========
     with tab1:
-        st.header("Registrar Nova Venda")
+    with st.expander("➕ Registrar Nova Venda", expanded=True):
+        with st.form("venda_form"):
+            st.subheader("Registrar Nova Venda")
         with st.form("venda_form"):
             data_venda = st.date_input("Data da venda", datetime.now())
             col1, col2, col3 = st.columns(3)
