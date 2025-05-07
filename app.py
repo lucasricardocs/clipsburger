@@ -7,73 +7,127 @@ from google.oauth2.service_account import Credentials
 from gspread.exceptions import SpreadsheetNotFound
 
 # Configuração da página
-st.set_page_config(page_title="Sistema de Registro de Vendas", layout="centered")
+st.set_page_config(page_title="Sistema de Registro de Vendas e Compras", layout="centered")
 
-def read_google_sheet():
-    """Função para ler os dados da planilha Google Sheets"""
+# IDs e escopos
+SPREADSHEET_ID = '1NTScbiIna-iE7roQ9XBdjUOssRihTFFby4INAAQNXTg'
+SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+
+def autenticar_google():
+    """Autentica com o Google Sheets"""
+    credentials_dict = st.secrets["google_credentials"]
+    creds = Credentials.from_service_account_info(credentials_dict, scopes=SCOPES)
+    return gspread.authorize(creds)
+
+def ler_aba(aba_nome):
+    """Lê uma aba específica do Google Sheets"""
     try:
-        SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 
-                 'https://www.googleapis.com/auth/spreadsheets.readonly', 
-                 'https://www.googleapis.com/auth/drive.readonly']
-        credentials_dict = st.secrets["google_credentials"]
-        creds = Credentials.from_service_account_info(credentials_dict, scopes=SCOPES)
-        gc = gspread.authorize(creds)
-        spreadsheet_id = '1NTScbiIna-iE7roQ9XBdjUOssRihTFFby4INAAQNXTg'
-        worksheet_name = 'Vendas'
-        try:
-            spreadsheet = gc.open_by_key(spreadsheet_id)
-            worksheet = spreadsheet.worksheet(worksheet_name)
-            rows = worksheet.get_all_records()
-            df = pd.DataFrame(rows)
-            return df, worksheet
-        except SpreadsheetNotFound:
-            st.error(f"Planilha com ID {spreadsheet_id} não encontrada.")
-            return pd.DataFrame(), None
+        gc = autenticar_google()
+        spreadsheet = gc.open_by_key(SPREADSHEET_ID)
+        worksheet = spreadsheet.worksheet(aba_nome)
+        rows = worksheet.get_all_records()
+        df = pd.DataFrame(rows)
+        return df, worksheet
+    except SpreadsheetNotFound:
+        st.error(f"Aba '{aba_nome}' não encontrada.")
+        return pd.DataFrame(), None
     except Exception as e:
-        st.error(f"Erro de autenticação: {e}")
+        st.error(f"Erro ao acessar o Google Sheets: {e}")
         return pd.DataFrame(), None
 
-def add_data_to_sheet(date, cartao, dinheiro, pix, worksheet):
-    """Função para adicionar dados à planilha Google Sheets"""
-    if worksheet is None:
-        st.error("Não foi possível acessar a planilha.")
-        return
+def adicionar_linha(worksheet, dados):
+    """Adiciona uma linha a uma worksheet"""
     try:
-        new_row = [date, float(cartao), float(dinheiro), float(pix)]
-        worksheet.append_row(new_row)
+        worksheet.append_row(dados)
         st.success("Dados registrados com sucesso!")
     except Exception as e:
         st.error(f"Erro ao adicionar dados: {e}")
 
-def process_data(df):
-    """Função para processar e preparar os dados"""
+def processar_dataframe(df, colunas_valor, tipo="Venda"):
+    """Processa e formata os dados"""
     if not df.empty:
-        for col in ['Cartão', 'Dinheiro', 'Pix']:
+        for col in colunas_valor:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
-        df['Total'] = df['Cartão'].fillna(0) + df['Dinheiro'].fillna(0) + df['Pix'].fillna(0)
+        df['Total'] = df[colunas_valor].sum(axis=1)
         if 'Data' in df.columns:
-            try:
-                df['Data'] = pd.to_datetime(df['Data'], format='%d/%m/%Y', errors='coerce')
-                df['Ano'] = df['Data'].dt.year
-                df['Mês'] = df['Data'].dt.month
-                df['MêsNome'] = df['Data'].dt.strftime('%B')
-                df['AnoMês'] = df['Data'].dt.strftime('%Y-%m')
-                df['DataFormatada'] = df['Data'].dt.strftime('%d/%m/%Y')
-            except ValueError:
-                st.warning("Formato de data inconsistente na planilha.")
-            except Exception as e:
-                st.error(f"Erro ao processar a coluna 'Data': {e}")
+            df['Data'] = pd.to_datetime(df['Data'], format='%d/%m/%Y', errors='coerce')
+            df['Ano'] = df['Data'].dt.year
+            df['Mês'] = df['Data'].dt.month
+            df['MêsNome'] = df['Data'].dt.strftime('%B')
+            df['AnoMês'] = df['Data'].dt.strftime('%Y-%m')
+            df['DataFormatada'] = df['Data'].dt.strftime('%d/%m/%Y')
     return df
 
-def main():
-    st.title("📊 Sistema de Registro de Vendas")
-    tab1, tab3 = st.tabs(["Registrar Venda", "Análise Detalhada"])
+def interface_filtros(df):
+    """Renderiza filtros de ano e mês"""
+    selected_anos = selected_meses = []
+    if not df.empty:
+        with st.sidebar:
+            st.header("🔍 Filtros")
 
+            anos = sorted(df['Ano'].dropna().unique())
+            current_year = datetime.now().year
+            default_anos = [current_year] if current_year in anos else anos
+            selected_anos = st.multiselect("Selecione o(s) Ano(s):", options=anos, default=default_anos)
+
+            meses_disponiveis = sorted(df[df['Ano'].isin(selected_anos)]['Mês'].unique()) if selected_anos else []
+            meses_nomes = {m: datetime(2020, m, 1).strftime('%B') for m in meses_disponiveis}
+            meses_opcoes = [f"{m} - {meses_nomes[m]}" for m in meses_disponiveis]
+            current_month = datetime.now().month
+            default_meses = [f"{current_month} - {meses_nomes[current_month]}"] if current_month in meses_nomes else meses_opcoes
+            selected_meses_str = st.multiselect("Selecione o(s) Mês(es):", options=meses_opcoes, default=default_meses)
+            selected_meses = [int(m.split(" - ")[0]) for m in selected_meses_str]
+    return selected_anos, selected_meses
+
+def exibir_graficos(df, colunas_valor, titulo="Dados"):
+    """Exibe gráficos e dados"""
+    if not df.empty and 'Data' in df.columns:
+        st.subheader("Dados Filtrados")
+        st.dataframe(df[['DataFormatada'] + colunas_valor + ['Total']], use_container_width=True, height=300)
+
+        st.subheader("Distribuição por Categoria")
+        resumo = pd.DataFrame({
+            'Categoria': colunas_valor,
+            'Valor': [df[col].sum() for col in colunas_valor]
+        })
+        chart = alt.Chart(resumo).mark_arc(innerRadius=50).encode(
+            theta=alt.Theta("Valor:Q"),
+            color=alt.Color("Categoria:N"),
+            tooltip=["Categoria", "Valor"]
+        )
+        st.altair_chart(chart, use_container_width=True)
+
+        st.subheader("Valores Diários por Categoria")
+        melted = df.melt(id_vars=['DataFormatada'], value_vars=colunas_valor, var_name='Categoria', value_name='Valor')
+        bar_chart = alt.Chart(melted).mark_bar().encode(
+            x=alt.X('DataFormatada:N', title='Data', axis=alt.Axis(labelAngle=-45)),
+            y='Valor:Q',
+            color='Categoria:N',
+            tooltip=['DataFormatada', 'Categoria', 'Valor']
+        )
+        st.altair_chart(bar_chart, use_container_width=True)
+
+        st.subheader("Acúmulo ao Longo do Tempo")
+        df_ordenado = df.sort_values('Data')
+        df_ordenado['Total Acumulado'] = df_ordenado['Total'].cumsum()
+        line_chart = alt.Chart(df_ordenado).mark_line(point=True).encode(
+            x='Data:T',
+            y='Total Acumulado:Q',
+            tooltip=['DataFormatada', 'Total Acumulado']
+        )
+        st.altair_chart(line_chart, use_container_width=True)
+
+def main():
+    st.title("📊 Sistema de Registro de Vendas e Compras")
+
+    tab1, tab2, tab3 = st.tabs(["Registrar", "Análise de Vendas", "Análise de Compras"])
+
+    # ========== REGISTRO ==========
     with tab1:
         st.header("Registrar Nova Venda")
         with st.form("venda_form"):
-            data = st.date_input("Data", datetime.now())
+            data_venda = st.date_input("Data da venda", datetime.now())
             col1, col2, col3 = st.columns(3)
             with col1:
                 cartao = st.number_input("Cartão (R$)", min_value=0.0, format="%.2f")
@@ -85,123 +139,68 @@ def main():
             st.markdown(f"**Total da venda: R$ {total:.2f}**")
             submitted = st.form_submit_button("Registrar Venda")
             if submitted:
-                if cartao > 0 or dinheiro > 0 or pix > 0:
-                    formatted_date = data.strftime('%d/%m/%Y')
-                    _, worksheet = read_google_sheet()
+                if total > 0:
+                    _, worksheet = ler_aba("Vendas")
                     if worksheet:
-                        add_data_to_sheet(formatted_date, cartao, dinheiro, pix, worksheet)
+                        adicionar_linha(worksheet, [
+                            data_venda.strftime('%d/%m/%Y'),
+                            float(cartao), float(dinheiro), float(pix)
+                        ])
                 else:
-                    st.warning("Pelo menos um valor de venda deve ser maior que zero.")
+                    st.warning("Informe pelo menos um valor.")
 
-    with tab3:
-        st.header("Análise Detalhada de Vendas")
-        
-        # Filtros na sidebar
-        with st.sidebar:
-            st.header("🔍 Filtros")
-            
-            with st.spinner("Carregando dados..."):
-                df_raw, _ = read_google_sheet()
-                df = process_data(df_raw.copy()) if not df_raw.empty else pd.DataFrame()
+        st.header("Registrar Nova Compra")
+        with st.expander("➕ Adicionar Compra"):
+            with st.form("compra_form"):
+                data_compra = st.date_input("Data da compra", datetime.now())
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    pao = st.number_input("Pão (R$)", min_value=0.0, format="%.2f", key="pao")
+                with col2:
+                    frios = st.number_input("Frios (R$)", min_value=0.0, format="%.2f", key="frios")
+                with col3:
+                    bebidas = st.number_input("Bebidas (R$)", min_value=0.0, format="%.2f", key="bebidas")
+                total_compra = pao + frios + bebidas
+                st.markdown(f"**Total da compra: R$ {total_compra:.2f}**")
+                submitted_compra = st.form_submit_button("Registrar Compra")
+                if submitted_compra:
+                    if total_compra > 0:
+                        _, worksheet_compras = ler_aba("Compras")
+                        if worksheet_compras:
+                            adicionar_linha(worksheet_compras, [
+                                data_compra.strftime('%d/%m/%Y'),
+                                float(pao), float(frios), float(bebidas)
+                            ])
+                    else:
+                        st.warning("Informe pelo menos um valor.")
 
-                if not df.empty and 'Data' in df.columns:
-                    # Obter mês e ano atual
-                    current_month = datetime.now().month
-                    current_year = datetime.now().year
-                    
-                    # Filtro de Ano
-                    anos = sorted(df['Ano'].unique())
-                    # Por padrão, selecionar o ano atual se disponível, senão todos os anos
-                    default_anos = [current_year] if current_year in anos else anos
-                    selected_anos = st.multiselect(
-                        "Selecione o(s) Ano(s):",
-                        options=anos,
-                        default=default_anos
-                    )
-
-                    # Filtro de Mês
-                    meses_disponiveis = sorted(df[df['Ano'].isin(selected_anos)]['Mês'].unique()) if selected_anos else []
-                    meses_nomes = {m: datetime(2020, m, 1).strftime('%B') for m in meses_disponiveis}
-                    meses_opcoes = [f"{m} - {meses_nomes[m]}" for m in meses_disponiveis]
-                    
-                    # Por padrão, selecionar apenas o mês atual se disponível
-                    default_mes_opcao = [f"{current_month} - {datetime(2020, current_month, 1).strftime('%B')}"]
-                    default_meses = [m for m in meses_opcoes if m.startswith(f"{current_month} -")]
-                    
-                    selected_meses_str = st.multiselect(
-                        "Selecione o(s) Mês(es):",
-                        options=meses_opcoes,
-                        default=default_meses if default_meses else meses_opcoes
-                    )
-                    selected_meses = [int(m.split(" - ")[0]) for m in selected_meses_str]
-
-        # Conteúdo principal da análise
-        if not df_raw.empty:
-            if 'Data' in df.columns and pd.api.types.is_datetime64_any_dtype(df['Data']):
-                # Aplicar filtros
-                df_filtered = df[df['Ano'].isin(selected_anos)] if selected_anos else df
-                df_filtered = df_filtered[df_filtered['Mês'].isin(selected_meses)] if selected_meses else df_filtered
-
-                st.subheader("Dados Filtrados")
-                st.dataframe(df_filtered[['DataFormatada', 'Cartão', 'Dinheiro', 'Pix', 'Total']]
-                             if 'DataFormatada' in df_filtered.columns else df_filtered, 
-                             use_container_width=True,
-                             height=300)
-
-                # Gráficos
-                st.subheader("Distribuição por Método de Pagamento")
-                payment_filtered = pd.DataFrame({
-                    'Método': ['Cartão', 'Dinheiro', 'PIX'],
-                    'Valor': [df_filtered['Cartão'].sum(), df_filtered['Dinheiro'].sum(), df_filtered['Pix'].sum()]
-                })
-                
-                pie_chart = alt.Chart(payment_filtered).mark_arc(innerRadius=50).encode(
-                    theta=alt.Theta("Valor:Q", stack=True),
-                    color=alt.Color("Método:N", legend=alt.Legend(title="Método")),
-                    tooltip=["Método", "Valor"]
-                ).properties(
-                    width=700,
-                    height=500
-                )
-                text = pie_chart.mark_text(radius=120, size=16).encode(text="Valor:Q")
-                st.altair_chart(pie_chart + text, use_container_width=True)
-
-                st.subheader("Vendas Diárias por Método de Pagamento")
-                date_column = 'DataFormatada' if 'DataFormatada' in df_filtered.columns else 'Data'
-                daily_data = df_filtered.melt(id_vars=[date_column], 
-                                            value_vars=['Cartão', 'Dinheiro', 'Pix'],
-                                            var_name='Método', 
-                                            value_name='Valor')
-                
-                bar_chart = alt.Chart(daily_data).mark_bar(size=30).encode(
-                    x=alt.X(f'{date_column}:N', title='Data', axis=alt.Axis(labelAngle=-45)),
-                    y=alt.Y('Valor:Q', title='Valor (R$)'),
-                    color=alt.Color('Método:N', legend=alt.Legend(title="Método")),
-                    tooltip=[date_column, 'Método', 'Valor']
-                ).properties(
-                    width=700,
-                    height=500
-                )
-                st.altair_chart(bar_chart, use_container_width=True)
-
-                st.subheader("Acúmulo de Capital ao Longo do Tempo")
-                df_accumulated = df_filtered.sort_values('Data').copy()
-                df_accumulated['Total Acumulado'] = df_accumulated['Total'].cumsum()
-                
-                line_chart = alt.Chart(df_accumulated).mark_line(point=True, strokeWidth=3).encode(
-                    x=alt.X('Data:T', title='Data'),
-                    y=alt.Y('Total Acumulado:Q', title='Capital Acumulado (R$)'),
-                    tooltip=['DataFormatada', 'Total Acumulado']
-                ).properties(
-                    width=700,
-                    height=500
-                )
-                st.altair_chart(line_chart, use_container_width=True)
-
-            else:
-                st.info("Não há dados de data para análise.")
+    # ========== ANÁLISE DE VENDAS ==========
+    with tab2:
+        st.header("📈 Análise Detalhada de Vendas")
+        df_vendas_raw, _ = ler_aba("Vendas")
+        df_vendas = processar_dataframe(df_vendas_raw.copy(), ['Cartão', 'Dinheiro', 'Pix'])
+        anos, meses = interface_filtros(df_vendas)
+        if not df_vendas.empty:
+            df_filtrado = df_vendas[
+                (df_vendas['Ano'].isin(anos)) & (df_vendas['Mês'].isin(meses))
+            ]
+            exibir_graficos(df_filtrado, ['Cartão', 'Dinheiro', 'Pix'], "Vendas")
         else:
-            st.info("Não há dados para exibir.")
+            st.info("Sem dados de vendas disponíveis.")
+
+    # ========== ANÁLISE DE COMPRAS ==========
+    with tab3:
+        st.header("📉 Análise Detalhada de Compras")
+        df_compras_raw, _ = ler_aba("Compras")
+        df_compras = processar_dataframe(df_compras_raw.copy(), ['Pão', 'Frios', 'Bebidas'])
+        anos_c, meses_c = interface_filtros(df_compras)
+        if not df_compras.empty:
+            df_compras_filtrado = df_compras[
+                (df_compras['Ano'].isin(anos_c)) & (df_compras['Mês'].isin(meses_c))
+            ]
+            exibir_graficos(df_compras_filtrado, ['Pão', 'Frios', 'Bebidas'], "Compras")
+        else:
+            st.info("Sem dados de compras disponíveis.")
 
 if __name__ == "__main__":
     main()
