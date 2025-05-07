@@ -1,155 +1,207 @@
 import streamlit as st
-import pandas as pd
-import datetime
-import altair as alt
-from PIL import Image
-from google.oauth2 import service_account
 import gspread
+import pandas as pd
+import altair as alt
+from datetime import datetime
+from google.oauth2.service_account import Credentials
+from gspread.exceptions import SpreadsheetNotFound
 
-# Autenticação com Google Sheets
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/spreadsheets",
-         "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
+# Configuração da página
+st.set_page_config(page_title="Sistema de Registro de Vendas", layout="centered")
 
-credentials = service_account.Credentials.from_service_account_info(
-    st.secrets["gcp_service_account"], scopes=scope)
+def read_google_sheet():
+    """Função para ler os dados da planilha Google Sheets"""
+    try:
+        SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 
+                 'https://www.googleapis.com/auth/spreadsheets.readonly', 
+                 'https://www.googleapis.com/auth/drive.readonly']
+        credentials_dict = st.secrets["google_credentials"]
+        creds = Credentials.from_service_account_info(credentials_dict, scopes=SCOPES)
+        gc = gspread.authorize(creds)
+        spreadsheet_id = '1NTScbiIna-iE7roQ9XBdjUOssRihTFFby4INAAQNXTg'
+        worksheet_name = 'Vendas'
+        try:
+            spreadsheet = gc.open_by_key(spreadsheet_id)
+            worksheet = spreadsheet.worksheet(worksheet_name)
+            rows = worksheet.get_all_records()
+            df = pd.DataFrame(rows)
+            return df, worksheet
+        except SpreadsheetNotFound:
+            st.error(f"Planilha com ID {spreadsheet_id} não encontrada.")
+            return pd.DataFrame(), None
+    except Exception as e:
+        st.error(f"Erro de autenticação: {e}")
+        return pd.DataFrame(), None
 
-client = gspread.authorize(credentials)
-SHEET_URL = st.secrets["private_gsheets_url"]
-sheet = client.open_by_url(SHEET_URL)
+def add_data_to_sheet(date, cartao, dinheiro, pix, worksheet):
+    """Função para adicionar dados à planilha Google Sheets"""
+    if worksheet is None:
+        st.error("Não foi possível acessar a planilha.")
+        return
+    try:
+        new_row = [date, float(cartao), float(dinheiro), float(pix)]
+        worksheet.append_row(new_row)
+        st.success("Dados registrados com sucesso!")
+    except Exception as e:
+        st.error(f"Erro ao adicionar dados: {e}")
 
-# Função para carregar dados
-def load_data(worksheet_name):
-    worksheet = sheet.worksheet(worksheet_name)
-    data = worksheet.get_all_records()
-    return pd.DataFrame(data)
-
-# Função para salvar dados
-def save_data(worksheet_name, data):
-    worksheet = sheet.worksheet(worksheet_name)
-    worksheet.append_row(data)
-
-# Processamento de datas
 def process_data(df):
-    if df.empty or 'data' not in df.columns:
-        return df
-    df['data'] = pd.to_datetime(df['data'], errors='coerce')
-    df['Ano'] = df['data'].dt.year
-    df['Mês'] = df['data'].dt.month
-    df['Dia'] = df['data'].dt.day
-    df['Dia da Semana'] = df['data'].dt.day_name()
+    """Função para processar e preparar os dados"""
+    if not df.empty:
+        for col in ['Cartão', 'Dinheiro', 'Pix']:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+        df['Total'] = df['Cartão'].fillna(0) + df['Dinheiro'].fillna(0) + df['Pix'].fillna(0)
+        if 'Data' in df.columns:
+            try:
+                df['Data'] = pd.to_datetime(df['Data'], format='%d/%m/%Y', errors='coerce')
+                df['Ano'] = df['Data'].dt.year
+                df['Mês'] = df['Data'].dt.month
+                df['MêsNome'] = df['Data'].dt.strftime('%B')
+                df['AnoMês'] = df['Data'].dt.strftime('%Y-%m')
+                df['DataFormatada'] = df['Data'].dt.strftime('%d/%m/%Y')
+            except ValueError:
+                st.warning("Formato de data inconsistente na planilha.")
+            except Exception as e:
+                st.error(f"Erro ao processar a coluna 'Data': {e}")
     return df
 
-# Função principal
 def main():
-    st.set_page_config(page_title="Clip's Burger - Sistema de Cadastro", layout="wide")
+    st.title("📊 Sistema de Registro de Vendas")
+    tab1, tab3 = st.tabs(["Registrar Venda", "Análise Detalhada"])
 
-    # Topo com logo
-    col1, col2 = st.columns([1, 8])
-    with col1:
-        st.image("logo.png", width=80)
-    with col2:
-        st.title("Clip's Burger - Sistema de Cadastro")
-
-    # Carregar dados
-    df_vendas = load_data("Vendas")
-    df_compras = load_data("Compras")
-
-    df_vendas = process_data(df_vendas)
-    df_compras = process_data(df_compras)
-
-    # Sidebar com filtros
-    anos = sorted(set(df_vendas['Ano'].dropna().unique()).union(df_compras['Ano'].dropna().unique()))
-    meses = sorted(set(df_vendas['Mês'].dropna().unique()).union(df_compras['Mês'].dropna().unique()))
-
-    st.sidebar.header("Filtros")
-    ano_selecionado = st.sidebar.selectbox("Selecione o Ano", anos)
-    mes_selecionado = st.sidebar.selectbox("Selecione o Mês", meses)
-
-    # Aplicar filtro
-    df_vendas_filtrado = df_vendas[(df_vendas['Ano'] == ano_selecionado) & (df_vendas['Mês'] == mes_selecionado)]
-    df_compras_filtrado = df_compras[(df_compras['Ano'] == ano_selecionado) & (df_compras['Mês'] == mes_selecionado)]
-
-    aba = st.tabs(["Cadastro", "Análise de Vendas", "Análise de Compras", "Estatísticas"])
-
-    # Aba Cadastro
-    with aba[0]:
-        st.subheader("Registrar Nova Venda")
+    with tab1:
+        st.header("Registrar Nova Venda")
         with st.form("venda_form"):
-            data_venda = st.date_input("Data da Venda", value=datetime.date.today(), key="venda_data")
-            produto = st.text_input("Produto")
-            valor = st.number_input("Valor", min_value=0.0, step=0.01)
-            forma_pagamento = st.selectbox("Forma de Pagamento", ["Dinheiro", "Cartão", "Pix"])
-            submit_venda = st.form_submit_button("Registrar Venda")
-            if submit_venda:
-                save_data("Vendas", [str(data_venda), produto, valor, forma_pagamento])
-                st.success("Venda registrada com sucesso!")
+            data = st.date_input("Data", datetime.now())
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                cartao = st.number_input("Cartão (R$)", min_value=0.0, format="%.2f")
+            with col2:
+                dinheiro = st.number_input("Dinheiro (R$)", min_value=0.0, format="%.2f")
+            with col3:
+                pix = st.number_input("PIX (R$)", min_value=0.0, format="%.2f")
+            total = cartao + dinheiro + pix
+            st.markdown(f"**Total da venda: R$ {total:.2f}**")
+            submitted = st.form_submit_button("Registrar Venda")
+            if submitted:
+                if cartao > 0 or dinheiro > 0 or pix > 0:
+                    formatted_date = data.strftime('%d/%m/%Y')
+                    _, worksheet = read_google_sheet()
+                    if worksheet:
+                        add_data_to_sheet(formatted_date, cartao, dinheiro, pix, worksheet)
+                else:
+                    st.warning("Pelo menos um valor de venda deve ser maior que zero.")
 
-        st.subheader("Registrar Nova Compra")
-        with st.form("compra_form"):
-            data_compra = st.date_input("Data da Compra", value=datetime.date.today(), key="compra_data")
-            pao = st.number_input("Pão", min_value=0.0, step=0.01)
-            frios = st.number_input("Frios", min_value=0.0, step=0.01)
-            bebidas = st.number_input("Bebidas", min_value=0.0, step=0.01)
-            submit_compra = st.form_submit_button("Registrar Compra")
-            if submit_compra:
-                save_data("Compras", [str(data_compra), pao, frios, bebidas])
-                st.success("Compra registrada com sucesso!")
+    with tab3:
+        st.header("Análise Detalhada de Vendas")
+        
+        # Filtros na sidebar
+        with st.sidebar:
+            st.header("🔍 Filtros")
+            
+            with st.spinner("Carregando dados..."):
+                df_raw, _ = read_google_sheet()
+                df = process_data(df_raw.copy()) if not df_raw.empty else pd.DataFrame()
 
-    # Aba Análise de Vendas
-    with aba[1]:
-        st.subheader("Gráficos de Vendas")
-        if not df_vendas_filtrado.empty:
-            chart = alt.Chart(df_vendas_filtrado).mark_bar().encode(
-                x='forma_pagamento:N',
-                y='valor:Q',
-                color='forma_pagamento:N'
-            ).properties(width=600)
-            st.altair_chart(chart)
+                if not df.empty and 'Data' in df.columns:
+                    # Obter mês e ano atual
+                    current_month = datetime.now().month
+                    current_year = datetime.now().year
+                    
+                    # Filtro de Ano
+                    anos = sorted(df['Ano'].unique())
+                    # Por padrão, selecionar o ano atual se disponível, senão todos os anos
+                    default_anos = [current_year] if current_year in anos else anos
+                    selected_anos = st.multiselect(
+                        "Selecione o(s) Ano(s):",
+                        options=anos,
+                        default=default_anos
+                    )
 
-            linha = alt.Chart(df_vendas_filtrado).mark_line(point=True).encode(
-                x='data:T', y='valor:Q'
-            ).properties(width=600)
-            st.altair_chart(linha)
+                    # Filtro de Mês
+                    meses_disponiveis = sorted(df[df['Ano'].isin(selected_anos)]['Mês'].unique()) if selected_anos else []
+                    meses_nomes = {m: datetime(2020, m, 1).strftime('%B') for m in meses_disponiveis}
+                    meses_opcoes = [f"{m} - {meses_nomes[m]}" for m in meses_disponiveis]
+                    
+                    # Por padrão, selecionar apenas o mês atual se disponível
+                    default_mes_opcao = [f"{current_month} - {datetime(2020, current_month, 1).strftime('%B')}"]
+                    default_meses = [m for m in meses_opcoes if m.startswith(f"{current_month} -")]
+                    
+                    selected_meses_str = st.multiselect(
+                        "Selecione o(s) Mês(es):",
+                        options=meses_opcoes,
+                        default=default_meses if default_meses else meses_opcoes
+                    )
+                    selected_meses = [int(m.split(" - ")[0]) for m in selected_meses_str]
+
+        # Conteúdo principal da análise
+        if not df_raw.empty:
+            if 'Data' in df.columns and pd.api.types.is_datetime64_any_dtype(df['Data']):
+                # Aplicar filtros
+                df_filtered = df[df['Ano'].isin(selected_anos)] if selected_anos else df
+                df_filtered = df_filtered[df_filtered['Mês'].isin(selected_meses)] if selected_meses else df_filtered
+
+                st.subheader("Dados Filtrados")
+                st.dataframe(df_filtered[['DataFormatada', 'Cartão', 'Dinheiro', 'Pix', 'Total']]
+                             if 'DataFormatada' in df_filtered.columns else df_filtered, 
+                             use_container_width=True,
+                             height=300)
+
+                # Gráficos
+                st.subheader("Distribuição por Método de Pagamento")
+                payment_filtered = pd.DataFrame({
+                    'Método': ['Cartão', 'Dinheiro', 'PIX'],
+                    'Valor': [df_filtered['Cartão'].sum(), df_filtered['Dinheiro'].sum(), df_filtered['Pix'].sum()]
+                })
+                
+                pie_chart = alt.Chart(payment_filtered).mark_arc(innerRadius=50).encode(
+                    theta=alt.Theta("Valor:Q", stack=True),
+                    color=alt.Color("Método:N", legend=alt.Legend(title="Método")),
+                    tooltip=["Método", "Valor"]
+                ).properties(
+                    width=700,
+                    height=500
+                )
+                text = pie_chart.mark_text(radius=120, size=16).encode(text="Valor:Q")
+                st.altair_chart(pie_chart + text, use_container_width=True)
+
+                st.subheader("Vendas Diárias por Método de Pagamento")
+                date_column = 'DataFormatada' if 'DataFormatada' in df_filtered.columns else 'Data'
+                daily_data = df_filtered.melt(id_vars=[date_column], 
+                                            value_vars=['Cartão', 'Dinheiro', 'Pix'],
+                                            var_name='Método', 
+                                            value_name='Valor')
+                
+                bar_chart = alt.Chart(daily_data).mark_bar(size=30).encode(
+                    x=alt.X(f'{date_column}:N', title='Data', axis=alt.Axis(labelAngle=-45)),
+                    y=alt.Y('Valor:Q', title='Valor (R$)'),
+                    color=alt.Color('Método:N', legend=alt.Legend(title="Método")),
+                    tooltip=[date_column, 'Método', 'Valor']
+                ).properties(
+                    width=700,
+                    height=500
+                )
+                st.altair_chart(bar_chart, use_container_width=True)
+
+                st.subheader("Acúmulo de Capital ao Longo do Tempo")
+                df_accumulated = df_filtered.sort_values('Data').copy()
+                df_accumulated['Total Acumulado'] = df_accumulated['Total'].cumsum()
+                
+                line_chart = alt.Chart(df_accumulated).mark_line(point=True, strokeWidth=3).encode(
+                    x=alt.X('Data:T', title='Data'),
+                    y=alt.Y('Total Acumulado:Q', title='Capital Acumulado (R$)'),
+                    tooltip=['DataFormatada', 'Total Acumulado']
+                ).properties(
+                    width=700,
+                    height=500
+                )
+                st.altair_chart(line_chart, use_container_width=True)
+
+            else:
+                st.info("Não há dados de data para análise.")
         else:
-            st.warning("Nenhuma venda registrada no período.")
+            st.info("Não há dados para exibir.")
 
-    # Aba Análise de Compras
-    with aba[2]:
-        st.subheader("Gráficos de Compras")
-        if not df_compras_filtrado.empty:
-            df_long = df_compras_filtrado.melt(id_vars=['data'], value_vars=['pao', 'frios', 'bebidas'],
-                                               var_name='categoria', value_name='valor')
-            chart = alt.Chart(df_long).mark_bar().encode(
-                x='categoria:N',
-                y='valor:Q',
-                color='categoria:N'
-            ).properties(width=600)
-            st.altair_chart(chart)
-
-            linha = alt.Chart(df_long).mark_line(point=True).encode(
-                x='data:T', y='valor:Q', color='categoria:N'
-            ).properties(width=600)
-            st.altair_chart(linha)
-        else:
-            st.warning("Nenhuma compra registrada no período.")
-
-    # Aba Estatísticas
-    with aba[3]:
-        st.subheader("Estatísticas Gerais")
-        if not df_vendas_filtrado.empty:
-            dias_ativos = df_vendas_filtrado['data'].dt.date.nunique()
-            dia_mais_vendas = df_vendas_filtrado.groupby('Dia da Semana')['valor'].mean().idxmax()
-            dia_menos_vendas = df_vendas_filtrado.groupby('Dia da Semana')['valor'].mean().idxmin()
-            st.markdown(f"- **Dias trabalhados:** {dias_ativos}")
-            st.markdown(f"- **Dia com mais vendas (em média):** {dia_mais_vendas}")
-            st.markdown(f"- **Dia com menos vendas (em média):** {dia_menos_vendas}")
-
-            total_vendas = df_vendas_filtrado['valor'].sum()
-            media_vendas = df_vendas_filtrado['valor'].mean()
-            st.markdown(f"- **Total vendido:** R$ {total_vendas:.2f}")
-            st.markdown(f"- **Média por venda:** R$ {media_vendas:.2f}")
-        else:
-            st.info("Nenhuma estatística de vendas disponível no período.")
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
