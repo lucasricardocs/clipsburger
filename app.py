@@ -1,13 +1,38 @@
-import streamlit as st
 import gspread
 import pandas as pd
 import altair as alt
-from datetime import datetime
+from datetime import datetime, timedelta
 from google.oauth2.service_account import Credentials
 from gspread.exceptions import SpreadsheetNotFound
+import time
+import re
 
 # Configuração da página
-st.set_page_config(page_title="Sistema de Registro do Clips Burger", layout="centered")
+st.set_page_config(page_title="Sistema de Registro do Clips Burger", layout="centered", initial_sidebar_state="expanded")
+
+def sanitize_number(value):
+    """Limpa e valida valores numéricos"""
+    if isinstance(value, str):
+        # Remove caracteres não numéricos, exceto o ponto decimal
+        value = re.sub(r'[^\d.]', '', value)
+        # Converte para float se possível
+        try:
+            return float(value) if value else 0.0
+        except ValueError:
+            return 0.0
+    return float(value) if value is not None else 0.0
+
+def validate_date_format(date_str):
+    """Valida se a string de data está no formato correto dd/mm/yyyy"""
+    try:
+        datetime.strptime(date_str, '%d/%m/%Y')
+        return True
+    except ValueError:
+        return False
+
+def format_currency(value):
+    """Formata valor como moeda brasileira"""
+    return f"R$ {value:.2f}".replace('.', ',')
 
 def read_google_sheet(worksheet_name="Vendas"):
     """Função para ler os dados da planilha Google Sheets"""
@@ -18,7 +43,7 @@ def read_google_sheet(worksheet_name="Vendas"):
         credentials_dict = st.secrets["google_credentials"]
         creds = Credentials.from_service_account_info(credentials_dict, scopes=SCOPES)
         gc = gspread.authorize(creds)
-        spreadsheet_id = '1NTScbiIna-iE7roQ9XBdjUOssRihTFFby4INAAQNXTg'
+        spreadsheet_id = '1NTScbiIna-iE7roQ9XBdjUOssRihTFFby4INAAQNXTg'  # ID da planilha "VendasPitDog"
         try:
             spreadsheet = gc.open_by_key(spreadsheet_id)
             worksheet = spreadsheet.worksheet(worksheet_name)
@@ -47,58 +72,155 @@ def append_row(worksheet_name, row_data):
 def process_data(df):
     """Função para processar e preparar os dados"""
     if not df.empty:
-        for col in ['Cartão', 'Dinheiro', 'Pix']:
+        # Aplicar conversão de tipo para colunas numéricas
+        for col in ['Cartão', 'Dinheiro', 'Pix', 'PIX']:
             if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce')
-        df['Total'] = df['Cartão'].fillna(0) + df['Dinheiro'].fillna(0) + df['Pix'].fillna(0)
+                df[col] = df[col].apply(sanitize_number)
+        
+        # Calcular o total das vendas
+        if all(col in df.columns for col in ['Cartão', 'Dinheiro', 'Pix']):
+            df['Total'] = df['Cartão'].fillna(0) + df['Dinheiro'].fillna(0) + df['Pix'].fillna(0)
+        elif all(col in df.columns for col in ['Cartão', 'Dinheiro', 'PIX']):
+            df['Total'] = df['Cartão'].fillna(0) + df['Dinheiro'].fillna(0) + df['PIX'].fillna(0)
+            
+        # Processar coluna de data
         if 'Data' in df.columns:
             try:
-                df['Data'] = pd.to_datetime(df['Data'], format='%d/%m/%Y', errors='coerce')
+                # Converter strings de data para datetime
+                date_mask = df['Data'].apply(lambda x: validate_date_format(str(x)) if x else False)
+                valid_dates = df[date_mask]
+                invalid_dates = df[~date_mask]
+                
+                if not invalid_dates.empty:
+                    st.warning(f"Encontradas {len(invalid_dates)} linhas com datas em formato inválido.")
+                
+                df.loc[date_mask, 'Data'] = pd.to_datetime(df.loc[date_mask, 'Data'], format='%d/%m/%Y')
+                
+                # Extrair componentes da data
                 df['Ano'] = df['Data'].dt.year
                 df['Mês'] = df['Data'].dt.month
+                df['Dia'] = df['Data'].dt.day
+                df['DiaSemana'] = df['Data'].dt.day_name()
                 df['MêsNome'] = df['Data'].dt.strftime('%B')
                 df['AnoMês'] = df['Data'].dt.strftime('%Y-%m')
                 df['DataFormatada'] = df['Data'].dt.strftime('%d/%m/%Y')
-            except ValueError:
-                st.warning("Formato de data inconsistente na planilha.")
+                
+                # Ordenar o DataFrame por data (mais recente primeiro)
+                df = df.sort_values('Data', ascending=False)
             except Exception as e:
-                st.error(f"Erro ao processar a coluna 'Data': {e}")
+                st.error(f"Erro ao processar datas: {e}")
     return df
 
 def process_vendas(df):
     """Função para processar dados de vendas"""
     if not df.empty:
+        # Padronizar nomes de colunas
+        if 'Pix' in df.columns and 'PIX' not in df.columns:
+            df.rename(columns={'Pix': 'PIX'}, inplace=True)
+            
+        # Aplicar conversão para valores numéricos
         for col in ['Cartão', 'Dinheiro', 'PIX']:
             if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce')
+                df[col] = df[col].apply(sanitize_number)
+                
+        # Calcular total
         df['Total'] = df['Cartão'].fillna(0) + df['Dinheiro'].fillna(0) + df['PIX'].fillna(0)
+        
+        # Processar datas
         if 'Data' in df.columns:
             try:
-                df['Data'] = pd.to_datetime(df['Data'], format='%d/%m/%Y', errors='coerce')
+                # Verificar formato das datas
+                date_mask = df['Data'].apply(lambda x: validate_date_format(str(x)) if x else False)
+                df.loc[date_mask, 'Data'] = pd.to_datetime(df.loc[date_mask, 'Data'], format='%d/%m/%Y')
+                
+                # Extrair componentes
                 df['Ano'] = df['Data'].dt.year
                 df['Mês'] = df['Data'].dt.month
+                df['DiaSemana'] = df['Data'].dt.day_name()
                 df['MêsNome'] = df['Data'].dt.strftime('%B')
                 df['DataFormatada'] = df['Data'].dt.strftime('%d/%m/%Y')
+                df['DiaMês'] = df['Data'].dt.strftime('%d/%m')
+                
+                # Ordenar do mais recente para o mais antigo
+                df = df.sort_values('Data', ascending=False)
             except Exception as e:
-                st.error(f"Erro ao processar a coluna 'Data': {e}")
+                st.error(f"Erro ao processar datas de vendas: {e}")
     return df
 
 def process_compras(df):
     """Função para processar dados de compras"""
     if not df.empty:
+        # Aplicar conversão para valores numéricos
         for col in ['Pão', 'Frios', 'Bebidas']:
             if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce')
+                df[col] = df[col].apply(sanitize_number)
+                
+        # Calcular total de compras
+        df['Total'] = df['Pão'].fillna(0) + df['Frios'].fillna(0) + df['Bebidas'].fillna(0)
+        
+        # Processar datas
         if 'Data' in df.columns:
             try:
-                df['Data'] = pd.to_datetime(df['Data'], format='%d/%m/%Y', errors='coerce')
+                # Verificar formato das datas
+                date_mask = df['Data'].apply(lambda x: validate_date_format(str(x)) if x else False)
+                df.loc[date_mask, 'Data'] = pd.to_datetime(df.loc[date_mask, 'Data'], format='%d/%m/%Y')
+                
+                # Extrair componentes
                 df['Ano'] = df['Data'].dt.year
                 df['Mês'] = df['Data'].dt.month
+                df['DiaSemana'] = df['Data'].dt.day_name()
                 df['MêsNome'] = df['Data'].dt.strftime('%B')
                 df['DataFormatada'] = df['Data'].dt.strftime('%d/%m/%Y')
+                df['DiaMês'] = df['Data'].dt.strftime('%d/%m')
+                
+                # Ordenar do mais recente para o mais antigo
+                df = df.sort_values('Data', ascending=False)
             except Exception as e:
-                st.error(f"Erro ao processar a coluna 'Data': {e}")
+                st.error(f"Erro ao processar datas de compras: {e}")
     return df
+
+def get_current_month_stats(df):
+    """Calcula estatísticas do mês atual"""
+    if df.empty:
+        return None
+    
+    # Identificar mês atual
+    hoje = datetime.now()
+    primeiro_dia_mes = datetime(hoje.year, hoje.month, 1)
+    df_mes_atual = df[df['Data'] >= primeiro_dia_mes]
+    
+    if df_mes_atual.empty:
+        return None
+    
+    stats = {
+        'total_vendas': df_mes_atual['Total'].sum(),
+        'media_diaria': df_mes_atual.groupby('Data').sum()['Total'].mean(),
+        'total_dias': df_mes_atual['Data'].dt.date.nunique(),
+        'dia_maior_venda': df_mes_atual.loc[df_mes_atual['Total'].idxmax()]['DataFormatada'] if not df_mes_atual.empty else "N/A",
+        'valor_maior_venda': df_mes_atual['Total'].max() if not df_mes_atual.empty else 0
+    }
+    
+    return stats
+
+def get_date_range_options():
+    """Gera opções de intervalos de datas para relatórios"""
+    hoje = datetime.now()
+    
+    # Datas pré-definidas
+    opcoes = {
+        "Hoje": (hoje.date(), hoje.date()),
+        "Ontem": ((hoje - timedelta(days=1)).date(), (hoje - timedelta(days=1)).date()),
+        "Últimos 7 dias": ((hoje - timedelta(days=7)).date(), hoje.date()),
+        "Últimos 30 dias": ((hoje - timedelta(days=30)).date(), hoje.date()),
+        "Este mês": (datetime(hoje.year, hoje.month, 1).date(), hoje.date()),
+        "Mês passado": (datetime(hoje.year if hoje.month > 1 else hoje.year - 1, 
+                               hoje.month - 1 if hoje.month > 1 else 12, 1).date(),
+                     (datetime(hoje.year if hoje.month > 1 else hoje.year - 1, 
+                               hoje.month - 1 if hoje.month > 1 else 12, 1) + 
+                      timedelta(days=32)).replace(day=1).date() - timedelta(days=1))
+    }
+    
+    return opcoes
 
 def main():
     st.title("📊 Sistema de Registro do Clips Burger")
@@ -106,58 +228,152 @@ def main():
     try:
         st.image("logo.png", width=200)
     except:
-        st.warning("Logo não encontrado. Verifique se o arquivo 'logo.png' está no diretório do aplicativo.")
+        st.info("💡 Dica: Adicione um arquivo 'logo.png' na pasta do aplicativo para personalizar o sistema.")
     
-    # Sidebar para filtros comuns
-    st.sidebar.title("🔍 Filtros")
-
+    # Sidebar para informações gerais
+    st.sidebar.title("🍔 Clips Burger")
+    
+    # Carregar dados para exibir resumo rápido na sidebar
+    with st.sidebar:
+        with st.spinner("Carregando resumo..."):
+            df_vendas_all, _ = read_google_sheet("Vendas")
+            if not df_vendas_all.empty:
+                df_vendas_all = process_vendas(df_vendas_all)
+                stats = get_current_month_stats(df_vendas_all)
+                
+                st.subheader("📈 Resumo do Mês")
+                if stats:
+                    st.metric("Total de Vendas", format_currency(stats['total_vendas']))
+                    st.metric("Média Diária", format_currency(stats['media_diaria']))
+                else:
+                    st.info("Sem dados para o mês atual")
+                
+                # Exibir últimas 5 vendas
+                st.subheader("🔄 Últimas Vendas")
+                if not df_vendas_all.empty:
+                    for _, row in df_vendas_all.head(5).iterrows():
+                        st.markdown(f"**{row['DataFormatada']}**: {format_currency(row['Total'])}")
+        
+        st.divider()
+        st.info("Use as abas acima para registrar vendas/compras e visualizar relatórios detalhados.")
+        
     # Abas principais do sistema
     tab1, tab2, tab3, tab4 = st.tabs(["📋 Registro", "📊 Análise de Vendas", "🛒 Análise de Compras", "📈 Estatísticas"])
 
     with tab1:
         st.header("Registro de Dados")
         
-        # Registro de Vendas
-        st.subheader("Registro de Vendas")
-        with st.form("form_vendas"):
-            data_venda = st.date_input("Data da Venda", value=datetime.today())
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                cartao = st.number_input("Cartão (R$)", min_value=0.0, step=0.01)
-            with col2:
-                dinheiro = st.number_input("Dinheiro (R$)", min_value=0.0, step=0.01)
-            with col3:
-                pix = st.number_input("PIX (R$)", min_value=0.0, step=0.01)
-            total = cartao + dinheiro + pix
-            st.write(f"**Total: R${total:.2f}**")
-            enviar_venda = st.form_submit_button("Registrar Venda")
-            if enviar_venda:
-                if total > 0:
-                    if append_row("Vendas", [data_venda.strftime('%d/%m/%Y'), cartao, dinheiro, pix]):
-                        st.success("Venda registrada com sucesso!")
+        # Opção para selecionar registro de vendas ou compras
+        reg_type = st.radio("Selecione o tipo de registro:", ["💰 Vendas", "🛍️ Compras"], horizontal=True)
+        
+        st.divider()
+        
+        if reg_type == "💰 Vendas":
+            # Registro de Vendas
+            st.subheader("📝 Registro de Vendas")
+            with st.form("form_vendas"):
+                data_venda = st.date_input("Data da Venda", value=datetime.today())
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    cartao = st.number_input("Cartão (R$)", min_value=0.0, step=0.01, format="%.2f")
+                with col2:
+                    dinheiro = st.number_input("Dinheiro (R$)", min_value=0.0, step=0.01, format="%.2f")
+                with col3:
+                    pix = st.number_input("PIX (R$)", min_value=0.0, step=0.01, format="%.2f")
+                
+                total = cartao + dinheiro + pix
+                st.metric("Total da Venda", f"R$ {total:.2f}")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    enviar_venda = st.form_submit_button("📥 Registrar Venda", use_container_width=True)
+                with col2:
+                    cancel_button = st.form_submit_button("❌ Cancelar", use_container_width=True)
+                
+                if enviar_venda:
+                    if total > 0:
+                        with st.spinner("Registrando venda..."):
+                            time.sleep(0.5)  # Pequeno delay para feedback visual
+                            if append_row("Vendas", [data_venda.strftime('%d/%m/%Y'), cartao, dinheiro, pix]):
+                                st.success("✅ Venda registrada com sucesso!")
+                                st.balloons()
+                    else:
+                        st.warning("⚠️ O valor total precisa ser maior que zero.")
+            
+            # Exibir últimas vendas registradas
+            st.subheader("📋 Últimas Vendas Registradas")
+            with st.spinner("Carregando vendas recentes..."):
+                df_ultimas_vendas, _ = read_google_sheet("Vendas")
+                if not df_ultimas_vendas.empty:
+                    df_ultimas_vendas = process_vendas(df_ultimas_vendas)
+                    st.dataframe(
+                        df_ultimas_vendas[['DataFormatada', 'Cartão', 'Dinheiro', 'PIX', 'Total']].head(10),
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+                            'DataFormatada': 'Data',
+                            'Cartão': st.column_config.NumberColumn('Cartão (R$)', format="R$ %.2f"),
+                            'Dinheiro': st.column_config.NumberColumn('Dinheiro (R$)', format="R$ %.2f"),
+                            'PIX': st.column_config.NumberColumn('PIX (R$)', format="R$ %.2f"),
+                            'Total': st.column_config.NumberColumn('Total (R$)', format="R$ %.2f")
+                        }
+                    )
                 else:
-                    st.warning("O valor total precisa ser maior que zero.")
-
-        # Registro de Compras
-        st.subheader("Registro de Compras")
-        with st.form("form_compras"):
-            data_compra = st.date_input("Data da Compra", value=datetime.today())
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                pao = st.number_input("Pão (R$)", min_value=0.0, step=0.01)
-            with col2:
-                frios = st.number_input("Frios (R$)", min_value=0.0, step=0.01)
-            with col3:
-                bebidas = st.number_input("Bebidas (R$)", min_value=0.0, step=0.01)
-            total_compra = pao + frios + bebidas
-            st.write(f"**Total da compra: R${total_compra:.2f}**")
-            enviar_compra = st.form_submit_button("Registrar Compra")
-            if enviar_compra:
-                if total_compra > 0:
-                    if append_row("Compras", [data_compra.strftime('%d/%m/%Y'), pao, frios, bebidas]):
-                        st.success("Compra registrada com sucesso!")
+                    st.info("Nenhuma venda registrada até o momento.")
+        
+        else:
+            # Registro de Compras
+            st.subheader("📝 Registro de Compras")
+            with st.form("form_compras"):
+                data_compra = st.date_input("Data da Compra", value=datetime.today())
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    pao = st.number_input("Pão (R$)", min_value=0.0, step=0.01, format="%.2f")
+                with col2:
+                    frios = st.number_input("Frios (R$)", min_value=0.0, step=0.01, format="%.2f")
+                with col3:
+                    bebidas = st.number_input("Bebidas (R$)", min_value=0.0, step=0.01, format="%.2f")
+                
+                total_compra = pao + frios + bebidas
+                st.metric("Total da Compra", f"R$ {total_compra:.2f}")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    enviar_compra = st.form_submit_button("📥 Registrar Compra", use_container_width=True)
+                with col2:
+                    cancel_button = st.form_submit_button("❌ Cancelar", use_container_width=True)
+                
+                if enviar_compra:
+                    if total_compra > 0:
+                        with st.spinner("Registrando compra..."):
+                            time.sleep(0.5)  # Pequeno delay para feedback visual
+                            if append_row("compras", [data_compra.strftime('%d/%m/%Y'), pao, frios, bebidas]):
+                                st.success("✅ Compra registrada com sucesso!")
+                    else:
+                        st.warning("⚠️ O valor total precisa ser maior que zero.")
+            
+            # Exibir últimas compras registradas
+            st.subheader("📋 Últimas Compras Registradas")
+            with st.spinner("Carregando compras recentes..."):
+                df_ultimas_compras, _ = read_google_sheet("compras")
+                if not df_ultimas_compras.empty:
+                    df_ultimas_compras = process_compras(df_ultimas_compras)
+                    st.dataframe(
+                        df_ultimas_compras[['DataFormatada', 'Pão', 'Frios', 'Bebidas', 'Total']].head(10),
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+                            'DataFormatada': 'Data',
+                            'Pão': st.column_config.NumberColumn('Pão (R$)', format="R$ %.2f"),
+                            'Frios': st.column_config.NumberColumn('Frios (R$)', format="R$ %.2f"),
+                            'Bebidas': st.column_config.NumberColumn('Bebidas (R$)', format="R$ %.2f"),
+                            'Total': st.column_config.NumberColumn('Total (R$)', format="R$ %.2f")
+                        }
+                    )
                 else:
-                    st.warning("O valor total precisa ser maior que zero.")
+                    st.info("Nenhuma compra registrada até o momento.")
 
     with tab2:
         st.header("Análise de Vendas")
@@ -227,7 +443,7 @@ def main():
         st.header("Análise de Compras")
         
         # Carregar dados de compras
-        df_compras, _ = read_google_sheet("Compras")
+        df_compras, _ = read_google_sheet("compras")
         df_compras = process_compras(df_compras)
 
         if not df_compras.empty:
