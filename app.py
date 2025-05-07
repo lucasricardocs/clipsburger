@@ -234,7 +234,7 @@ def main():
             cols2[1].metric("⬆️ Maior Venda", f"R$ {maior_venda:,.2f}")
             
             # Terceira linha (centralizada)
-            cols3 = st.columns([1,1,1])  # Margens + coluna central
+            cols3 = st.columns([1])  # Margens + coluna central
             cols3[1].metric("⬇️ Menor Venda", f"R$ {menor_venda:,.2f}")
             
             # Métodos de pagamento
