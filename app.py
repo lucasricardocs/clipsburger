@@ -8,7 +8,10 @@ from gspread.exceptions import SpreadsheetNotFound, APIError
 import time
 import re
 
-# Configuração da página
+# =============================================
+# CONFIGURAÇÃO INICIAL
+# =============================================
+
 st.set_page_config(
     page_title="Sistema de Registro do Clips Burger",
     layout="centered",
@@ -21,6 +24,10 @@ MESES_NOMES = {
     5: "Maio", 6: "Junho", 7: "Julho", 8: "Agosto",
     9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"
 }
+
+# =============================================
+# FUNÇÕES AUXILIARES
+# =============================================
 
 def sanitize_number(value):
     """Limpa e valida valores numéricos"""
@@ -43,6 +50,10 @@ def validate_date_format(date_str):
 def format_currency(value):
     """Formata valor como moeda brasileira"""
     return f"R$ {value:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+
+# =============================================
+# CONEXÃO COM GOOGLE SHEETS
+# =============================================
 
 @st.cache_data(ttl=300)
 def read_google_sheet(worksheet_name="Vendas"):
@@ -88,73 +99,94 @@ def append_row(worksheet_name, row_data):
         st.error(f"Erro ao adicionar linha: {e}")
         return False
 
+# =============================================
+# PROCESSAMENTO DE DADOS
+# =============================================
+
+def safe_date_conversion(df, date_column='Data'):
+    """Conversão segura de datas com tratamento de erros"""
+    if date_column not in df.columns:
+        return df
+    
+    # Tentar converter para datetime
+    df[date_column] = pd.to_datetime(df[date_column], errors='coerce', format='%d/%m/%Y')
+    
+    # Verificar se alguma data não foi convertida
+    if df[date_column].isna().any():
+        st.warning(f"Algumas datas na coluna '{date_column}' não puderam ser convertidas")
+    
+    return df
+
 def process_vendas(df):
     """Função para processar dados de vendas"""
-    if not df.empty:
-        # Padronizar nomes de colunas
-        df.columns = [col.strip().capitalize() for col in df.columns]
+    if df.empty:
+        return df
+    
+    # Padronizar nomes de colunas
+    df.columns = [col.strip().capitalize() for col in df.columns]
+    
+    # Verificar colunas de pagamento
+    payment_cols = []
+    for col in ['Cartão', 'Dinheiro', 'Pix']:
+        if col in df.columns:
+            payment_cols.append(col)
+            df[col] = df[col].apply(sanitize_number)
+    
+    if payment_cols:
+        df['Total'] = df[payment_cols].sum(axis=1)
+    
+    # Processar datas de forma segura
+    df = safe_date_conversion(df)
+    
+    if 'Data' in df.columns and pd.api.types.is_datetime64_any_dtype(df['Data']):
+        # Extrair componentes da data
+        df['Ano'] = df['Data'].dt.year
+        df['Mês'] = df['Data'].dt.month
+        df['Dia'] = df['Data'].dt.day
+        df['DiaSemana'] = df['Data'].dt.day_name()
+        df['MêsNome'] = df['Data'].dt.month.map(MESES_NOMES)
+        df['DataFormatada'] = df['Data'].dt.strftime('%d/%m/%Y')
+        df['AnoMês'] = df['Data'].dt.strftime('%Y-%m')
         
-        # Verificar colunas de pagamento
-        payment_cols = []
-        for col in ['Cartão', 'Dinheiro', 'Pix']:
-            if col in df.columns:
-                payment_cols.append(col)
-                df[col] = df[col].apply(sanitize_number)
-        
-        if payment_cols:
-            df['Total'] = df[payment_cols].sum(axis=1)
-        
-        # Processar datas
-        if 'Data' in df.columns:
-            try:
-                date_mask = df['Data'].apply(lambda x: validate_date_format(str(x)) if pd.notnull(x) else False)
-                df.loc[date_mask, 'Data'] = pd.to_datetime(df.loc[date_mask, 'Data'], format='%d/%m/%Y')
-                
-                # Extrair componentes da data
-                df['Ano'] = df['Data'].dt.year
-                df['Mês'] = df['Data'].dt.month
-                df['Dia'] = df['Data'].dt.day
-                df['DiaSemana'] = df['Data'].dt.day_name()
-                df['MêsNome'] = df['Data'].dt.month.map(MESES_NOMES)
-                df['DataFormatada'] = df['Data'].dt.strftime('%d/%m/%Y')
-                df['AnoMês'] = df['Data'].dt.strftime('%Y-%m')
-                
-                df = df.sort_values('Data', ascending=False)
-            except Exception as e:
-                st.error(f"Erro ao processar datas: {e}")
+        df = df.sort_values('Data', ascending=False)
+    
     return df
 
 def process_compras(df):
     """Função para processar dados de compras"""
-    if not df.empty:
-        # Padronizar nomes de colunas
-        df.columns = [col.strip().capitalize() for col in df.columns]
+    if df.empty:
+        return df
+    
+    # Padronizar nomes de colunas
+    df.columns = [col.strip().capitalize() for col in df.columns]
+    
+    # Processar valores
+    for col in ['Pão', 'Frios', 'Bebidas']:
+        if col in df.columns:
+            df[col] = df[col].apply(sanitize_number)
+    
+    if all(col in df.columns for col in ['Pão', 'Frios', 'Bebidas']):
+        df['Total'] = df['Pão'] + df['Frios'] + df['Bebidas']
+    
+    # Processar datas de forma segura
+    df = safe_date_conversion(df)
+    
+    if 'Data' in df.columns and pd.api.types.is_datetime64_any_dtype(df['Data']):
+        # Extrair componentes da data
+        df['Ano'] = df['Data'].dt.year
+        df['Mês'] = df['Data'].dt.month
+        df['DiaSemana'] = df['Data'].dt.day_name()
+        df['MêsNome'] = df['Data'].dt.month.map(MESES_NOMES)
+        df['DataFormatada'] = df['Data'].dt.strftime('%d/%m/%Y')
+        df['AnoMês'] = df['Data'].dt.strftime('%Y-%m')
         
-        # Processar valores
-        for col in ['Pão', 'Frios', 'Bebidas']:
-            if col in df.columns:
-                df[col] = df[col].apply(sanitize_number)
-        
-        if all(col in df.columns for col in ['Pão', 'Frios', 'Bebidas']):
-            df['Total'] = df['Pão'] + df['Frios'] + df['Bebidas']
-        
-        # Processar datas
-        if 'Data' in df.columns:
-            try:
-                date_mask = df['Data'].apply(lambda x: validate_date_format(str(x)) if pd.notnull(x) else False)
-                df.loc[date_mask, 'Data'] = pd.to_datetime(df.loc[date_mask, 'Data'], format='%d/%m/%Y')
-                
-                df['Ano'] = df['Data'].dt.year
-                df['Mês'] = df['Data'].dt.month
-                df['DiaSemana'] = df['Data'].dt.day_name()
-                df['MêsNome'] = df['Data'].dt.month.map(MESES_NOMES)
-                df['DataFormatada'] = df['Data'].dt.strftime('%d/%m/%Y')
-                df['AnoMês'] = df['Data'].dt.strftime('%Y-%m')
-                
-                df = df.sort_values('Data', ascending=False)
-            except Exception as e:
-                st.error(f"Erro ao processar datas: {e}")
+        df = df.sort_values('Data', ascending=False)
+    
     return df
+
+# =============================================
+# INTERFACE DO USUÁRIO
+# =============================================
 
 def get_date_filters(df):
     """Cria filtros de data na sidebar e retorna os valores selecionados"""
@@ -178,7 +210,7 @@ def get_date_filters(df):
         )
         
         # Filtro de Mês
-        meses_disponiveis = sorted(df[df['Ano'] == ano_selecionado]['Mês'].unique(), reverse=True)
+        meses_disponiveis = sorted(df[df['Ano'] == ano_selecionado]['Mês'].unique(), reverse=True) if 'Mês' in df.columns else []
         
         if not meses_disponiveis:
             return ano_selecionado, None
@@ -209,191 +241,52 @@ def show_sidebar_summary(df_vendas, df_compras):
     with st.sidebar:
         st.subheader("📊 Resumo Rápido")
         
-        if not df_vendas.empty:
+        if not df_vendas.empty and 'Total' in df_vendas.columns:
             total_vendas = df_vendas['Total'].sum()
             st.metric("Total de Vendas", format_currency(total_vendas))
             
-            if 'Data' in df_vendas.columns:
+            if 'Data' in df_vendas.columns and pd.api.types.is_datetime64_any_dtype(df_vendas['Data']):
                 ultima_data = df_vendas['Data'].max()
                 ultimo_total = df_vendas[df_vendas['Data'] == ultima_data]['Total'].sum()
                 st.metric(f"Último Dia ({ultima_data.strftime('%d/%m')})", format_currency(ultimo_total))
         
-        if not df_compras.empty:
+        if not df_compras.empty and 'Total' in df_compras.columns:
             total_compras = df_compras['Total'].sum()
             st.metric("Total de Compras", format_currency(total_compras))
         
         st.divider()
 
-def main():
-    st.title("📊 Sistema de Registro do Clips Burger")
+def show_vendas_tab(df_vendas_filtrado):
+    """Mostra a aba de Análise de Vendas"""
+    st.header("Análise de Vendas")
     
-    try:
-        st.image("logo.png", width=200)
-    except:
-        st.info("💡 Adicione um arquivo 'logo.png' na pasta do aplicativo para personalizar o sistema.")
-    
-    # Carregar dados
-    with st.spinner("Carregando dados..."):
-        df_vendas, _ = read_google_sheet("Vendas")
-        df_compras, _ = read_google_sheet("Compras")
+    if not df_vendas_filtrado.empty:
+        st.subheader(f"Vendas de {MESES_NOMES.get(mes_selecionado, '')} {ano_selecionado}")
         
-        df_vendas = process_vendas(df_vendas)
-        df_compras = process_compras(df_compras)
-    
-    # Filtros na sidebar
-    ano_selecionado, mes_selecionado = get_date_filters(df_vendas)
-    
-    # Filtrar dados pelo período selecionado
-    if not df_vendas.empty and ano_selecionado and mes_selecionado:
-        df_vendas_filtrado = df_vendas[
-            (df_vendas['Ano'] == ano_selecionado) & 
-            (df_vendas['Mês'] == mes_selecionado)
-        ]
-    else:
-        df_vendas_filtrado = df_vendas
-    
-    if not df_compras.empty and ano_selecionado and mes_selecionado:
-        df_compras_filtrado = df_compras[
-            (df_compras['Ano'] == ano_selecionado) & 
-            (df_compras['Mês'] == mes_selecionado)
-        ]
-    else:
-        df_compras_filtrado = df_compras
-    
-    # Resumo na sidebar
-    show_sidebar_summary(df_vendas_filtrado, df_compras_filtrado)
-    
-    # Abas principais
-    tab1, tab2, tab3, tab4 = st.tabs(["📋 Registro", "📊 Análise de Vendas", "🛒 Análise de Compras", "📈 Estatísticas"])
-
-    with tab1:
-        st.header("Registro de Dados")
+        # Métricas principais
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total do Período", format_currency(df_vendas_filtrado['Total'].sum()))
+        with col2:
+            st.metric("Média Diária", format_currency(df_vendas_filtrado.groupby('Data')['Total'].sum().mean()))
+        with col3:
+            st.metric("Dias com Venda", df_vendas_filtrado['Data'].nunique())
         
-        reg_type = st.radio("Selecione o tipo de registro:", ["💰 Vendas", "🛍️ Compras"], horizontal=True)
-        st.divider()
+        # Gráfico de vendas diárias
+        st.subheader("Vendas Diárias")
+        vendas_diarias = df_vendas_filtrado.groupby('Data')['Total'].sum().reset_index()
         
-        if reg_type == "💰 Vendas":
-            st.subheader("📝 Registro de Vendas")
-            with st.form("form_vendas"):
-                data_venda = st.date_input("Data da Venda", value=datetime.today())
-                
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    cartao = st.number_input("Cartão (R$)", min_value=0.0, step=0.01, format="%.2f")
-                with col2:
-                    dinheiro = st.number_input("Dinheiro (R$)", min_value=0.0, step=0.01, format="%.2f")
-                with col3:
-                    pix = st.number_input("PIX (R$)", min_value=0.0, step=0.01, format="%.2f")
-                
-                total = cartao + dinheiro + pix
-                st.metric("Total da Venda", format_currency(total))
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    enviar_venda = st.form_submit_button("📥 Registrar Venda", use_container_width=True)
-                with col2:
-                    cancel_button = st.form_submit_button("❌ Cancelar", use_container_width=True)
-                
-                if enviar_venda:
-                    if total > 0:
-                        with st.spinner("Registrando venda..."):
-                            if append_row("Vendas", [data_venda.strftime('%d/%m/%Y'), cartao, dinheiro, pix]):
-                                st.success("✅ Venda registrada com sucesso!")
-                                st.balloons()
-                                time.sleep(1)
-                                st.experimental_rerun()
-                    else:
-                        st.warning("⚠️ O valor total precisa ser maior que zero.")
-            
-            st.subheader("📋 Últimas Vendas Registradas")
-            st.dataframe(
-                df_vendas[['DataFormatada', 'Cartão', 'Dinheiro', 'Pix', 'Total']].head(10),
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    'DataFormatada': st.column_config.TextColumn('Data'),
-                    'Cartão': st.column_config.NumberColumn('Cartão (R$)', format="R$ %.2f"),
-                    'Dinheiro': st.column_config.NumberColumn('Dinheiro (R$)', format="R$ %.2f"),
-                    'Pix': st.column_config.NumberColumn('PIX (R$)', format="R$ %.2f"),
-                    'Total': st.column_config.NumberColumn('Total (R$)', format="R$ %.2f")
-                }
-            )
+        chart = alt.Chart(vendas_diarias).mark_bar().encode(
+            x=alt.X('Data:T', title='Data'),
+            y=alt.Y('Total:Q', title='Valor (R$)'),
+            tooltip=['Data', 'Total']
+        ).properties(height=400)
         
-        else:
-            st.subheader("📝 Registro de Compras")
-            with st.form("form_compras"):
-                data_compra = st.date_input("Data da Compra", value=datetime.today())
-                
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    pao = st.number_input("Pão (R$)", min_value=0.0, step=0.01, format="%.2f")
-                with col2:
-                    frios = st.number_input("Frios (R$)", min_value=0.0, step=0.01, format="%.2f")
-                with col3:
-                    bebidas = st.number_input("Bebidas (R$)", min_value=0.0, step=0.01, format="%.2f")
-                
-                total_compra = pao + frios + bebidas
-                st.metric("Total da Compra", format_currency(total_compra))
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    enviar_compra = st.form_submit_button("📥 Registrar Compra", use_container_width=True)
-                with col2:
-                    cancel_button = st.form_submit_button("❌ Cancelar", use_container_width=True)
-                
-                if enviar_compra:
-                    if total_compra > 0:
-                        with st.spinner("Registrando compra..."):
-                            if append_row("Compras", [data_compra.strftime('%d/%m/%Y'), pao, frios, bebidas]):
-                                st.success("✅ Compra registrada com sucesso!")
-                                time.sleep(1)
-                                st.experimental_rerun()
-                    else:
-                        st.warning("⚠️ O valor total precisa ser maior que zero.")
-            
-            st.subheader("📋 Últimas Compras Registradas")
-            st.dataframe(
-                df_compras[['DataFormatada', 'Pão', 'Frios', 'Bebidas', 'Total']].head(10),
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    'DataFormatada': st.column_config.TextColumn('Data'),
-                    'Pão': st.column_config.NumberColumn('Pão (R$)', format="R$ %.2f"),
-                    'Frios': st.column_config.NumberColumn('Frios (R$)', format="R$ %.2f"),
-                    'Bebidas': st.column_config.NumberColumn('Bebidas (R$)', format="R$ %.2f"),
-                    'Total': st.column_config.NumberColumn('Total (R$)', format="R$ %.2f")
-                }
-            )
-
-    with tab2:
-        st.header("Análise de Vendas")
+        st.altair_chart(chart, use_container_width=True)
         
-        if not df_vendas_filtrado.empty:
-            st.subheader(f"Vendas de {MESES_NOMES.get(mes_selecionado, '')} {ano_selecionado}")
-            
-            # Métricas principais
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Total do Período", format_currency(df_vendas_filtrado['Total'].sum()))
-            with col2:
-                st.metric("Média Diária", format_currency(df_vendas_filtrado.groupby('Data')['Total'].sum().mean()))
-            with col3:
-                st.metric("Dias com Venda", df_vendas_filtrado['Data'].nunique())
-            
-            # Gráfico de vendas diárias
-            st.subheader("Vendas Diárias")
-            vendas_diarias = df_vendas_filtrado.groupby('Data')['Total'].sum().reset_index()
-            
-            chart = alt.Chart(vendas_diarias).mark_bar().encode(
-                x=alt.X('Data:T', title='Data'),
-                y=alt.Y('Total:Q', title='Valor (R$)'),
-                tooltip=['Data', 'Total']
-            ).properties(height=400)
-            
-            st.altair_chart(chart, use_container_width=True)
-            
-            # Gráfico por forma de pagamento
-            st.subheader("Distribuição por Forma de Pagamento")
+        # Gráfico por forma de pagamento
+        st.subheader("Distribuição por Forma de Pagamento")
+        if all(col in df_vendas_filtrado.columns for col in ['Cartão', 'Dinheiro', 'Pix']):
             pagamentos = df_vendas_filtrado[['Cartão', 'Dinheiro', 'Pix']].sum().reset_index()
             pagamentos.columns = ['Meio', 'Valor']
             
@@ -404,34 +297,36 @@ def main():
             ).properties(height=300)
             
             st.altair_chart(pie_chart, use_container_width=True)
-            
-            # Tabela detalhada
-            st.subheader("Detalhes das Vendas")
-            st.dataframe(
-                df_vendas_filtrado[['DataFormatada', 'Cartão', 'Dinheiro', 'Pix', 'Total']],
-                use_container_width=True,
-                hide_index=True
-            )
-        else:
-            st.warning("Nenhuma venda encontrada para o período selecionado")
-
-    with tab3:
-        st.header("Análise de Compras")
         
-        if not df_compras_filtrado.empty:
-            st.subheader(f"Compras de {MESES_NOMES.get(mes_selecionado, '')} {ano_selecionado}")
-            
-            # Métricas principais
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Total do Período", format_currency(df_compras_filtrado['Total'].sum()))
-            with col2:
-                st.metric("Média Diária", format_currency(df_compras_filtrado.groupby('Data')['Total'].sum().mean()))
-            with col3:
-                st.metric("Dias com Compra", df_compras_filtrado['Data'].nunique())
-            
-            # Gráfico de compras por categoria
-            st.subheader("Distribuição por Categoria")
+        # Tabela detalhada
+        st.subheader("Detalhes das Vendas")
+        st.dataframe(
+            df_vendas_filtrado[['DataFormatada', 'Cartão', 'Dinheiro', 'Pix', 'Total']],
+            use_container_width=True,
+            hide_index=True
+        )
+    else:
+        st.warning("Nenhuma venda encontrada para o período selecionado")
+
+def show_compras_tab(df_compras_filtrado):
+    """Mostra a aba de Análise de Compras"""
+    st.header("Análise de Compras")
+    
+    if not df_compras_filtrado.empty:
+        st.subheader(f"Compras de {MESES_NOMES.get(mes_selecionado, '')} {ano_selecionado}")
+        
+        # Métricas principais
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total do Período", format_currency(df_compras_filtrado['Total'].sum()))
+        with col2:
+            st.metric("Média Diária", format_currency(df_compras_filtrado.groupby('Data')['Total'].sum().mean()))
+        with col3:
+            st.metric("Dias com Compra", df_compras_filtrado['Data'].nunique())
+        
+        # Gráfico de compras por categoria
+        st.subheader("Distribuição por Categoria")
+        if all(col in df_compras_filtrado.columns for col in ['Pão', 'Frios', 'Bebidas']):
             categorias = df_compras_filtrado[['Pão', 'Frios', 'Bebidas']].sum().reset_index()
             categorias.columns = ['Categoria', 'Valor']
             
@@ -443,24 +338,26 @@ def main():
             ).properties(height=400)
             
             st.altair_chart(bar_chart, use_container_width=True)
-            
-            # Tabela detalhada
-            st.subheader("Detalhes das Compras")
-            st.dataframe(
-                df_compras_filtrado[['DataFormatada', 'Pão', 'Frios', 'Bebidas', 'Total']],
-                use_container_width=True,
-                hide_index=True
-            )
-        else:
-            st.warning("Nenhuma compra encontrada para o período selecionado")
-
-    with tab4:
-        st.header("📈 Estatísticas Comparativas")
         
-        if not df_vendas.empty:
-            # Estatísticas mensais
-            st.subheader("Desempenho Mensal")
-            
+        # Tabela detalhada
+        st.subheader("Detalhes das Compras")
+        st.dataframe(
+            df_compras_filtrado[['DataFormatada', 'Pão', 'Frios', 'Bebidas', 'Total']],
+            use_container_width=True,
+            hide_index=True
+        )
+    else:
+        st.warning("Nenhuma compra encontrada para o período selecionado")
+
+def show_estatisticas_tab(df_vendas):
+    """Mostra a aba de Estatísticas"""
+    st.header("📈 Estatísticas Comparativas")
+    
+    if not df_vendas.empty:
+        # Estatísticas mensais
+        st.subheader("Desempenho Mensal")
+        
+        if 'Ano' in df_vendas.columns and 'Mês' in df_vendas.columns and 'Total' in df_vendas.columns:
             vendas_mensais = df_vendas.groupby(['Ano', 'Mês'])['Total'].sum().reset_index()
             vendas_mensais['AnoMês'] = vendas_mensais['Ano'].astype(str) + '-' + vendas_mensais['Mês'].astype(str).str.zfill(2)
             vendas_mensais['MêsNome'] = vendas_mensais['Mês'].map(MESES_NOMES)
@@ -505,8 +402,183 @@ def main():
                     st.caption(f"Linha vermelha mostra o total de {ano_selecionado}")
                 else:
                     st.info("Não há dados de meses anteriores para comparação")
+    else:
+        st.warning("Nenhum dado de vendas disponível para análise")
+
+def show_registro_tab():
+    """Mostra a aba de Registro de Dados"""
+    st.header("Registro de Dados")
+    
+    reg_type = st.radio("Selecione o tipo de registro:", ["💰 Vendas", "🛍️ Compras"], horizontal=True)
+    st.divider()
+    
+    if reg_type == "💰 Vendas":
+        st.subheader("📝 Registro de Vendas")
+        with st.form("form_vendas"):
+            data_venda = st.date_input("Data da Venda", value=datetime.today())
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                cartao = st.number_input("Cartão (R$)", min_value=0.0, step=0.01, format="%.2f")
+            with col2:
+                dinheiro = st.number_input("Dinheiro (R$)", min_value=0.0, step=0.01, format="%.2f")
+            with col3:
+                pix = st.number_input("PIX (R$)", min_value=0.0, step=0.01, format="%.2f")
+            
+            total = cartao + dinheiro + pix
+            st.metric("Total da Venda", format_currency(total))
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                enviar_venda = st.form_submit_button("📥 Registrar Venda", use_container_width=True)
+            with col2:
+                cancel_button = st.form_submit_button("❌ Cancelar", use_container_width=True)
+            
+            if enviar_venda:
+                if total > 0:
+                    with st.spinner("Registrando venda..."):
+                        if append_row("Vendas", [data_venda.strftime('%d/%m/%Y'), cartao, dinheiro, pix]):
+                            st.success("✅ Venda registrada com sucesso!")
+                            st.balloons()
+                            time.sleep(1)
+                            st.experimental_rerun()
+                else:
+                    st.warning("⚠️ O valor total precisa ser maior que zero.")
+        
+        st.subheader("📋 Últimas Vendas Registradas")
+        df_ultimas_vendas, _ = read_google_sheet("Vendas")
+        if not df_ultimas_vendas.empty:
+            df_ultimas_vendas = process_vendas(df_ultimas_vendas)
+            st.dataframe(
+                df_ultimas_vendas[['DataFormatada', 'Cartão', 'Dinheiro', 'Pix', 'Total']].head(10),
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    'DataFormatada': st.column_config.TextColumn('Data'),
+                    'Cartão': st.column_config.NumberColumn('Cartão (R$)', format="R$ %.2f"),
+                    'Dinheiro': st.column_config.NumberColumn('Dinheiro (R$)', format="R$ %.2f"),
+                    'Pix': st.column_config.NumberColumn('PIX (R$)', format="R$ %.2f"),
+                    'Total': st.column_config.NumberColumn('Total (R$)', format="R$ %.2f")
+                }
+            )
+    
+    else:
+        st.subheader("📝 Registro de Compras")
+        with st.form("form_compras"):
+            data_compra = st.date_input("Data da Compra", value=datetime.today())
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                pao = st.number_input("Pão (R$)", min_value=0.0, step=0.01, format="%.2f")
+            with col2:
+                frios = st.number_input("Frios (R$)", min_value=0.0, step=0.01, format="%.2f")
+            with col3:
+                bebidas = st.number_input("Bebidas (R$)", min_value=0.0, step=0.01, format="%.2f")
+            
+            total_compra = pao + frios + bebidas
+            st.metric("Total da Compra", format_currency(total_compra))
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                enviar_compra = st.form_submit_button("📥 Registrar Compra", use_container_width=True)
+            with col2:
+                cancel_button = st.form_submit_button("❌ Cancelar", use_container_width=True)
+            
+            if enviar_compra:
+                if total_compra > 0:
+                    with st.spinner("Registrando compra..."):
+                        if append_row("Compras", [data_compra.strftime('%d/%m/%Y'), pao, frios, bebidas]):
+                            st.success("✅ Compra registrada com sucesso!")
+                            time.sleep(1)
+                            st.experimental_rerun()
+                else:
+                    st.warning("⚠️ O valor total precisa ser maior que zero.")
+        
+        st.subheader("📋 Últimas Compras Registradas")
+        df_ultimas_compras, _ = read_google_sheet("Compras")
+        if not df_ultimas_compras.empty:
+            df_ultimas_compras = process_compras(df_ultimas_compras)
+            st.dataframe(
+                df_ultimas_compras[['DataFormatada', 'Pão', 'Frios', 'Bebidas', 'Total']].head(10),
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    'DataFormatada': st.column_config.TextColumn('Data'),
+                    'Pão': st.column_config.NumberColumn('Pão (R$)', format="R$ %.2f"),
+                    'Frios': st.column_config.NumberColumn('Frios (R$)', format="R$ %.2f"),
+                    'Bebidas': st.column_config.NumberColumn('Bebidas (R$)', format="R$ %.2f"),
+                    'Total': st.column_config.NumberColumn('Total (R$)', format="R$ %.2f")
+                }
+            )
+
+# =============================================
+# FUNÇÃO PRINCIPAL
+# =============================================
+
+def main():
+    st.title("📊 Sistema de Registro do Clips Burger")
+    
+    try:
+        st.image("logo.png", width=200)
+    except:
+        st.info("💡 Adicione um arquivo 'logo.png' na pasta do aplicativo para personalizar o sistema.")
+    
+    # Carregar dados
+    with st.spinner("Carregando dados..."):
+        df_vendas, _ = read_google_sheet("Vendas")
+        df_compras, _ = read_google_sheet("Compras")
+        
+        df_vendas = process_vendas(df_vendas)
+        df_compras = process_compras(df_compras)
+    
+    # Filtros na sidebar
+    global ano_selecionado, mes_selecionado, df_vendas_filtrado, df_compras_filtrado
+    ano_selecionado, mes_selecionado = get_date_filters(df_vendas)
+    
+    # Filtrar dados pelo período selecionado (com verificações de segurança)
+    df_vendas_filtrado = pd.DataFrame()
+    if not df_vendas.empty:
+        filter_conditions = []
+        if 'Ano' in df_vendas.columns and ano_selecionado:
+            filter_conditions.append(df_vendas['Ano'] == ano_selecionado)
+        if 'Mês' in df_vendas.columns and mes_selecionado:
+            filter_conditions.append(df_vendas['Mês'] == mes_selecionado)
+        
+        if filter_conditions:
+            df_vendas_filtrado = df_vendas[pd.concat(filter_conditions, axis=1).all(axis=1)]
         else:
-            st.warning("Nenhum dado de vendas disponível para análise")
+            df_vendas_filtrado = df_vendas
+    
+    df_compras_filtrado = pd.DataFrame()
+    if not df_compras.empty:
+        filter_conditions = []
+        if 'Ano' in df_compras.columns and ano_selecionado:
+            filter_conditions.append(df_compras['Ano'] == ano_selecionado)
+        if 'Mês' in df_compras.columns and mes_selecionado:
+            filter_conditions.append(df_compras['Mês'] == mes_selecionado)
+        
+        if filter_conditions:
+            df_compras_filtrado = df_compras[pd.concat(filter_conditions, axis=1).all(axis=1)]
+        else:
+            df_compras_filtrado = df_compras
+    
+    # Resumo na sidebar
+    show_sidebar_summary(df_vendas_filtrado, df_compras_filtrado)
+    
+    # Abas principais
+    tab1, tab2, tab3, tab4 = st.tabs(["📋 Registro", "📊 Análise de Vendas", "🛒 Análise de Compras", "📈 Estatísticas"])
+
+    with tab1:
+        show_registro_tab()
+
+    with tab2:
+        show_vendas_tab(df_vendas_filtrado)
+
+    with tab3:
+        show_compras_tab(df_compras_filtrado)
+
+    with tab4:
+        show_estatisticas_tab(df_vendas)
 
     # Rodapé
     st.divider()
