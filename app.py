@@ -1,9 +1,10 @@
 import streamlit as st
+import gspread
 import pandas as pd
 import altair as alt
-import gspread
 from datetime import datetime
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
+from gspread.exceptions import SpreadsheetNotFound
 
 # Configuração da página
 st.set_page_config(layout="wide", page_title="Sistema de Registro do Clips Burger")
