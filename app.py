@@ -302,22 +302,34 @@ def main():
                 
                 # Gráfico de média por dia da semana
                 if 'DiaSemana' in df_filtered.columns:
-                    # Mapeando dias da semana para ordem correta
-                    dias_ordem = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-                    dias_pt = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
+                    # Mapeando dias da semana para ordem correta (segunda a sexta)
+                    dias_ordem = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+                    dias_pt = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta']
                     mapa_dias = dict(zip(dias_ordem, dias_pt))
                     
+                    # Criando coluna de nome do dia da semana em inglês
+                    df_filtered['DiaSemana'] = df_filtered['Data'].dt.day_name()
+                    
+                    # Filtrando apenas dias úteis
+                    df_filtered = df_filtered[df_filtered['DiaSemana'].isin(dias_ordem)]
+                    
+                    # Agrupando por dia da semana
                     vendas_por_dia = df_filtered.groupby('DiaSemana')['Total'].mean().reset_index()
                     
                     if not vendas_por_dia.empty:
+                        # Traduzindo para português
                         vendas_por_dia['DiaSemana'] = vendas_por_dia['DiaSemana'].map(mapa_dias)
                         
+                        # Garantindo presença de todos os dias úteis, mesmo sem dados
+                        vendas_por_dia = vendas_por_dia.set_index('DiaSemana').reindex(dias_pt, fill_value=0).reset_index()
+                    
+                        # Gráfico
                         chart = alt.Chart(vendas_por_dia).mark_bar().encode(
                             x=alt.X('DiaSemana:N', title='Dia da Semana', sort=dias_pt),
                             y=alt.Y('Total:Q', title='Média de Vendas (R$)'),
                             tooltip=['DiaSemana', 'Total']
                         ).properties(
-                            title='Média de Vendas por Dia da Semana',
+                            title='Média de Vendas por Dia da Semana (Seg-Sex)',
                             height=300
                         )
                         st.altair_chart(chart, use_container_width=True)
