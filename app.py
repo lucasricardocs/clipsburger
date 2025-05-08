@@ -7,7 +7,7 @@ from google.oauth2.service_account import Credentials
 from gspread.exceptions import SpreadsheetNotFound
 
 # Configuração da página
-st.set_page_config(page_title="Sistema de Registro de Vendas", layout="wide")
+st.set_page_config(page_title="Sistema de Registro de Vendas", layout="centered")
 
 def read_google_sheet():
     """Função para ler os dados da planilha Google Sheets"""
