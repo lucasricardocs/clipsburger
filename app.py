@@ -269,7 +269,7 @@ def main():
                     color=alt.Color("Método:N", legend=alt.Legend(title="Método")),
                     tooltip=["Método", "Valor"]
                 ).properties(
-                    height=700
+                    height=500
                 )
                 text = pie_chart.mark_text(radius=120, size=16).encode(text="Valor:Q")
                 st.altair_chart(pie_chart + text, use_container_width=True)
@@ -330,7 +330,7 @@ def main():
                             tooltip=['DiaSemana', 'Total']
                         ).properties(
                             title='Média de Vendas por Dia da Semana (Seg-Sex)',
-                            height=700
+                            height=500
                         )
                         st.altair_chart(chart, use_container_width=True)
             
@@ -357,7 +357,7 @@ def main():
                         tooltip=['AnoMês', 'Total']
                     ).properties(
                         title='Tendência Mensal de Vendas',
-                        height=700
+                        height=500
                     )
                     st.altair_chart(trend_chart, use_container_width=True)
             
@@ -397,7 +397,7 @@ def main():
                     hist = alt.Chart(df_filtered).mark_bar().encode(
                         alt.X('Total:Q', bin=True, title='Valor da Venda (R$)'),
                         alt.Y('count()', title='Frequência')
-                    ).properties(height=700)
+                    ).properties(height=500)
                     st.altair_chart(hist, use_container_width=True)
             
             # Projeções e Metas
@@ -499,7 +499,7 @@ def main():
                             tooltip=['DiaSemana', 'Total', 'Porcentagem']
                         ).properties(
                             title='Distribuição Semanal de Vendas',
-                            height=700
+                            height=500
                         )
                         st.altair_chart(chart_sazonalidade, use_container_width=True)
                         
@@ -540,7 +540,7 @@ def main():
                     tooltip=['AnoMês', 'Método', 'Valor']
                 ).properties(
                     title='Evolução dos Métodos de Pagamento',
-                    height=700
+                    height=500
                 )
                 st.altair_chart(chart_evolucao, use_container_width=True)
                 
