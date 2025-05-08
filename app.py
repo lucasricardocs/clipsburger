@@ -406,9 +406,9 @@ def main():
             
             if total_vendas > 1:
                 # Projeção simples baseada na média diária
-                projecao_mensal = media_diaria * 30 if media_diaria > 0 else 0
+                projecao_mensal = media_diaria * 20 if media_diaria > 0 else 0
                 meta_mensal = projecao_mensal * 1.2
-                meta_diaria = meta_mensal / 30
+                meta_diaria = meta_mensal / 20
                 
                 # Mostrar projeções em linha
                 proj_cols = st.columns(2)
