@@ -14,7 +14,7 @@ SPREADSHEET_ID = '1NTScbiIna-iE7roQ9XBdjUOssRihTFFby4INAAQNXTg'
 WORKSHEET_NAME = 'Vendas'
 
 # Configuração da página Streamlit
-st.set_page_config(page_title="Sistema de Registro de Vendas", layout="wide") # Alterado para layout="wide"
+st.set_page_config(page_title="Sistema de Registro de Vendas", layout="centered") # Alterado para layout="wide"
 
 # Configura o locale para Português do Brasil para formatação de datas e nomes
 try:
