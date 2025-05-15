@@ -263,16 +263,27 @@ def main():
                 'Valor': [cartao_total, dinheiro_total, pix_total]
             })
             
+            # Adiciona coluna de percentual formatado
             if total_pagamentos > 0:
+                payment_data['Percentual'] = payment_data['Valor'] / payment_data['Valor'].sum() * 100
+                payment_data['Label'] = payment_data['Percentual'].map(lambda x: f"{x:.1f}%")
+            
                 pie_chart = alt.Chart(payment_data).mark_arc(innerRadius=50).encode(
                     theta=alt.Theta("Valor:Q", stack=True),
                     color=alt.Color("Método:N", legend=alt.Legend(title="Método")),
-                    tooltip=["Método", "Valor"]
+                    tooltip=["Método", "Valor", alt.Tooltip("Percentual:Q", format=".1f")]
                 ).properties(
                     height=500
                 )
-                text = pie_chart.mark_text(radius=120, size=16).encode(text="Valor:Q")
+            
+                # Adiciona o texto com o percentual dentro dos arcos
+                text = alt.Chart(payment_data).mark_text(radius=120, size=16, color="black").encode(
+                    theta=alt.Theta("Valor:Q", stack=True),
+                    text="Label:N"
+                )
+            
                 st.altair_chart(pie_chart + text, use_container_width=True)
+
             
             # Análise Temporal
             st.markdown("---")
