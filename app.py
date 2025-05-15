@@ -2,7 +2,6 @@ import streamlit as st
 import gspread
 import pandas as pd
 import altair as alt
-import plotly.express as px
 from datetime import datetime
 from google.oauth2.service_account import Credentials
 from gspread.exceptions import SpreadsheetNotFound
@@ -238,11 +237,10 @@ def main():
             cols3 = st.columns(1)  # Margens + coluna central
             cols3[0].metric("⬇️ Menor Venda", f"R$ {menor_venda:,.2f}")
             
-            # 💳 Métodos de pagamento
+            # Métodos de pagamento
             st.markdown("---")
             st.subheader("💳 Métodos de Pagamento")
             
-            # Totais por método
             cartao_total = df_filtered['Cartão'].sum()
             dinheiro_total = df_filtered['Dinheiro'].sum()
             pix_total = df_filtered['Pix'].sum()
@@ -259,36 +257,23 @@ def main():
             payment_cols[1].markdown(f"**💵 Dinheiro:** R$ {dinheiro_total:.2f} ({dinheiro_pct:.1f}%)")
             payment_cols[2].markdown(f"**📱 PIX:** R$ {pix_total:.2f} ({pix_pct:.1f}%)")
             
-            # DataFrame para o gráfico
+            # Gráfico de pizza para métodos de pagamento
             payment_data = pd.DataFrame({
                 'Método': ['Cartão', 'Dinheiro', 'PIX'],
                 'Valor': [cartao_total, dinheiro_total, pix_total]
             })
             
-            # Gráfico de pizza com Plotly
             if total_pagamentos > 0:
-                fig = px.pie(
-                    payment_data,
-                    names='Método',
-                    values='Valor',
-                    hole=0.4,
-                    color_discrete_sequence=px.colors.qualitative.Set3,
+                pie_chart = alt.Chart(payment_data).mark_arc(innerRadius=50).encode(
+                    theta=alt.Theta("Valor:Q", stack=True),
+                    color=alt.Color("Método:N", legend=alt.Legend(title="Método")),
+                    tooltip=["Método", "Valor"]
+                ).properties(
+                    height=500
                 )
-                
-                fig.update_traces(
-                    textinfo='label+percent+value',
-                    textposition='inside',
-                    showlegend=True
-                )
-                
-                fig.update_layout(
-                    title_text="Distribuição dos Métodos de Pagamento",
-                    title_x=0.5
-                )
-                
-                st.plotly_chart(fig, use_container_width=True) 
+                text = pie_chart.mark_text(radius=120, size=16).encode(text="Valor:Q")
+                st.altair_chart(pie_chart + text, use_container_width=True)
             
-                
             # Análise Temporal
             st.markdown("---")
             st.subheader("📅 Análise Temporal")
