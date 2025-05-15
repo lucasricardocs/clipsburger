@@ -237,10 +237,11 @@ def main():
             cols3 = st.columns(1)  # Margens + coluna central
             cols3[0].metric("⬇️ Menor Venda", f"R$ {menor_venda:,.2f}")
             
-            # Métodos de pagamento
+            # 💳 Métodos de pagamento
             st.markdown("---")
             st.subheader("💳 Métodos de Pagamento")
             
+            # Totais por método
             cartao_total = df_filtered['Cartão'].sum()
             dinheiro_total = df_filtered['Dinheiro'].sum()
             pix_total = df_filtered['Pix'].sum()
@@ -263,26 +264,25 @@ def main():
                 'Valor': [cartao_total, dinheiro_total, pix_total]
             })
             
-            # Adiciona coluna de percentual formatado
             if total_pagamentos > 0:
                 payment_data['Percentual'] = payment_data['Valor'] / payment_data['Valor'].sum() * 100
                 payment_data['Label'] = payment_data['Percentual'].map(lambda x: f"{x:.1f}%")
             
-                pie_chart = alt.Chart(payment_data).mark_arc(innerRadius=50).encode(
-                    theta=alt.Theta("Valor:Q", stack=True),
-                    color=alt.Color("Método:N", legend=alt.Legend(title="Método")),
-                    tooltip=["Método", "Valor", alt.Tooltip("Percentual:Q", format=".1f")]
-                ).properties(
-                    height=500
+                base = alt.Chart(payment_data).transform_calculate(
+                    Percentual="format(datum.Percentual, '.1f') + '%'"
+                ).encode(
+                    theta=alt.Theta("Valor:Q"),
+                    color=alt.Color("Método:N", legend=alt.Legend(title="Método"))
                 )
             
-                # Adiciona o texto com o percentual dentro dos arcos
-                text = alt.Chart(payment_data).mark_text(radius=120, size=16, color="black").encode(
-                    theta=alt.Theta("Valor:Q", stack=True),
-                    text="Label:N"
+                pie = base.mark_arc(innerRadius=50)
+            
+                text = base.mark_text(radius=80, size=16, color='black').encode(
+                    text="Percentual:N"
                 )
             
-                st.altair_chart(pie_chart + text, use_container_width=True)
+                st.altair_chart(pie + text, use_container_width=True)
+
 
             
             # Análise Temporal
