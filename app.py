@@ -1,3 +1,4 @@
+```python
 import streamlit as st
 import gspread
 import pandas as pd
@@ -302,9 +303,9 @@ def main():
                 
                 # Gráfico de média por dia da semana
                 if 'DiaSemana' in df_filtered.columns:
-                    # Mapeando dias da semana para ordem correta (segunda a sexta)
-                    dias_ordem = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
-                    dias_pt = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta']
+                    # Mapeando dias da semana para ordem correta (segunda a sábado)
+                    dias_ordem = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+                    dias_pt = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
                     mapa_dias = dict(zip(dias_ordem, dias_pt))
                     
                     # Criando coluna de nome do dia da semana em inglês
@@ -329,7 +330,7 @@ def main():
                             y=alt.Y('Total:Q', title='Média de Vendas (R$)'),
                             tooltip=['DiaSemana', 'Total']
                         ).properties(
-                            title='Média de Vendas por Dia da Semana (Seg-Sex)',
+                            title='Média de Vendas por Dia da Semana (Seg-Sáb)',
                             height=500
                         )
                         st.altair_chart(chart, use_container_width=True)
@@ -413,8 +414,8 @@ def main():
                         vendas_por_dia_semana['Porcentagem'] = vendas_por_dia_semana['Total'] / total_semana * 100
                         
                         # Traduzir dias para português e ordenar
-                        dias_ordem = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
-                        dias_pt = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta']
+                        dias_ordem = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+                        dias_pt = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
                         mapa_dias = dict(zip(dias_ordem, dias_pt))
                         
                         if vendas_por_dia_semana['DiaSemana'].iloc[0] in mapa_dias:
@@ -506,3 +507,4 @@ def main():
             
 if __name__ == "__main__":
     main()
+```
