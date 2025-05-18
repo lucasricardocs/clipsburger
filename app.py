@@ -470,29 +470,6 @@ def main():
                             <p style='margin:0; color:#666;'>{pct:.1f}% do total</p>
                         </div>
                         """, unsafe_allow_html=True)
-                    
-                    # Gráfico de pizza
-                    pie_chart = alt.Chart(payment_data).mark_arc(innerRadius=70).encode(
-                        theta=alt.Theta("Valor:Q", stack=True),
-                        color=alt.Color("Método:N", 
-                                      legend=alt.Legend(title="Método de Pagamento"),
-                                      scale=alt.Scale(domain=['Cartão', 'Dinheiro', 'PIX'],
-                                                    range=['#4285F4', '#34A853', '#FBBC05'])),
-                        tooltip=[
-                            alt.Tooltip("Método:N", title="Método"),
-                            alt.Tooltip("Valor:Q", title="Valor", format="R$ ,.2f"),
-                            alt.Tooltip("Porcentagem:Q", title="Porcentagem", format=".1f%")
-                        ]
-                    ).properties(
-                        height=400
-                    )
-                    
-                    # Texto no centro do gráfico
-                    text_pie = pie_chart.mark_text(radius=150, size=16).encode(
-                        text=alt.Text("Valor:Q", format="R$ ,.2f")
-                    )
-                    
-                    st.altair_chart(pie_chart + text_pie, use_container_width=True)
             
             # Vendas Diárias
             with st.container(border=True):
