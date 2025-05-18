@@ -1,4 +1,3 @@
-```python
 import streamlit as st
 import gspread
 import pandas as pd
@@ -507,4 +506,3 @@ def main():
             
 if __name__ == "__main__":
     main()
-```
