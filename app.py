@@ -396,7 +396,7 @@ def main():
                     penultimo_mes = vendas_mensais.iloc[-2]['Total']
                     variacao = ((ultimo_mes - penultimo_mes) / penultimo_mes * 100) if penultimo_mes > 0 else 0
                     
-                    emoji_tendencia = "🚀" if variacao > 10 else "📈" if variacao > 0 else "📉" if variacao  0 else 1
+                    emoji_tendencia = "🚀" if variacao > 10 else "📈" if variacao > 0 else "📉" if variacao < 0 else "➡️"
                     vendas_mensais['Normalizado'] = vendas_mensais['Total'] / max_valor_mensal
                     
                     # Mapa de calor para tendência mensal
