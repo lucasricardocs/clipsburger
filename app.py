@@ -430,11 +430,29 @@ def main():
                 
                 st.altair_chart(pie_chart + text, use_container_width=True)
             
-            # Análise Temporal
-            st.subheader("📅 Análise Temporal")
-            if 'DiaSemana' in df_filtered.columns:
-                st.write("📊 Desempenho por Dia da Semana")
+            # Histogramas
+            st.subheader("📊 Distribuição de Valores")
+            
+            # Histograma de valores totais usando Altair
+            if not df_filtered.empty:
+                # Criar histograma com Altair
+                histogram = alt.Chart(df_filtered).mark_bar().encode(
+                    alt.X('Total:Q', bin=alt.Bin(maxbins=20), title='Valor da Venda (R$)'),
+                    alt.Y('count()', title='Frequência'),
+                    tooltip=[
+                        alt.Tooltip('count()', title='Quantidade'),
+                        alt.Tooltip('Total:Q', title='Valor', format='R$ ,.2f')
+                    ]
+                ).properties(
+                    title='Distribuição dos Valores de Venda',
+                    height=300
+                )
                 
+                st.altair_chart(histogram, use_container_width=True)
+            
+            # Análise Temporal
+            st.subheader("📅 Análise por Dia da Semana")
+            if 'DiaSemana' in df_filtered.columns:
                 # Dias da semana em português e ordem correta
                 dias_ordem = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
                 
