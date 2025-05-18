@@ -6,83 +6,12 @@ from datetime import datetime
 from google.oauth2.service_account import Credentials
 from gspread.exceptions import SpreadsheetNotFound
 
-# Configuração da página com layout centralizado
+# Configuração da página com layout centered
 st.set_page_config(
     page_title="Sistema de Registro de Vendas", 
     layout="centered",
     initial_sidebar_state="expanded"
 )
-
-# CSS personalizado para melhorar a aparência
-st.markdown("""
-<style>
-    .main {
-        background-color: #f8f9fa;
-    }
-    .stMetric {
-        background-color: white;
-        padding: 15px;
-        border-radius: 10px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        transition: transform 0.3s ease;
-    }
-    .stMetric:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 6px 8px rgba(0,0,0,0.15);
-    }
-    h1, h2, h3 {
-        color: #1E3A8A;
-    }
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 24px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        height: 50px;
-        white-space: pre-wrap;
-        background-color: white;
-        border-radius: 5px 5px 0px 0px;
-        gap: 1px;
-        padding-top: 10px;
-        padding-bottom: 10px;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: white;
-        color: #1E3A8A;
-    }
-    .stTabs [data-baseweb="tab-highlight"] {
-        display: none;
-    }
-    div[data-testid="stExpander"] {
-        border: 1px solid #ddd;
-        border-radius: 10px;
-        margin-bottom: 15px;
-    }
-    div[data-testid="stForm"] {
-        border: 1px solid #ddd;
-        border-radius: 10px;
-        padding: 20px;
-        background-color: white;
-    }
-    div[data-testid="stVerticalBlock"] {
-        gap: 20px;
-    }
-    button[kind="primaryFormSubmit"] {
-        background-color: #1E3A8A;
-        color: white;
-    }
-    .stDataFrame {
-        border: 1px solid #ddd;
-        border-radius: 10px;
-    }
-    .sidebar .sidebar-content {
-        background-color: #f1f5f9;
-    }
-    /* Para remover o ícone de download nos dataframes */
-    [data-testid="stElementToolbar"] {
-        display: none;
-    }
-</style>
-""", unsafe_allow_html=True)
 
 # Habilitar tema para gráficos Altair
 alt.themes.enable('fivethirtyeight')
@@ -248,11 +177,7 @@ def main():
                 total = cartao + dinheiro + pix
                 
                 # Mostrar total calculado
-                st.markdown(f"""
-                <div style='background-color:#f0f8ff; padding:10px; border-radius:5px; margin:10px 0;'>
-                    <h3 style='margin:0; text-align:center;'>Total da venda: R$ {total:.2f}</h3>
-                </div>
-                """, unsafe_allow_html=True)
+                st.write(f"Total da venda: R$ {total:.2f}")
                 
                 submitted = st.form_submit_button("💾 Registrar Venda", 
                                                use_container_width=True,
@@ -434,12 +359,7 @@ def main():
                     
                     # Mostrar valor final acumulado
                     final_value = df_accumulated['Total Acumulado'].iloc[-1]
-                    st.markdown(f"""
-                    <div style='background-color:#f0f8ff; padding:15px; border-radius:10px; text-align:center; margin-top:10px;'>
-                        <h4 style='margin:0;'>💰 Capital Total Acumulado</h4>
-                        <h1 style='margin:10px 0; color:#1E3A8A;'>R$ {final_value:,.2f}</h1>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    st.write(f"💰 Capital Total Acumulado: R$ {final_value:,.2f}")
     
     # Aba 3: Estatísticas
     with tab3:
@@ -508,38 +428,9 @@ def main():
                     # Mostrar valores e porcentagens
                     payment_cols = st.columns(3)
                     
-                    payment_cols[0].markdown(f"""
-                    <div style='background-color:white; padding:15px; border-radius:10px; box-shadow:0 2px 5px rgba(0,0,0,0.1); text-align:center;'>
-                        <h3 style='margin:0;'>💳 Cartão</h3>
-                        <h2 style='margin:10px 0;'>R$ {cartao_total:,.2f}</h2>
-                        <div style='background-color:#f0f0f0; border-radius:5px; padding:5px;'>
-                            <div style='background-color:#4285F4; width:{cartao_pct}%; height:10px; border-radius:5px;'></div>
-                        </div>
-                        <p style='margin:5px 0;'>{cartao_pct:.1f}%</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    payment_cols[1].markdown(f"""
-                    <div style='background-color:white; padding:15px; border-radius:10px; box-shadow:0 2px 5px rgba(0,0,0,0.1); text-align:center;'>
-                        <h3 style='margin:0;'>💵 Dinheiro</h3>
-                        <h2 style='margin:10px 0;'>R$ {dinheiro_total:,.2f}</h2>
-                        <div style='background-color:#f0f0f0; border-radius:5px; padding:5px;'>
-                            <div style='background-color:#34A853; width:{dinheiro_pct}%; height:10px; border-radius:5px;'></div>
-                        </div>
-                        <p style='margin:5px 0;'>{dinheiro_pct:.1f}%</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    payment_cols[2].markdown(f"""
-                    <div style='background-color:white; padding:15px; border-radius:10px; box-shadow:0 2px 5px rgba(0,0,0,0.1); text-align:center;'>
-                        <h3 style='margin:0;'>📱 PIX</h3>
-                        <h2 style='margin:10px 0;'>R$ {pix_total:,.2f}</h2>
-                        <div style='background-color:#f0f0f0; border-radius:5px; padding:5px;'>
-                            <div style='background-color:#FBBC05; width:{pix_pct}%; height:10px; border-radius:5px;'></div>
-                        </div>
-                        <p style='margin:5px 0;'>{pix_pct:.1f}%</p>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    payment_cols[0].write(f"💳 Cartão: R$ {cartao_total:,.2f} ({cartao_pct:.1f}%)")
+                    payment_cols[1].write(f"💵 Dinheiro: R$ {dinheiro_total:,.2f} ({dinheiro_pct:.1f}%)")
+                    payment_cols[2].write(f"📱 PIX: R$ {pix_total:,.2f} ({pix_pct:.1f}%)")
                     
                     # Gráfico de pizza para métodos de pagamento
                     payment_data = pd.DataFrame({
@@ -668,21 +559,8 @@ def main():
                     
                     best_worst_cols = st.columns(2)
                     
-                    best_worst_cols[0].markdown(f"""
-                    <div style='background-color:#f0fff0; padding:15px; border-radius:10px; text-align:center;'>
-                        <h4 style='margin:0;'>🔝 Melhor Dia da Semana</h4>
-                        <h2 style='margin:10px 0;'>{melhor_dia['DiaSemana']}</h2>
-                        <h3 style='margin:0;'>R$ {melhor_dia['Total']:,.2f}</h3>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    best_worst_cols[1].markdown(f"""
-                    <div style='background-color:#fff0f0; padding:15px; border-radius:10px; text-align:center;'>
-                        <h4 style='margin:0;'>🔻 Pior Dia da Semana</h4>
-                        <h2 style='margin:10px 0;'>{pior_dia['DiaSemana']}</h2>
-                        <h3 style='margin:0;'>R$ {pior_dia['Total']:,.2f}</h3>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    best_worst_cols[0].write(f"🔝 Melhor Dia da Semana: {melhor_dia['DiaSemana']} (R$ {melhor_dia['Total']:,.2f})")
+                    best_worst_cols[1].write(f"🔻 Pior Dia da Semana: {pior_dia['DiaSemana']} (R$ {pior_dia['Total']:,.2f})")
             
             # Tendência Mensal
             if 'AnoMês' in df_filtered.columns and df_filtered['AnoMês'].nunique() > 1:
@@ -706,14 +584,7 @@ def main():
                         
                         if not pd.isna(variacao):
                             icone = "🚀" if variacao > 10 else "📈" if variacao > 0 else "📉" if variacao < 0 else "➡️"
-                            
-                            st.markdown(f"""
-                            <div style='background-color:{'#f0fff0' if variacao > 0 else '#fff0f0'}; padding:15px; border-radius:10px; text-align:center; margin-bottom:20px;'>
-                                <h4 style='margin:0;'>{icone} Variação em {ultimo_mes['AnoMês']}</h4>
-                                <h1 style='margin:10px 0; color:{'#34A853' if variacao > 0 else '#EA4335'};'>{variacao:+.1f}%</h1>
-                                <p style='margin:0;'>Em relação ao mês anterior</p>
-                            </div>
-                            """, unsafe_allow_html=True)
+                            st.write(f"{icone} Variação em {ultimo_mes['AnoMês']}: {variacao:+.1f}% em relação ao mês anterior")
                     
                     # Gráfico de linha para tendência mensal
                     line_chart = alt.Chart(vendas_mensais).mark_line(
@@ -784,32 +655,12 @@ def main():
                 meta_mensal = projecao_mensal * 1.2  # Meta 20% acima da projeção
                 meta_diaria = meta_mensal / 20
                 
-                # Mostrar projeções em cards
+                # Mostrar projeções em texto simples
                 proj_cols = st.columns(3)
                 
-                proj_cols[0].markdown(f"""
-                <div style='background-color:#f0f8ff; padding:15px; border-radius:10px; text-align:center;'>
-                    <h4 style='margin:0;'>📊 Média Diária</h4>
-                    <h2 style='margin:10px 0;'>R$ {media_diaria:,.2f}</h2>
-                    <p style='margin:0; color:#666;'>Baseado em {dias_distintos} dias</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                proj_cols[1].markdown(f"""
-                <div style='background-color:#f0fff0; padding:15px; border-radius:10px; text-align:center;'>
-                    <h4 style='margin:0;'>📅 Projeção Mensal</h4>
-                    <h2 style='margin:10px 0;'>R$ {projecao_mensal:,.2f}</h2>
-                    <p style='margin:0; color:#666;'>Baseado em 20 dias úteis</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                proj_cols[2].markdown(f"""
-                <div style='background-color:#fff8f0; padding:15px; border-radius:10px; text-align:center;'>
-                    <h4 style='margin:0;'>🌟 Meta Mensal</h4>
-                    <h2 style='margin:10px 0;'>R$ {meta_mensal:,.2f}</h2>
-                    <p style='margin:0; color:#666;'>Meta diária: R$ {meta_diaria:,.2f}</p>
-                </div>
-                """, unsafe_allow_html=True)
+                proj_cols[0].write(f"📊 Média Diária: R$ {media_diaria:,.2f} (baseado em {dias_distintos} dias)")
+                proj_cols[1].write(f"📅 Projeção Mensal: R$ {projecao_mensal:,.2f} (baseado em 20 dias úteis)")
+                proj_cols[2].write(f"🌟 Meta Mensal: R$ {meta_mensal:,.2f} (meta diária: R$ {meta_diaria:,.2f})")
                 
                 # Taxa de crescimento se houver dados suficientes
                 if 'AnoMês' in df_filtered.columns and df_filtered['AnoMês'].nunique() >= 3:
@@ -832,21 +683,8 @@ def main():
                         # Mostrar previsão
                         taxa_cols = st.columns(2)
                         
-                        taxa_cols[0].markdown(f"""
-                        <div style='background-color:#f0f8ff; padding:15px; border-radius:10px; text-align:center;'>
-                            <h4 style='margin:0;'>📈 Taxa Média de Crescimento</h4>
-                            <h2 style='margin:10px 0;'>{taxa_media*100:+.1f}%</h2>
-                            <p style='margin:0; color:#666;'>Baseado em {len(taxas)} períodos</p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        taxa_cols[1].markdown(f"""
-                        <div style='background-color:#f0fff0; padding:15px; border-radius:10px; text-align:center;'>
-                            <h4 style='margin:0;'>🔮 Previsão Próximo Mês</h4>
-                            <h2 style='margin:10px 0;'>R$ {previsao_proximo:,.2f}</h2>
-                            <p style='margin:0; color:#666;'>Baseado na taxa histórica</p>
-                        </div>
-                        """, unsafe_allow_html=True)
+                        taxa_cols[0].write(f"📈 Taxa Média de Crescimento: {taxa_media*100:+.1f}% (baseado em {len(taxas)} períodos)")
+                        taxa_cols[1].write(f"🔮 Previsão Próximo Mês: R$ {previsao_proximo:,.2f} (baseado na taxa histórica)")
                         
                         # Gráfico de previsão
                         # Adicionar ponto de previsão
