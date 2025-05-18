@@ -361,45 +361,6 @@ def main():
                     )
                     st.altair_chart(trend_chart, use_container_width=True)
             
-            # Estatísticas Avançadas
-            st.markdown("---")
-            st.subheader("🔍 Estatísticas Avançadas")
-            
-            # Estatísticas de distribuição
-            if total_vendas > 1:
-                st.markdown("### 📊 Distribuição de Vendas")
-                
-                mediana = df_filtered['Total'].median()
-                desvio_padrao = df_filtered['Total'].std()
-                
-                # Coeficiente de variação
-                cv = (desvio_padrao / media_por_venda * 100) if media_por_venda > 0 else 0
-                
-                # Quartis para entender a distribuição
-                q1 = df_filtered['Total'].quantile(0.25)
-                q3 = df_filtered['Total'].quantile(0.75)
-                iqr = q3 - q1
-                
-                # Mostra medidas de distribuição em uma linha
-                # Linha 1
-                dist_cols1 = st.columns(2)
-                dist_cols1[0].markdown(f"**↔️ Mediana:** R$ {mediana:.2f}")
-                dist_cols1[1].markdown(f"**🔄 Desvio Padrão:** R$ {desvio_padrao:.2f}")
-                
-                # Linha 2
-                dist_cols2 = st.columns(2)
-                dist_cols2[0].markdown(f"**📏 Coef. Variação:** {cv:.1f}%")
-                dist_cols2[1].markdown(f"**🔍 Amplitude Interquartil:** R$ {iqr:.2f}")
-                
-                # Histograma de distribuição dos valores de venda
-                if len(df_filtered) >= 5:  # Pelo menos 5 registros para um histograma significativo
-                    st.markdown("#### Histograma de Valores de Venda")
-                    hist = alt.Chart(df_filtered).mark_bar().encode(
-                        alt.X('Total:Q', bin=True, title='Valor da Venda (R$)'),
-                        alt.Y('count()', title='Frequência')
-                    ).properties(height=500)
-                    st.altair_chart(hist, use_container_width=True)
-            
             # Projeções e Metas
             st.markdown("---")
             st.subheader("🎯 Projeções e Metas")
@@ -437,39 +398,6 @@ def main():
                             taxa_cols[0].markdown(f"**📈 Taxa Média de Crescimento:** {taxa_media*100:.1f}%")
                             taxa_cols[1].markdown(f"**🔮 Previsão Próximo Mês:** R$ {previsao_proximo:.2f}")
             
-            # Análise de Frequência 
-            st.markdown("---")
-            st.subheader("🗓️ Análise de Frequência")
-            
-            if 'Data' in df_filtered.columns and not df_filtered.empty:
-                data_min = df_filtered['Data'].min()
-                data_max = df_filtered['Data'].max()
-                
-                # Criar série com todas as datas no intervalo
-                todas_datas = pd.date_range(start=data_min, end=data_max)
-                datas_com_vendas = df_filtered['Data'].unique()
-                
-                # Quantos dias sem vendas
-                dias_sem_vendas = len(todas_datas) - len(datas_com_vendas)
-                
-                freq_cols = st.columns(2)
-                freq_cols[0].markdown(f"**⚠️ Dias Sem Vendas:** {dias_sem_vendas}")
-                
-                # Frequência média entre vendas (em dias)
-                if len(datas_com_vendas) > 1:
-                    dias_entre_vendas = (data_max - data_min).days / len(datas_com_vendas)
-                    freq_cols[1].markdown(f"**⏱️ Intervalo Médio:** {dias_entre_vendas:.1f} dias")
-                
-                # Calcular dias da semana mais frequentes
-                if len(df_filtered) > 3 and 'DiaSemana' in df_filtered.columns:  # Mais de 3 registros
-                    freq_cols = st.columns(2)
-                    freq_cols[0].markdown(f"**🏆 Dia Mais Frequente:** {dia_mais_vendas}")
-                    
-                    # Encontrar dia menos frequente
-                    dia_menos_vendas = df_filtered.groupby('DiaSemana')['Total'].sum().idxmin() \
-                        if not df_filtered.empty else "N/A"
-                    freq_cols[1].markdown(f"**📉 Dia Menos Frequente:** {dia_menos_vendas}")
-            
             # Sazonalidade Semanal
             st.markdown("---")
             st.subheader("📅 Sazonalidade Semanal")
@@ -485,8 +413,8 @@ def main():
                         vendas_por_dia_semana['Porcentagem'] = vendas_por_dia_semana['Total'] / total_semana * 100
                         
                         # Traduzir dias para português e ordenar
-                        dias_ordem = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-                        dias_pt = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
+                        dias_ordem = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+                        dias_pt = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta']
                         mapa_dias = dict(zip(dias_ordem, dias_pt))
                         
                         if vendas_por_dia_semana['DiaSemana'].iloc[0] in mapa_dias:
