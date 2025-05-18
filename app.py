@@ -9,7 +9,7 @@ from gspread.exceptions import SpreadsheetNotFound
 # Configuração da página com layout wide
 st.set_page_config(
     page_title="Sistema de Registro de Vendas", 
-    layout="wide",
+    layout="centered",
     initial_sidebar_state="expanded"
 )
 
