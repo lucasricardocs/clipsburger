@@ -18,7 +18,7 @@ st.set_page_config(
 
 # CSS Minimalista para melhorias sutis e compatibilidade com tema escuro
 st.markdown("""
-
+<style>
     /* Melhora a aparência dos containers com borda */
     div[data-testid="stVerticalBlock"] > [data-testid="stVerticalBlock"] > [data-testid="stVerticalBlock"] > div[style*="border"] {
         border-radius: 10px;
@@ -41,7 +41,7 @@ st.markdown("""
         box-shadow: none;
         padding: 0;
     }
-
+</style>
 """, unsafe_allow_html=True)
 
 # Habilitar tema para gráficos Altair que funciona bem em ambos os modos
@@ -227,7 +227,79 @@ def create_avg_sales_by_weekday_bar_chart(df_data):
     return bar_chart + text_on_bars
 
 def create_monthly_trend_line_chart(df_data):
-    if df_data.empty or 'AnoMês' not in df_data.columns or df_data['AnoMês'].nunique() Total: R$ {total_venda_calculado:,.2f}", unsafe_allow_html=True)
+    if df_data.empty or 'AnoMês' not in df_data.columns or df_data['AnoMês'].nunique() <= 1: return None
+    vendas_mensais = df_data.groupby('AnoMês')['Total'].sum().reset_index()
+    vendas_mensais['Variação %'] = vendas_mensais['Total'].pct_change() * 100
+
+    line_chart = alt.Chart(vendas_mensais).mark_line(point=alt.OverlayMarkDef(color="firebrick", size=50, filled=True), strokeWidth=3).encode(
+        x=alt.X('AnoMês:N', title='Mês', sort='ascending'),
+        y=alt.Y('Total:Q', title='Total de Vendas (R$)'),
+        tooltip=[
+            alt.Tooltip('AnoMês:N', title="Mês"),
+            alt.Tooltip('Total:Q', format='R$,.2f', title="Faturamento"),
+            alt.Tooltip('Variação %:Q', format='+.1f', title="Variação MoM (%)")
+        ]
+    ).properties(height=CHART_HEIGHT, title=alt.TitleParams(text="Tendência Mensal de Faturamento", fontSize=16, dy=-10, anchor='middle'))
+    return line_chart
+
+def create_weekly_seasonality_bar_chart(df_data):
+    if df_data.empty or 'DiaSemanaNome' not in df_data.columns or 'DiaSemanaNum' not in df_data.columns or len(df_data) <=6: return None
+    dias_funcionamento = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
+    df_data_funcionamento = df_data[df_data['DiaSemanaNome'].isin(dias_funcionamento)]
+    if df_data_funcionamento.empty: return None
+
+    vendas_sum_dia_semana = df_data_funcionamento.groupby(['DiaSemanaNum', 'DiaSemanaNome'])['Total'].sum().reset_index()
+    total_periodo_saz = vendas_sum_dia_semana['Total'].sum()
+    if total_periodo_saz == 0: return None
+    vendas_sum_dia_semana['Porcentagem'] = (vendas_sum_dia_semana['Total'] / total_periodo_saz) * 100
+
+    bar_chart = alt.Chart(vendas_sum_dia_semana).mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3).encode(
+        x=alt.X('DiaSemanaNome:N', title='Dia da Semana', sort=alt.EncodingSortField(field="DiaSemanaNum", op="min", order='ascending')),
+        y=alt.Y('Porcentagem:Q', title='% do Volume Semanal'),
+        color=alt.Color('DiaSemanaNome:N', legend=None, scale=alt.Scale(scheme='tableau10')),
+        tooltip=[
+            alt.Tooltip('DiaSemanaNome:N', title="Dia"),
+            alt.Tooltip('Total:Q', format='R$,.2f', title="Total no Período"),
+            alt.Tooltip('Porcentagem:Q', format='.1f', title="% do Total")
+        ]
+    ).properties(height=CHART_HEIGHT, title=alt.TitleParams(text="Distribuição % de Vendas na Semana (Seg-Sáb)", fontSize=16, dy=-10, anchor='middle'))
+    text_on_bars = bar_chart.mark_text(dy=-10).encode(text=alt.Text('Porcentagem:Q', format=".0f") + "%")
+    return bar_chart + text_on_bars
+
+def create_sales_value_histogram(df_data):
+    if df_data.empty or 'Total' not in df_data.columns: return None
+    histogram = alt.Chart(df_data).mark_bar().encode(
+        alt.X('Total:Q', bin=alt.Bin(maxbins=20), title='Valor da Venda (R$)'),
+        alt.Y('count()', title='Frequência (Nº de Vendas)'),
+        tooltip=[
+            alt.Tooltip('count()', title="Nº de Vendas"),
+            alt.Tooltip('Total:Q', bin=True, title="Intervalo de Valor")
+        ]
+    ).properties(height=CHART_HEIGHT, title=alt.TitleParams(text="Distribuição dos Valores Totais de Venda", fontSize=16, dy=-10, anchor='middle'))
+    return histogram
+
+# --- Interface Principal ---
+def main():
+    st.title("🍔 Sistema de Vendas ClipsBurger")
+
+    df_raw, worksheet_obj = read_google_sheet()
+    df_processed = process_data(df_raw)
+
+    tab_registrar, tab_analise, tab_estatisticas = st.tabs([
+        "📝 Registrar Venda", "📈 Análise Detalhada", "📊 Estatísticas Chave"
+    ])
+
+    with tab_registrar:
+        st.header("Nova Venda")
+        with st.container(border=True): # Adicionado container com borda
+            with st.form("venda_form"):
+                data_venda = st.date_input("🗓️ Data da Venda", datetime.now(), key="data_venda_input")
+                c1, c2, c3 = st.columns(3)
+                cartao = c1.number_input("💳 Cartão (R$)", min_value=0.0, format="%.2f", key="cartao_input")
+                dinheiro = c2.number_input("💵 Dinheiro (R$)", min_value=0.0, format="%.2f", key="dinheiro_input")
+                pix = c3.number_input("📱 PIX (R$)", min_value=0.0, format="%.2f", key="pix_input")
+                total_venda_calculado = cartao + dinheiro + pix
+                st.markdown(f"<h3 style='text-align: center; margin-top:10px;'>Total: R$ {total_venda_calculado:,.2f}</h3>", unsafe_allow_html=True)
 
                 submitted = st.form_submit_button("💾 Registrar Venda", use_container_width=True, type="primary")
                 if submitted:
