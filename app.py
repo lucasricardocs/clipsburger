@@ -300,7 +300,7 @@ def main():
                         if not df_filtered.empty else "N/A"
                     stats_cols[2].markdown(f"**📆 Dia com Mais Vendas:** {dia_mais_vendas}")
                 
-                # Gráfico de média por dia da semana
+                # Mapa de calor por dia da semana
                 if 'DiaSemana' in df_filtered.columns:
                     # Mapeando dias da semana para ordem correta (segunda a sábado)
                     dias_ordem = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -322,17 +322,42 @@ def main():
                         
                         # Garantindo presença de todos os dias úteis, mesmo sem dados
                         vendas_por_dia = vendas_por_dia.set_index('DiaSemana').reindex(dias_pt, fill_value=0).reset_index()
-                    
-                        # Gráfico
-                        chart = alt.Chart(vendas_por_dia).mark_bar().encode(
+                        
+                        # Calculando o valor máximo para normalização
+                        max_valor = vendas_por_dia['Total'].max() if vendas_por_dia['Total'].max() > 0 else 1
+                        
+                        # Adicionando coluna normalizada para controlar a cor (0 a 1)
+                        vendas_por_dia['Normalizado'] = vendas_por_dia['Total'] / max_valor
+                        
+                        # Criando mapa de calor com Altair
+                        heatmap = alt.Chart(vendas_por_dia).mark_rect().encode(
                             x=alt.X('DiaSemana:N', title='Dia da Semana', sort=dias_pt),
-                            y=alt.Y('Total:Q', title='Média de Vendas (R$)'),
+                            y=alt.Y('Total:Q', title='', axis=None),  # Removendo eixo Y
+                            color=alt.Color('Normalizado:Q', 
+                                           scale=alt.Scale(domain=[0, 1], 
+                                                          range=['red', 'yellow', 'green']),
+                                           legend=None),  # Escala de cores vermelho-amarelo-verde
                             tooltip=['DiaSemana', 'Total']
                         ).properties(
-                            title='Média de Vendas por Dia da Semana (Seg-Sáb)',
-                            height=500
+                            title='Mapa de Calor - Média de Vendas por Dia da Semana',
+                            height=100  # Altura reduzida para o mapa de calor
                         )
-                        st.altair_chart(chart, use_container_width=True)
+                        
+                        # Adicionando texto com o valor
+                        text = alt.Chart(vendas_por_dia).mark_text(baseline='middle').encode(
+                            x=alt.X('DiaSemana:N', sort=dias_pt),
+                            y=alt.Y('Total:Q', axis=None),
+                            text=alt.Text('Total:Q', format='R$ {:.2f}'),
+                            color=alt.condition(
+                                alt.datum.Normalizado > 0.5,
+                                alt.value('black'),
+                                alt.value('white')
+                            )
+                        )
+                        
+                        # Combinando o mapa de calor com o texto
+                        chart_final = (heatmap + text).properties(height=200)
+                        st.altair_chart(chart_final, use_container_width=True)
             
             # Análise mensal se houver dados suficientes
             if 'AnoMês' in df_filtered.columns and df_filtered['AnoMês'].nunique() > 1:
