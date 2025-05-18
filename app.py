@@ -173,16 +173,40 @@ def main():
                                             var_name='Método', 
                                             value_name='Valor')
                 
-                bar_chart = alt.Chart(daily_data).mark_bar(size=30).encode(
+                # Calculando valores máximos para normalização
+                max_valor_diario = daily_data['Valor'].max() if daily_data['Valor'].max() > 0 else 1
+                daily_data['Normalizado'] = daily_data['Valor'] / max_valor_diario
+                
+                # Mapa de calor para vendas diárias
+                heatmap_daily = alt.Chart(daily_data).mark_rect().encode(
                     x=alt.X(f'{date_column}:N', title='Data', axis=alt.Axis(labelAngle=-45)),
-                    y=alt.Y('Valor:Q', title='Valor (R$)'),
-                    color=alt.Color('Método:N', legend=alt.Legend(title="Método")),
+                    y=alt.Y('Método:N', title='Método de Pagamento'),
+                    color=alt.Color('Normalizado:Q', 
+                                   scale=alt.Scale(domain=[0, 1], 
+                                                  range=['red', 'yellow', 'green']),
+                                   legend=None),
                     tooltip=[date_column, 'Método', 'Valor']
                 ).properties(
+                    title='Mapa de Calor - Vendas Diárias por Método',
                     width=700,
                     height=500
                 )
-                st.altair_chart(bar_chart, use_container_width=True)
+                
+                # Texto para o mapa de calor
+                text_daily = alt.Chart(daily_data).mark_text().encode(
+                    x=alt.X(f'{date_column}:N', axis=alt.Axis(labelAngle=-45)),
+                    y=alt.Y('Método:N'),
+                    text=alt.Text('Valor:Q', format='R$ {:.2f}'),
+                    color=alt.condition(
+                        alt.datum.Normalizado > 0.5,
+                        alt.value('black'),
+                        alt.value('white')
+                    )
+                )
+                
+                # Combinando mapa de calor e texto
+                daily_chart = (heatmap_daily + text_daily)
+                st.altair_chart(daily_chart, use_container_width=True)
 
                 st.subheader("Acúmulo de Capital ao Longo do Tempo")
                 df_accumulated = df_filtered.sort_values('Data').copy()
@@ -340,7 +364,7 @@ def main():
                             tooltip=['DiaSemana', 'Total']
                         ).properties(
                             title='Mapa de Calor - Média de Vendas por Dia da Semana',
-                            height=100  # Altura reduzida para o mapa de calor
+                            height=300  # Altura aumentada
                         )
                         
                         # Adicionando texto com o valor
@@ -356,7 +380,7 @@ def main():
                         )
                         
                         # Combinando o mapa de calor com o texto
-                        chart_final = (heatmap + text).properties(height=200)
+                        chart_final = (heatmap + text).properties(height=500)
                         st.altair_chart(chart_final, use_container_width=True)
             
             # Análise mensal se houver dados suficientes
@@ -372,19 +396,38 @@ def main():
                     penultimo_mes = vendas_mensais.iloc[-2]['Total']
                     variacao = ((ultimo_mes - penultimo_mes) / penultimo_mes * 100) if penultimo_mes > 0 else 0
                     
-                    emoji_tendencia = "🚀" if variacao > 10 else "📈" if variacao > 0 else "📉" if variacao < 0 else "➡️"
-                    st.markdown(f"**{emoji_tendencia} Variação Mensal:** {variacao:.1f}%")
+                    emoji_tendencia = "🚀" if variacao > 10 else "📈" if variacao > 0 else "📉" if variacao  0 else 1
+                    vendas_mensais['Normalizado'] = vendas_mensais['Total'] / max_valor_mensal
                     
-                    # Gráfico de tendência mensal
-                    trend_chart = alt.Chart(vendas_mensais).mark_line(point=True).encode(
+                    # Mapa de calor para tendência mensal
+                    heatmap_mensal = alt.Chart(vendas_mensais).mark_rect().encode(
                         x=alt.X('AnoMês:N', title='Mês'),
-                        y=alt.Y('Total:Q', title='Total de Vendas (R$)'),
+                        y=alt.Y('Total:Q', title='', axis=None),
+                        color=alt.Color('Normalizado:Q', 
+                                       scale=alt.Scale(domain=[0, 1], 
+                                                      range=['red', 'yellow', 'green']),
+                                       legend=None),
                         tooltip=['AnoMês', 'Total']
                     ).properties(
-                        title='Tendência Mensal de Vendas',
-                        height=500
+                        title='Mapa de Calor - Vendas Mensais',
+                        height=300
                     )
-                    st.altair_chart(trend_chart, use_container_width=True)
+                    
+                    # Texto para o mapa de calor mensal
+                    text_mensal = alt.Chart(vendas_mensais).mark_text(baseline='middle').encode(
+                        x=alt.X('AnoMês:N'),
+                        y=alt.Y('Total:Q', axis=None),
+                        text=alt.Text('Total:Q', format='R$ {:.2f}'),
+                        color=alt.condition(
+                            alt.datum.Normalizado > 0.5,
+                            alt.value('black'),
+                            alt.value('white')
+                        )
+                    )
+                    
+                    # Combinando mapa de calor e texto
+                    mensal_chart = (heatmap_mensal + text_mensal).properties(height=500)
+                    st.altair_chart(mensal_chart, use_container_width=True)
             
             # Projeções e Metas
             st.markdown("---")
@@ -445,16 +488,39 @@ def main():
                         if vendas_por_dia_semana['DiaSemana'].iloc[0] in mapa_dias:
                             vendas_por_dia_semana['DiaSemana'] = vendas_por_dia_semana['DiaSemana'].map(mapa_dias)
                         
-                        # Criar gráfico de barras com porcentagem
-                        chart_sazonalidade = alt.Chart(vendas_por_dia_semana).mark_bar().encode(
+                        # Calculando valores para normalização
+                        max_valor_semanal = vendas_por_dia_semana['Porcentagem'].max() if vendas_por_dia_semana['Porcentagem'].max() > 0 else 1
+                        vendas_por_dia_semana['Normalizado'] = vendas_por_dia_semana['Porcentagem'] / max_valor_semanal
+                        
+                        # Mapa de calor para sazonalidade semanal
+                        heatmap_semanal = alt.Chart(vendas_por_dia_semana).mark_rect().encode(
                             x=alt.X('DiaSemana:N', title='Dia da Semana', sort=dias_pt),
-                            y=alt.Y('Porcentagem:Q', title='% do Volume Semanal'),
+                            y=alt.Y('Porcentagem:Q', title='', axis=None),
+                            color=alt.Color('Normalizado:Q', 
+                                           scale=alt.Scale(domain=[0, 1], 
+                                                          range=['red', 'yellow', 'green']),
+                                           legend=None),
                             tooltip=['DiaSemana', 'Total', 'Porcentagem']
                         ).properties(
-                            title='Distribuição Semanal de Vendas',
-                            height=500
+                            title='Mapa de Calor - Distribuição Semanal de Vendas',
+                            height=300
                         )
-                        st.altair_chart(chart_sazonalidade, use_container_width=True)
+                        
+                        # Texto para o mapa de calor semanal
+                        text_semanal = alt.Chart(vendas_por_dia_semana).mark_text(baseline='middle').encode(
+                            x=alt.X('DiaSemana:N', sort=dias_pt),
+                            y=alt.Y('Porcentagem:Q', axis=None),
+                            text=alt.Text('Porcentagem:Q', format='{:.1f}%'),
+                            color=alt.condition(
+                                alt.datum.Normalizado > 0.5,
+                                alt.value('black'),
+                                alt.value('white')
+                            )
+                        )
+                        
+                        # Combinando mapa de calor e texto
+                        semanal_chart = (heatmap_semanal + text_semanal).properties(height=500)
+                        st.altair_chart(semanal_chart, use_container_width=True)
                         
                         # Destacar dias mais importantes
                         melhor_dia = vendas_por_dia_semana.loc[vendas_por_dia_semana['Total'].idxmax()]
@@ -485,17 +551,39 @@ def main():
                     value_name='Valor'
                 )
                 
-                # Criar gráfico de linhas para evolução de métodos
-                chart_evolucao = alt.Chart(df_pagamentos_long).mark_line(point=True).encode(
+                # Calculando valores para normalização
+                max_valor_pagamento = df_pagamentos_long['Valor'].max() if df_pagamentos_long['Valor'].max() > 0 else 1
+                df_pagamentos_long['Normalizado'] = df_pagamentos_long['Valor'] / max_valor_pagamento
+                
+                # Mapa de calor para evolução dos métodos de pagamento
+                heatmap_pagamento = alt.Chart(df_pagamentos_long).mark_rect().encode(
                     x=alt.X('AnoMês:N', title='Mês'),
-                    y=alt.Y('Valor:Q', title='Valor (R$)'),
-                    color=alt.Color('Método:N', title='Método de Pagamento'),
+                    y=alt.Y('Método:N', title='Método de Pagamento'),
+                    color=alt.Color('Normalizado:Q', 
+                                   scale=alt.Scale(domain=[0, 1], 
+                                                  range=['red', 'yellow', 'green']),
+                                   legend=None),
                     tooltip=['AnoMês', 'Método', 'Valor']
                 ).properties(
-                    title='Evolução dos Métodos de Pagamento',
-                    height=500
+                    title='Mapa de Calor - Evolução dos Métodos de Pagamento',
+                    height=300
                 )
-                st.altair_chart(chart_evolucao, use_container_width=True)
+                
+                # Texto para o mapa de calor de pagamentos
+                text_pagamento = alt.Chart(df_pagamentos_long).mark_text().encode(
+                    x=alt.X('AnoMês:N'),
+                    y=alt.Y('Método:N'),
+                    text=alt.Text('Valor:Q', format='R$ {:.2f}'),
+                    color=alt.condition(
+                        alt.datum.Normalizado > 0.5,
+                        alt.value('black'),
+                        alt.value('white')
+                    )
+                )
+                
+                # Combinando mapa de calor e texto
+                pagamento_chart = (heatmap_pagamento + text_pagamento).properties(height=500)
+                st.altair_chart(pagamento_chart, use_container_width=True)
                 
                 # Identificar tendências na preferência de pagamento
                 if df_pagamentos.shape[0] >= 3:  # Pelo menos 3 meses
