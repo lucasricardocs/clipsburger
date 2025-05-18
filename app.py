@@ -26,9 +26,6 @@ st.markdown("""
         padding: 15px; /* Adiciona um pouco de padding interno */
         margin-bottom: 15px; /* Espaço entre containers */
     }
-    /* Títulos principais (opcional, pode deixar o padrão do tema) */
-    /* h1 { color: #FF4B4B; } */
-
     /* Ajuste no spinner para ser mais visível em ambos os temas */
     .stSpinner > div {
         border-top-color: #FF4B4B !important; /* Cor do spinner */
@@ -43,8 +40,8 @@ st.markdown("""
 
 """, unsafe_allow_html=True)
 
-# REMOVIDO: alt.themes.enable('streamlit') - Não é necessário e causa erro.
-# O Streamlit aplica seu tema aos gráficos Altair por padrão ao usar st.altair_chart.
+# Streamlit aplica seu tema aos gráficos Altair por padrão ao usar st.altair_chart(theme="streamlit") ou theme=None.
+# Não é necessário alt.themes.enable() globalmente.
 
 CHART_HEIGHT = 380 # Altura padrão para gráficos grandes
 
@@ -81,19 +78,19 @@ def read_google_sheet():
             rows = worksheet.get_all_records()
             if not rows:
                 st.toast("⚠️ Planilha de vendas está vazia ou não contém dados.", icon="📄")
-                return pd.DataFrame(), worksheet
+                return pd.DataFrame(columns=['Data', 'Cartão', 'Dinheiro', 'Pix']), worksheet # Retorna DF com colunas esperadas
             df = pd.DataFrame(rows)
-            # Assegurar que colunas monetárias existem antes de converter, mesmo que vazias
+            # Assegurar que colunas monetárias existem, mesmo que a planilha esteja mal formatada
             for col_monetaria in ['Cartão', 'Dinheiro', 'Pix']:
                 if col_monetaria not in df.columns:
                     df[col_monetaria] = 0
             if 'Data' not in df.columns: # Assegurar que a coluna 'Data' existe
-                df['Data'] = None # Ou pd.NaT se preferir
+                df['Data'] = pd.NaT # Usar NaT para datas ausentes
 
             st.toast("✔️ Dados carregados da planilha!", icon="📊")
             return df, worksheet
     except SpreadsheetNotFound:
-        st.error(f"❌ Planilha com ID '{spreadsheet_id}' ou aba '{worksheet_name}' não encontrada. Verifique os valores em secrets.toml e as permissões.")
+        st.error(f"❌ Planilha com ID '{spreadsheet_id if 'spreadsheet_id' in st.secrets.get('google_sheets', {}) else 'NÃO DEFINIDO'}' ou aba '{worksheet_name if 'worksheet_name' in st.secrets.get('google_sheets', {}) else 'NÃO DEFINIDO'}' não encontrada. Verifique os valores em secrets.toml e as permissões.")
         return pd.DataFrame(), None
     except KeyError as e:
         st.error(f"❌ Erro ao carregar segredos: A chave '{e}' não foi encontrada. Verifique seu arquivo secrets.toml.")
@@ -125,30 +122,27 @@ def process_data(df_raw):
         return pd.DataFrame()
     df = df_raw.copy()
 
-    # Garantir que as colunas de pagamento existem, mesmo que a planilha venha sem elas
     for col_pay in ['Cartão', 'Dinheiro', 'Pix']:
         if col_pay not in df.columns:
-            df[col_pay] = 0 # Adiciona a coluna com zeros se não existir
-
-    for col in ['Cartão', 'Dinheiro', 'Pix']:
-        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            df[col_pay] = 0
+        df[col_pay] = pd.to_numeric(df[col_pay], errors='coerce').fillna(0)
     
     df['Total'] = df['Cartão'] + df['Dinheiro'] + df['Pix']
 
-    if 'Data' in df.columns:
+    if 'Data' in df.columns and not df['Data'].isnull().all(): # Processa apenas se a coluna Data existir e não for toda nula
         df['Data'] = pd.to_datetime(df['Data'], format='%d/%m/%Y', errors='coerce')
-        df.dropna(subset=['Data'], inplace=True) # Remove linhas onde a data não pôde ser convertida
-        if not df.empty: # Checa novamente após dropar NaNs de data
+        df.dropna(subset=['Data'], inplace=True)
+        if not df.empty:
             df['Ano'] = df['Data'].dt.year
             df['Mês'] = df['Data'].dt.month
             df['MêsNome'] = df['Data'].dt.strftime('%B').str.capitalize()
             df['AnoMês'] = df['Data'].dt.strftime('%Y-%m')
             df['DataFormatada'] = df['Data'].dt.strftime('%d/%m/%Y')
-            df['DiaSemanaNum'] = df['Data'].dt.dayofweek # Segunda=0 ... Sábado=5, Domingo=6
+            df['DiaSemanaNum'] = df['Data'].dt.dayofweek
             df['DiaSemanaNome'] = df['Data'].dt.day_name().map({
                 'Monday': 'Segunda', 'Tuesday': 'Terça', 'Wednesday': 'Quarta',
                 'Thursday': 'Quinta', 'Friday': 'Sexta', 'Saturday': 'Sábado', 'Sunday': 'Domingo'
-            }).fillna('Desconhecido') # Adiciona fillna para caso haja algum dia não mapeado
+            }).fillna('Desconhecido')
     return df
 
 # --- Funções de Gráficos ---
@@ -177,12 +171,26 @@ def create_pie_chart_payment_methods(df_data):
 
 def create_daily_sales_bar_chart(df_data):
     if df_data is None or df_data.empty or 'DataFormatada' not in df_data.columns: return None
-    daily_data_melted = df_data.melt(
-        id_vars=['DataFormatada', 'Data'],
-        value_vars=['Cartão', 'Dinheiro', 'Pix'],
-        var_name='Método',
-        value_name='Valor'
-    )
+    # Garante que 'Data' existe para ordenação, mesmo que 'DataFormatada' seja usada para o eixo X
+    if 'Data' not in df_data.columns and 'DataFormatada' in df_data.columns:
+        df_data_copy = df_data.copy() # Evitar SettingWithCopyWarning
+        df_data_copy.loc[:, 'Data'] = pd.to_datetime(df_data_copy['DataFormatada'], format='%d/%m/%Y', errors='coerce')
+        daily_data_melted = df_data_copy.melt(
+            id_vars=['DataFormatada', 'Data'],
+            value_vars=['Cartão', 'Dinheiro', 'Pix'],
+            var_name='Método',
+            value_name='Valor'
+        )
+    elif 'Data' in df_data.columns:
+         daily_data_melted = df_data.melt(
+            id_vars=['DataFormatada', 'Data'],
+            value_vars=['Cartão', 'Dinheiro', 'Pix'],
+            var_name='Método',
+            value_name='Valor'
+        )
+    else:
+        return None # Não tem nem DataFormatada nem Data
+
     daily_data_melted = daily_data_melted[daily_data_melted['Valor'] > 0]
     if daily_data_melted.empty: return None
 
@@ -256,54 +264,53 @@ def create_monthly_trend_line_chart(df_data):
     df_filtrado_sidebar = pd.DataFrame() # Inicializa como DataFrame vazio
     if df_processed is not None and not df_processed.empty:
         df_para_filtrar_sidebar = df_processed.copy()
-        df_filtrado_sidebar = df_processed.copy()
+        df_filtrado_sidebar = df_processed.copy() # Default é mostrar todos os dados processados
     else:
-        df_para_filtrar_sidebar = pd.DataFrame()
+        df_para_filtrar_sidebar = pd.DataFrame() # Garante que é DataFrame vazio se não houver dados processados
 
     with st.sidebar:
         st.header("🔍 Filtros")
         if not df_para_filtrar_sidebar.empty and 'Ano' in df_para_filtrar_sidebar.columns:
             anos_disponiveis = sorted(df_para_filtrar_sidebar['Ano'].unique(), reverse=True)
-            # Default para o ano mais recente se houver dados, ou lista vazia
             default_anos = anos_disponiveis[:1] if anos_disponiveis else []
             selected_anos = st.multiselect("Ano(s)", anos_disponiveis, default=default_anos, key="sel_anos_sidebar")
 
             df_para_meses = pd.DataFrame(columns=['Mês'])
             if selected_anos:
                 df_para_meses = df_para_filtrar_sidebar[df_para_filtrar_sidebar['Ano'].isin(selected_anos)]
-
+            
+            meses_opcoes = {}
             if not df_para_meses.empty and 'Mês' in df_para_meses.columns:
                 meses_disponiveis_no_filtro_ano = sorted(df_para_meses['Mês'].unique())
                 meses_opcoes = {m: datetime(2000, m, 1).strftime('%B').capitalize() for m in meses_disponiveis_no_filtro_ano}
-                
-                default_meses_num_sidebar = []
-                if selected_anos and meses_opcoes:
-                    current_year_selected = datetime.now().year in selected_anos
-                    current_month_available = datetime.now().month in meses_opcoes
-                    if current_year_selected and current_month_available:
-                        default_meses_num_sidebar = [datetime.now().month]
-                    else: # Se o mês atual não está, seleciona todos os disponíveis para os anos selecionados
-                        default_meses_num_sidebar = list(meses_opcoes.keys())
-                
-                selected_meses_num_sidebar = st.multiselect(
-                    "Mês(es)",
-                    options=list(meses_opcoes.keys()),
-                    format_func=lambda m: meses_opcoes.get(m, str(m)),
-                    default=default_meses_num_sidebar,
-                    key="sel_meses_sidebar",
-                    disabled=not selected_anos or not meses_opcoes
-                )
-            else:
-                selected_meses_num_sidebar = []
-                st.multiselect("Mês(es)", [], disabled=True, help="Selecione um ano com dados para habilitar meses.")
+            
+            default_meses_num_sidebar = []
+            if selected_anos and meses_opcoes:
+                current_year_selected = datetime.now().year in selected_anos
+                current_month_available = datetime.now().month in meses_opcoes
+                if current_year_selected and current_month_available:
+                    default_meses_num_sidebar = [datetime.now().month]
+                else:
+                    default_meses_num_sidebar = list(meses_opcoes.keys())
+            
+            selected_meses_num_sidebar = st.multiselect(
+                "Mês(es)",
+                options=list(meses_opcoes.keys()),
+                format_func=lambda m: meses_opcoes.get(m, str(m)),
+                default=default_meses_num_sidebar,
+                key="sel_meses_sidebar",
+                disabled=not selected_anos or not meses_opcoes # Desabilita se nenhum ano selecionado OU nenhum mês disponível para os anos selecionados
+            )
 
             # Aplicar filtros ao df_filtrado_sidebar
             if selected_anos:
                 df_filtrado_sidebar = df_para_filtrar_sidebar[df_para_filtrar_sidebar['Ano'].isin(selected_anos)]
-                if selected_meses_num_sidebar:
+                if selected_meses_num_sidebar and meses_opcoes : # Aplica filtro de mês apenas se anos E meses foram selecionados E há opções de meses
                     df_filtrado_sidebar = df_filtrado_sidebar[df_filtrado_sidebar['Mês'].isin(selected_meses_num_sidebar)]
-            else:
-                df_filtrado_sidebar = df_processed.copy() if df_processed is not None else pd.DataFrame()
+            # Se nenhum ano selecionado, df_filtrado_sidebar mantém todos os dados processados (se houver)
+            elif df_processed is not None:
+                 df_filtrado_sidebar = df_processed.copy()
+
         else:
             st.info("Sem dados carregados para aplicar filtros.")
             df_filtrado_sidebar = pd.DataFrame()
@@ -389,12 +396,13 @@ def create_monthly_trend_line_chart(df_data):
                     else: st.caption("Sem dados para sazonalidade semanal (>6 dias).")
 
             with st.expander("💡 Mais Insights e Projeções (Simplificado)", expanded=False):
-                if not df_filtrado_sidebar.empty and 'Data' in df_filtrado_sidebar.columns:
+                if not df_filtrado_sidebar.empty and 'Data' in df_filtrado_sidebar.columns and 'Total' in df_filtrado_sidebar.columns: # Garante que Total também existe
                     dias_distintos = df_filtrado_sidebar['Data'].nunique()
                     if dias_distintos > 0:
+                        # Usa total_faturamento_f que já foi calculado com base no df_filtrado_sidebar
                         media_diaria_faturamento = total_faturamento_f / dias_distintos
                         st.markdown(f"**Média Diária de Faturamento (no período):** R$ {media_diaria_faturamento:,.2f} (baseado em {dias_distintos} dias com vendas)")
-                        projecao_30_dias = media_diaria_faturamento * 30 # Considerando 30 dias corridos
+                        projecao_30_dias = media_diaria_faturamento * 30
                         st.markdown(f"**Projeção Simples para 30 dias:** R$ {projecao_30_dias:,.2f} (se o ritmo atual se mantiver)")
                     else:
                         st.caption("Não há dias distintos com vendas no período selecionado para calcular a média diária.")
