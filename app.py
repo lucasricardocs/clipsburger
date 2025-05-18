@@ -1,26 +1,3 @@
-Olá! Parece que houve uma pequena confusão e você colou parte do código do seu aplicativo na Query de pesquisa. Sem problemas!
-
-O erro que você viu anteriormente, `altair.utils.plugin_registry.NoSuchEntryPoint`, referente à linha `alt.themes.enable('streamlit')`, é o ponto principal a ser corrigido. Como mencionei, essa linha deve ser removida.
-
-Vou assumir que você já tem a configuração do `secrets.toml` correta, conforme discutimos, para que o `read_google_sheet()` funcione.
-
-Aqui está o código completo, revisado com as seguintes correções e melhorias:
-
-1.  **Erro `NoSuchEntryPoint` do Altair:** Removida a linha `alt.themes.enable('streamlit')`. O Streamlit já aplica seu tema aos gráficos Altair automaticamente.
-2.  **Consistência Visual (Dark/Light Mode):**
-    *   Mantido o CSS minimalista para melhorar a aparência dos containers e métricas, testado para funcionar bem em ambos os temas.
-    *   O tema padrão do Altair (`theme=None` ou deixar o Streamlit gerenciar) geralmente se adapta bem.
-3.  **Redundância e Organização:**
-    *   A estrutura das abas e o conteúdo dentro delas foram mantidos conforme sua última versão, focando na clareza e utilidade das informações.
-    *   A seção de resumo 2x2 na aba "Estatísticas Chave" está implementada.
-4.  **Gráficos de Histograma:**
-    *   A função `create_sales_value_histogram` está presente e é chamada corretamente.
-5.  **KPIs (Indicadores Chave):**
-    *   Removi a seção de KPIs complexos que você havia adicionado no final da aba de estatísticas, pois ela estava incompleta e poderia causar erros se `df_ultimo_mes` ou `df_penultimo_mes` não fossem populados (o que aconteceria se não houvesse dados suficientes). Mantive o resumo financeiro 2x2 que é mais robusto. Se quiser reintroduzir KPIs comparativos, precisará garantir que os dataframes de meses anteriores sejam sempre válidos ou tenham um tratamento de erro adequado.
-6.  **Lógica de Filtros da Sidebar:** Revisada para maior clareza e para tentar evitar estados onde nenhum dado é selecionado por padrão, se houver dados disponíveis.
-7.  **Tratamento de Erros:** Pequenas melhorias no tratamento de DataFrames vazios antes de tentar criar gráficos.
-
-```python
 import streamlit as st
 import gspread
 import pandas as pd
