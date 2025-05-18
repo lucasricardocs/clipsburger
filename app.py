@@ -6,10 +6,10 @@ from datetime import datetime
 from google.oauth2.service_account import Credentials
 from gspread.exceptions import SpreadsheetNotFound
 
-# Configuração da página com layout wide
+# Configuração da página com layout centralizado
 st.set_page_config(
     page_title="Sistema de Registro de Vendas", 
-    layout="wide",
+    layout="centered",
     initial_sidebar_state="expanded"
 )
 
@@ -46,8 +46,11 @@ st.markdown("""
         padding-bottom: 10px;
     }
     .stTabs [aria-selected="true"] {
-        background-color: #1E3A8A;
-        color: white;
+        background-color: white;
+        color: #1E3A8A;
+    }
+    .stTabs [data-baseweb="tab-highlight"] {
+        display: none;
     }
     div[data-testid="stExpander"] {
         border: 1px solid #ddd;
@@ -73,6 +76,10 @@ st.markdown("""
     }
     .sidebar .sidebar-content {
         background-color: #f1f5f9;
+    }
+    /* Para remover o ícone de download nos dataframes */
+    [data-testid="stElementToolbar"] {
+        display: none;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -169,11 +176,6 @@ def process_data(df_raw):
             st.warning(f"Erro ao processar datas: {e}")
     
     return df
-
-@st.cache_data
-def convert_df_to_csv(df):
-    """Converter DataFrame para CSV para download"""
-    return df.to_csv(index=False).encode('utf-8')
 
 def create_kpi_metrics(df):
     """Criar métricas KPI a partir do DataFrame"""
@@ -304,20 +306,10 @@ def main():
             )
             selected_meses = [int(m.split(" - ")[0]) for m in selected_meses_str]
             
-            # Filtro de Método de Pagamento
-            payment_methods = ["Cartão", "Dinheiro", "Pix"]
-            selected_methods = st.multiselect(
-                "Métodos de Pagamento:",
-                options=payment_methods,
-                default=payment_methods,
-                key="filter_methods"
-            )
-            
             # Botão para limpar filtros
             if st.button("🔄 Limpar Filtros", use_container_width=True):
                 st.session_state["filter_years"] = default_anos
                 st.session_state["filter_months"] = default_meses if default_meses else meses_opcoes
-                st.session_state["filter_methods"] = payment_methods
                 st.rerun()
             
             # Aplicar filtros
@@ -329,18 +321,6 @@ def main():
             if selected_meses:
                 df_filtered = df_filtered[df_filtered['Mês'].isin(selected_meses)]
             
-            # Exportar dados filtrados
-            if not df_filtered.empty:
-                st.markdown("---")
-                st.subheader("📤 Exportar Dados")
-                csv = convert_df_to_csv(df_filtered)
-                st.download_button(
-                    label="📥 Baixar como CSV",
-                    data=csv,
-                    file_name=f"vendas_{'_'.join(str(a) for a in selected_anos)}_{'-'.join(str(m) for m in selected_meses)}.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
         else:
             st.info("Não há dados disponíveis para filtrar.")
             df_filtered = pd.DataFrame()
@@ -356,51 +336,21 @@ def main():
             with st.container(border=True):
                 st.subheader("🧾 Dados Filtrados")
                 
-                # Adicionar botões para alternar entre tabela e cartões
-                view_type = st.radio(
-                    "Visualização:",
-                    ["Tabela", "Cartões"],
-                    horizontal=True,
-                    key="view_type"
+                # Mostrar como tabela
+                st.dataframe(
+                    df_filtered[['DataFormatada', 'Cartão', 'Dinheiro', 'Pix', 'Total', 'DiaSemana']], 
+                    use_container_width=True,
+                    height=300,
+                    column_config={
+                        "DataFormatada": st.column_config.TextColumn("Data"),
+                        "Cartão": st.column_config.NumberColumn("Cartão (R$)", format="R$ %.2f"),
+                        "Dinheiro": st.column_config.NumberColumn("Dinheiro (R$)", format="R$ %.2f"),
+                        "Pix": st.column_config.NumberColumn("PIX (R$)", format="R$ %.2f"),
+                        "Total": st.column_config.NumberColumn("Total (R$)", format="R$ %.2f"),
+                        "DiaSemana": st.column_config.TextColumn("Dia da Semana")
+                    },
+                    hide_index=True
                 )
-                
-                if view_type == "Tabela":
-                    # Mostrar como tabela
-                    st.dataframe(
-                        df_filtered[['DataFormatada', 'Cartão', 'Dinheiro', 'Pix', 'Total', 'DiaSemana']], 
-                        use_container_width=True,
-                        height=300,
-                        column_config={
-                            "DataFormatada": st.column_config.TextColumn("Data"),
-                            "Cartão": st.column_config.NumberColumn("Cartão (R$)", format="R$ %.2f"),
-                            "Dinheiro": st.column_config.NumberColumn("Dinheiro (R$)", format="R$ %.2f"),
-                            "Pix": st.column_config.NumberColumn("PIX (R$)", format="R$ %.2f"),
-                            "Total": st.column_config.NumberColumn("Total (R$)", format="R$ %.2f"),
-                            "DiaSemana": st.column_config.TextColumn("Dia da Semana")
-                        },
-                        hide_index=True
-                    )
-                else:
-                    # Mostrar como cartões
-                    num_cards_to_show = min(10, len(df_filtered))
-                    for i in range(0, num_cards_to_show, 3):
-                        cols = st.columns(3)
-                        for j in range(3):
-                            if i+j < num_cards_to_show:
-                                venda = df_filtered.iloc[i+j]
-                                with cols[j]:
-                                    st.markdown(f"""
-                                    <div style='background-color:white; padding:15px; border-radius:10px; box-shadow:0 2px 5px rgba(0,0,0,0.1); height:200px;'>
-                                        <h4 style='color:#1E3A8A; margin-top:0;'>{venda['DataFormatada']} ({venda['DiaSemana']})</h4>
-                                        <p><b>Cartão:</b> R$ {venda['Cartão']:.2f}</p>
-                                        <p><b>Dinheiro:</b> R$ {venda['Dinheiro']:.2f}</p>
-                                        <p><b>PIX:</b> R$ {venda['Pix']:.2f}</p>
-                                        <h3 style='color:#1E3A8A; text-align:right;'>R$ {venda['Total']:.2f}</h3>
-                                    </div>
-                                    """, unsafe_allow_html=True)
-                    
-                    if num_cards_to_show < len(df_filtered):
-                        st.info(f"Mostrando {num_cards_to_show} de {len(df_filtered)} vendas. Use a visualização em tabela para ver todas.")
             
             # Resumo dos dados
             kpis = create_kpi_metrics(df_filtered)
@@ -433,133 +383,6 @@ def main():
                     "Maior Venda", 
                     f"R$ {kpis['maior_venda']:,.2f}"
                 )
-            
-            # Gráficos
-            st.markdown("---")
-            
-            # Distribuição por Método de Pagamento
-            with st.container(border=True):
-                st.subheader("💳 Distribuição por Método de Pagamento")
-                
-                payment_data = pd.DataFrame({
-                    'Método': ['Cartão', 'Dinheiro', 'PIX'],
-                    'Valor': [
-                        df_filtered['Cartão'].sum(), 
-                        df_filtered['Dinheiro'].sum(), 
-                        df_filtered['Pix'].sum()
-                    ]
-                })
-                
-                # Adicionar porcentagem
-                total_pagamentos = payment_data['Valor'].sum()
-                if total_pagamentos > 0:
-                    payment_data['Porcentagem'] = payment_data['Valor'] / total_pagamentos * 100
-                    
-                    # Mostrar valores e porcentagens em texto
-                    payment_cols = st.columns(3)
-                    for i, metodo in enumerate(['Cartão', 'Dinheiro', 'PIX']):
-                        valor = payment_data[payment_data['Método'] == metodo]['Valor'].values[0]
-                        pct = payment_data[payment_data['Método'] == metodo]['Porcentagem'].values[0]
-                        
-                        icone = "💳" if metodo == "Cartão" else "💵" if metodo == "Dinheiro" else "📱"
-                        
-                        payment_cols[i].markdown(f"""
-                        <div style='background-color:white; padding:15px; border-radius:10px; box-shadow:0 2px 5px rgba(0,0,0,0.1); text-align:center;'>
-                            <h3 style='margin:0;'>{icone} {metodo}</h3>
-                            <h2 style='margin:10px 0;'>R$ {valor:,.2f}</h2>
-                            <p style='margin:0; color:#666;'>{pct:.1f}% do total</p>
-                        </div>
-                        """, unsafe_allow_html=True)
-            
-            # Vendas Diárias
-            with st.container(border=True):
-                st.subheader("📆 Vendas Diárias por Método de Pagamento")
-                
-                if 'DataFormatada' in df_filtered.columns:
-                    # Preparar dados para o gráfico
-                    daily_data = df_filtered.melt(
-                        id_vars=['DataFormatada', 'Data'], 
-                        value_vars=['Cartão', 'Dinheiro', 'Pix'],
-                        var_name='Método', 
-                        value_name='Valor'
-                    )
-                    
-                    # Filtrar apenas valores positivos
-                    daily_data = daily_data[daily_data['Valor'] > 0]
-                    
-                    # Gráfico de barras empilhadas
-                    bar_chart = alt.Chart(daily_data).mark_bar().encode(
-                        x=alt.X('DataFormatada:N', 
-                              title='Data', 
-                              sort=alt.EncodingSortField(field="Data", order='ascending'),
-                              axis=alt.Axis(labelAngle=-45)),
-                        y=alt.Y('Valor:Q', 
-                              title='Valor (R$)',
-                              stack='zero'),
-                        color=alt.Color('Método:N', 
-                                      legend=alt.Legend(title="Método de Pagamento"),
-                                      scale=alt.Scale(domain=['Cartão', 'Dinheiro', 'Pix'],
-                                                    range=['#4285F4', '#34A853', '#FBBC05'])),
-                        tooltip=[
-                            alt.Tooltip('DataFormatada:N', title='Data'),
-                            alt.Tooltip('Método:N', title='Método'),
-                            alt.Tooltip('Valor:Q', title='Valor', format='R$ ,.2f')
-                        ]
-                    ).properties(
-                        height=400
-                    )
-                    
-                    # Adicionar linha com total diário
-                    daily_totals = df_filtered.groupby('DataFormatada')['Total'].sum().reset_index()
-                    
-                    line_chart = alt.Chart(daily_totals).mark_line(
-                        color='red',
-                        strokeWidth=3,
-                        point=alt.OverlayMarkDef(color="red", size=80)
-                    ).encode(
-                        x=alt.X('DataFormatada:N', title='Data'),
-                        y=alt.Y('Total:Q', title='Total (R$)'),
-                        tooltip=[
-                            alt.Tooltip('DataFormatada:N', title='Data'),
-                            alt.Tooltip('Total:Q', title='Total', format='R$ ,.2f')
-                        ]
-                    )
-                    
-                    # Combinar gráficos
-                    st.altair_chart(bar_chart + line_chart, use_container_width=True)
-                    
-                    # Estatísticas de vendas diárias
-                    daily_stats_cols = st.columns(3)
-                    
-                    with daily_stats_cols[0]:
-                        max_day = daily_totals.loc[daily_totals['Total'].idxmax()]
-                        st.markdown(f"""
-                        <div style='background-color:#f0f8ff; padding:15px; border-radius:10px; text-align:center;'>
-                            <h4 style='margin:0;'>⭐ Melhor Dia</h4>
-                            <h3 style='margin:5px 0;'>{max_day['DataFormatada']}</h3>
-                            <h2 style='margin:0;'>R$ {max_day['Total']:,.2f}</h2>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    
-                    with daily_stats_cols[1]:
-                        min_day = daily_totals.loc[daily_totals['Total'].idxmin()]
-                        st.markdown(f"""
-                        <div style='background-color:#fff0f0; padding:15px; border-radius:10px; text-align:center;'>
-                            <h4 style='margin:0;'>📉 Pior Dia</h4>
-                            <h3 style='margin:5px 0;'>{min_day['DataFormatada']}</h3>
-                            <h2 style='margin:0;'>R$ {min_day['Total']:,.2f}</h2>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    
-                    with daily_stats_cols[2]:
-                        avg_daily = daily_totals['Total'].mean()
-                        st.markdown(f"""
-                        <div style='background-color:#f0fff0; padding:15px; border-radius:10px; text-align:center;'>
-                            <h4 style='margin:0;'>📊 Média Diária</h4>
-                            <h3 style='margin:5px 0;'>&nbsp;</h3>
-                            <h2 style='margin:0;'>R$ {avg_daily:,.2f}</h2>
-                        </div>
-                        """, unsafe_allow_html=True)
             
             # Acúmulo de Capital
             with st.container(border=True):
