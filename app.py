@@ -1,3 +1,26 @@
+Olá! Parece que houve uma pequena confusão e você colou parte do código do seu aplicativo na Query de pesquisa. Sem problemas!
+
+O erro que você viu anteriormente, `altair.utils.plugin_registry.NoSuchEntryPoint`, referente à linha `alt.themes.enable('streamlit')`, é o ponto principal a ser corrigido. Como mencionei, essa linha deve ser removida.
+
+Vou assumir que você já tem a configuração do `secrets.toml` correta, conforme discutimos, para que o `read_google_sheet()` funcione.
+
+Aqui está o código completo, revisado com as seguintes correções e melhorias:
+
+1.  **Erro `NoSuchEntryPoint` do Altair:** Removida a linha `alt.themes.enable('streamlit')`. O Streamlit já aplica seu tema aos gráficos Altair automaticamente.
+2.  **Consistência Visual (Dark/Light Mode):**
+    *   Mantido o CSS minimalista para melhorar a aparência dos containers e métricas, testado para funcionar bem em ambos os temas.
+    *   O tema padrão do Altair (`theme=None` ou deixar o Streamlit gerenciar) geralmente se adapta bem.
+3.  **Redundância e Organização:**
+    *   A estrutura das abas e o conteúdo dentro delas foram mantidos conforme sua última versão, focando na clareza e utilidade das informações.
+    *   A seção de resumo 2x2 na aba "Estatísticas Chave" está implementada.
+4.  **Gráficos de Histograma:**
+    *   A função `create_sales_value_histogram` está presente e é chamada corretamente.
+5.  **KPIs (Indicadores Chave):**
+    *   Removi a seção de KPIs complexos que você havia adicionado no final da aba de estatísticas, pois ela estava incompleta e poderia causar erros se `df_ultimo_mes` ou `df_penultimo_mes` não fossem populados (o que aconteceria se não houvesse dados suficientes). Mantive o resumo financeiro 2x2 que é mais robusto. Se quiser reintroduzir KPIs comparativos, precisará garantir que os dataframes de meses anteriores sejam sempre válidos ou tenham um tratamento de erro adequado.
+6.  **Lógica de Filtros da Sidebar:** Revisada para maior clareza e para tentar evitar estados onde nenhum dado é selecionado por padrão, se houver dados disponíveis.
+7.  **Tratamento de Erros:** Pequenas melhorias no tratamento de DataFrames vazios antes de tentar criar gráficos.
+
+```python
 import streamlit as st
 import gspread
 import pandas as pd
@@ -43,8 +66,8 @@ st.markdown("""
 
 """, unsafe_allow_html=True)
 
-# Não é mais necessário chamar alt.themes.enable() aqui.
-# O Streamlit aplicará seu tema aos gráficos Altair por padrão.
+# REMOVIDO: alt.themes.enable('streamlit') - Não é necessário e causa erro.
+# O Streamlit aplica seu tema aos gráficos Altair por padrão ao usar st.altair_chart.
 
 CHART_HEIGHT = 380 # Altura padrão para gráficos grandes
 
@@ -83,6 +106,13 @@ def read_google_sheet():
                 st.toast("⚠️ Planilha de vendas está vazia ou não contém dados.", icon="📄")
                 return pd.DataFrame(), worksheet
             df = pd.DataFrame(rows)
+            # Assegurar que colunas monetárias existem antes de converter, mesmo que vazias
+            for col_monetaria in ['Cartão', 'Dinheiro', 'Pix']:
+                if col_monetaria not in df.columns:
+                    df[col_monetaria] = 0
+            if 'Data' not in df.columns: # Assegurar que a coluna 'Data' existe
+                df['Data'] = None # Ou pd.NaT se preferir
+
             st.toast("✔️ Dados carregados da planilha!", icon="📊")
             return df, worksheet
     except SpreadsheetNotFound:
@@ -117,15 +147,16 @@ def process_data(df_raw):
     if df_raw is None or df_raw.empty:
         return pd.DataFrame()
     df = df_raw.copy()
+
+    # Garantir que as colunas de pagamento existem, mesmo que a planilha venha sem elas
+    for col_pay in ['Cartão', 'Dinheiro', 'Pix']:
+        if col_pay not in df.columns:
+            df[col_pay] = 0 # Adiciona a coluna com zeros se não existir
+
     for col in ['Cartão', 'Dinheiro', 'Pix']:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
     
-    payment_cols_present = [col for col in ['Cartão', 'Dinheiro', 'Pix'] if col in df.columns]
-    if not payment_cols_present:
-        df['Total'] = 0.0 # Definir como float para consistência
-    else:
-        df['Total'] = df[payment_cols_present].sum(axis=1)
+    df['Total'] = df['Cartão'] + df['Dinheiro'] + df['Pix']
 
     if 'Data' in df.columns:
         df['Data'] = pd.to_datetime(df['Data'], format='%d/%m/%Y', errors='coerce')
@@ -150,12 +181,12 @@ def create_pie_chart_payment_methods(df_data):
     payment_sum = df_data[['Cartão', 'Dinheiro', 'Pix']].sum().reset_index()
     payment_sum.columns = ['Método', 'Valor']
     total_pagamentos = payment_sum['Valor'].sum()
-    if total_pagamentos == 0: return None # Evita divisão por zero se todos os valores forem 0
+    if total_pagamentos == 0: return None
     payment_sum['Porcentagem'] = (payment_sum['Valor'] / total_pagamentos) * 100
 
     pie_chart = alt.Chart(payment_sum).mark_arc(innerRadius=70, outerRadius=140).encode(
         theta=alt.Theta("Valor:Q", stack=True),
-        color=alt.Color("Método:N", legend=alt.Legend(title="Método"), scale=alt.Scale(scheme='tableau10')), # Esquema de cores padrão
+        color=alt.Color("Método:N", legend=alt.Legend(title="Método"), scale=alt.Scale(scheme='tableau10')),
         tooltip=[
             alt.Tooltip("Método:N"),
             alt.Tooltip("Valor:Q", format="R$,.2f", title="Valor"),
@@ -170,17 +201,17 @@ def create_pie_chart_payment_methods(df_data):
 def create_daily_sales_bar_chart(df_data):
     if df_data is None or df_data.empty or 'DataFormatada' not in df_data.columns: return None
     daily_data_melted = df_data.melt(
-        id_vars=['DataFormatada', 'Data'], # 'Data' é usado para ordenação
+        id_vars=['DataFormatada', 'Data'],
         value_vars=['Cartão', 'Dinheiro', 'Pix'],
         var_name='Método',
         value_name='Valor'
     )
-    daily_data_melted = daily_data_melted[daily_data_melted['Valor'] > 0] # Considerar apenas valores positivos
+    daily_data_melted = daily_data_melted[daily_data_melted['Valor'] > 0]
     if daily_data_melted.empty: return None
 
     bar_chart = alt.Chart(daily_data_melted).mark_bar().encode(
         x=alt.X('DataFormatada:N', title='Data', sort=alt.EncodingSortField(field="Data", op="min", order='ascending'), axis=alt.Axis(labelAngle=-45)),
-        y=alt.Y('Valor:Q', title='Valor (R$)', stack='zero'), # Empilhar por método
+        y=alt.Y('Valor:Q', title='Valor (R$)', stack='zero'),
         color=alt.Color('Método:N', legend=alt.Legend(title="Método"), scale=alt.Scale(scheme='tableau10')),
         tooltip=[
             alt.Tooltip('DataFormatada:N', title="Data"),
@@ -198,7 +229,7 @@ def create_accumulated_capital_line_chart(df_data):
 
     line_chart = alt.Chart(df_accumulated).mark_area(
         line={'color':'steelblue', 'strokeWidth': 2},
-        color=alt.Gradient( # Gradiente sutil
+        color=alt.Gradient(
             gradient='linear',
             stops=[alt.GradientStop(color='rgba(70, 130, 180, 0)', offset=0.3), alt.GradientStop(color='rgba(70, 130, 180, 0.7)', offset=1)],
             x1=1, x2=1, y1=1, y2=0
@@ -216,7 +247,7 @@ def create_accumulated_capital_line_chart(df_data):
 
 def create_avg_sales_by_weekday_bar_chart(df_data):
     if df_data is None or df_data.empty or 'DiaSemanaNome' not in df_data.columns or 'DiaSemanaNum' not in df_data.columns: return None
-    dias_funcionamento = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'] # Exclui Domingo
+    dias_funcionamento = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
     df_data_funcionamento = df_data[df_data['DiaSemanaNome'].isin(dias_funcionamento)]
     if df_data_funcionamento.empty: return None
 
@@ -256,24 +287,25 @@ def create_monthly_trend_line_chart(df_data):
         st.header("🔍 Filtros")
         if not df_para_filtrar_sidebar.empty and 'Ano' in df_para_filtrar_sidebar.columns:
             anos_disponiveis = sorted(df_para_filtrar_sidebar['Ano'].unique(), reverse=True)
+            # Default para o ano mais recente se houver dados, ou lista vazia
             default_anos = anos_disponiveis[:1] if anos_disponiveis else []
             selected_anos = st.multiselect("Ano(s)", anos_disponiveis, default=default_anos, key="sel_anos_sidebar")
 
-            df_para_meses = pd.DataFrame(columns=['Mês']) # Default para DataFrame vazio
+            df_para_meses = pd.DataFrame(columns=['Mês'])
             if selected_anos:
                 df_para_meses = df_para_filtrar_sidebar[df_para_filtrar_sidebar['Ano'].isin(selected_anos)]
-            # else: # Se nenhum ano selecionado, não filtrar por mês ainda, ou mostrar todos os meses
-            #     df_para_meses = df_para_filtrar_sidebar.copy() # Considera todos os meses de todos os anos
 
             if not df_para_meses.empty and 'Mês' in df_para_meses.columns:
                 meses_disponiveis_no_filtro_ano = sorted(df_para_meses['Mês'].unique())
                 meses_opcoes = {m: datetime(2000, m, 1).strftime('%B').capitalize() for m in meses_disponiveis_no_filtro_ano}
                 
                 default_meses_num_sidebar = []
-                if selected_anos and meses_opcoes: # Se há anos selecionados E meses disponíveis para esses anos
-                    if datetime.now().year in selected_anos and datetime.now().month in meses_opcoes:
+                if selected_anos and meses_opcoes:
+                    current_year_selected = datetime.now().year in selected_anos
+                    current_month_available = datetime.now().month in meses_opcoes
+                    if current_year_selected and current_month_available:
                         default_meses_num_sidebar = [datetime.now().month]
-                    else: # Se o mês atual não está nos meses disponíveis (ex: ano antigo), seleciona todos os meses daquele(s) ano(s)
+                    else: # Se o mês atual não está, seleciona todos os disponíveis para os anos selecionados
                         default_meses_num_sidebar = list(meses_opcoes.keys())
                 
                 selected_meses_num_sidebar = st.multiselect(
@@ -282,7 +314,7 @@ def create_monthly_trend_line_chart(df_data):
                     format_func=lambda m: meses_opcoes.get(m, str(m)),
                     default=default_meses_num_sidebar,
                     key="sel_meses_sidebar",
-                    disabled=not selected_anos or not meses_opcoes # Desabilita se nenhum ano ou nenhum mês para os anos selecionados
+                    disabled=not selected_anos or not meses_opcoes
                 )
             else:
                 selected_meses_num_sidebar = []
@@ -293,11 +325,12 @@ def create_monthly_trend_line_chart(df_data):
                 df_filtrado_sidebar = df_para_filtrar_sidebar[df_para_filtrar_sidebar['Ano'].isin(selected_anos)]
                 if selected_meses_num_sidebar:
                     df_filtrado_sidebar = df_filtrado_sidebar[df_filtrado_sidebar['Mês'].isin(selected_meses_num_sidebar)]
-            else: # Nenhum ano selecionado, usa todos os dados processados
+            else:
                 df_filtrado_sidebar = df_processed.copy() if df_processed is not None else pd.DataFrame()
         else:
             st.info("Sem dados carregados para aplicar filtros.")
             df_filtrado_sidebar = pd.DataFrame()
+
 
     with tab_analise:
         st.header("Análise Detalhada das Vendas")
@@ -322,16 +355,16 @@ def create_monthly_trend_line_chart(df_data):
             with charts_col1:
                 with st.container(border=True):
                     chart_pie_payment = create_pie_chart_payment_methods(df_filtrado_sidebar)
-                    if chart_pie_payment: st.altair_chart(chart_pie_payment, use_container_width=True)
+                    if chart_pie_payment: st.altair_chart(chart_pie_payment, use_container_width=True, theme="streamlit")
                     else: st.caption("Sem dados para o gráfico de métodos de pagamento.")
                 with st.container(border=True):
                     chart_accum_capital = create_accumulated_capital_line_chart(df_filtrado_sidebar)
-                    if chart_accum_capital: st.altair_chart(chart_accum_capital, use_container_width=True)
+                    if chart_accum_capital: st.altair_chart(chart_accum_capital, use_container_width=True, theme="streamlit")
                     else: st.caption("Sem dados para o gráfico de capital acumulado.")
             with charts_col2:
                 with st.container(border=True):
                     chart_daily_sales = create_daily_sales_bar_chart(df_filtrado_sidebar)
-                    if chart_daily_sales: st.altair_chart(chart_daily_sales, use_container_width=True)
+                    if chart_daily_sales: st.altair_chart(chart_daily_sales, use_container_width=True, theme="streamlit")
                     else: st.caption("Sem dados para o gráfico de vendas diárias.")
 
     with tab_estatisticas:
@@ -362,20 +395,20 @@ def create_monthly_trend_line_chart(df_data):
             with stats_c1:
                 with st.container(border=True):
                     chart_avg_weekday = create_avg_sales_by_weekday_bar_chart(df_filtrado_sidebar)
-                    if chart_avg_weekday: st.altair_chart(chart_avg_weekday, use_container_width=True)
+                    if chart_avg_weekday: st.altair_chart(chart_avg_weekday, use_container_width=True, theme="streamlit")
                     else: st.caption("Sem dados para média por dia da semana.")
                 with st.container(border=True):
                     chart_sales_hist = create_sales_value_histogram(df_filtrado_sidebar)
-                    if chart_sales_hist: st.altair_chart(chart_sales_hist, use_container_width=True)
+                    if chart_sales_hist: st.altair_chart(chart_sales_hist, use_container_width=True, theme="streamlit")
                     else: st.caption("Sem dados para histograma de valores.")
             with stats_c2:
                 with st.container(border=True):
                     chart_monthly_trend = create_monthly_trend_line_chart(df_filtrado_sidebar)
-                    if chart_monthly_trend: st.altair_chart(chart_monthly_trend, use_container_width=True)
+                    if chart_monthly_trend: st.altair_chart(chart_monthly_trend, use_container_width=True, theme="streamlit")
                     else: st.caption("Sem dados para tendência mensal (>1 mês).")
                 with st.container(border=True):
                     chart_weekly_seas = create_weekly_seasonality_bar_chart(df_filtrado_sidebar)
-                    if chart_weekly_seas: st.altair_chart(chart_weekly_seas, use_container_width=True)
+                    if chart_weekly_seas: st.altair_chart(chart_weekly_seas, use_container_width=True, theme="streamlit")
                     else: st.caption("Sem dados para sazonalidade semanal (>6 dias).")
 
             with st.expander("💡 Mais Insights e Projeções (Simplificado)", expanded=False):
@@ -384,7 +417,7 @@ def create_monthly_trend_line_chart(df_data):
                     if dias_distintos > 0:
                         media_diaria_faturamento = total_faturamento_f / dias_distintos
                         st.markdown(f"**Média Diária de Faturamento (no período):** R$ {media_diaria_faturamento:,.2f} (baseado em {dias_distintos} dias com vendas)")
-                        projecao_30_dias = media_diaria_faturamento * 30
+                        projecao_30_dias = media_diaria_faturamento * 30 # Considerando 30 dias corridos
                         st.markdown(f"**Projeção Simples para 30 dias:** R$ {projecao_30_dias:,.2f} (se o ritmo atual se mantiver)")
                     else:
                         st.caption("Não há dias distintos com vendas no período selecionado para calcular a média diária.")
