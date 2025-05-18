@@ -18,7 +18,7 @@ st.set_page_config(
 
 # CSS Minimalista para melhorias sutis e compatibilidade com tema escuro
 st.markdown("""
-<style>
+
     /* Melhora a aparência dos containers com borda */
     div[data-testid="stVerticalBlock"] > [data-testid="stVerticalBlock"] > [data-testid="stVerticalBlock"] > div[style*="border"] {
         border-radius: 10px;
@@ -41,7 +41,7 @@ st.markdown("""
         box-shadow: none;
         padding: 0;
     }
-</style>
+
 """, unsafe_allow_html=True)
 
 # Habilitar tema para gráficos Altair que funciona bem em ambos os modos
@@ -58,6 +58,7 @@ def read_google_sheet():
                  'https://www.googleapis.com/auth/spreadsheets.readonly',
                  'https://www.googleapis.com/auth/drive.readonly']
 
+        # Carregar credenciais e detalhes da planilha dos segredos do Streamlit
         credentials_dict = {
             "type": st.secrets["google_credentials"]["type"],
             "project_id": st.secrets["google_credentials"]["project_id"],
@@ -73,23 +74,24 @@ def read_google_sheet():
         creds = Credentials.from_service_account_info(credentials_dict, scopes=SCOPES)
         gc = gspread.authorize(creds)
 
+        # Esta é a parte que está causando o erro se "google_sheets" não estiver definido nos segredos
         spreadsheet_id = st.secrets["google_sheets"]["spreadsheet_id"]
         worksheet_name = st.secrets["google_sheets"]["worksheet_name"]
 
         with st.spinner("🔄 Conectando à planilha e carregando dados..."):
             spreadsheet = gc.open_by_key(spreadsheet_id)
             worksheet = spreadsheet.worksheet(worksheet_name)
-            rows = worksheet.get_all_records()
-            if not rows:
-                st.toast("⚠️ Planilha de vendas está vazia.", icon="📄")
-                return pd.DataFrame(), worksheet
+            rows = worksheet.get_all_records() # get_all_records() retorna uma lista de dicionários
+            if not rows: # Verifica se a lista de registros está vazia
+                st.toast("⚠️ Planilha de vendas está vazia ou não contém dados.", icon="📄")
+                return pd.DataFrame(), worksheet # Retorna DataFrame vazio mas com objeto worksheet
             df = pd.DataFrame(rows)
             st.toast("✔️ Dados carregados da planilha!", icon="📊")
             return df, worksheet
     except SpreadsheetNotFound:
         st.error(f"❌ Planilha com ID '{spreadsheet_id}' ou aba '{worksheet_name}' não encontrada. Verifique os valores em secrets.toml e as permissões.")
         return pd.DataFrame(), None
-    except KeyError as e:
+    except KeyError as e: # Este erro será lançado se "google_credentials" ou "google_sheets" não existirem, ou suas subchaves.
         st.error(f"❌ Erro ao carregar segredos: A chave '{e}' não foi encontrada. Verifique seu arquivo secrets.toml.")
         st.error("Estrutura esperada no secrets.toml: [google_credentials] com todos os campos do JSON, e [google_sheets] com spreadsheet_id e worksheet_name.")
         return pd.DataFrame(), None
@@ -115,13 +117,20 @@ def add_data_to_sheet(date_str, cartao, dinheiro, pix, worksheet_obj):
 @st.cache_data(ttl=300)
 def process_data(df_raw):
     """Função para processar e preparar os dados"""
-    if df_raw.empty:
+    if df_raw is None or df_raw.empty: # Adicionada checagem para None
         return pd.DataFrame()
     df = df_raw.copy()
     for col in ['Cartão', 'Dinheiro', 'Pix']:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-    df['Total'] = df['Cartão'] + df['Dinheiro'] + df['Pix']
+    
+    # Garante que as colunas de pagamento existam antes de somar
+    payment_cols_present = [col for col in ['Cartão', 'Dinheiro', 'Pix'] if col in df.columns]
+    if not payment_cols_present: # Se nenhuma coluna de pagamento existir, Total é 0
+        df['Total'] = 0
+    else:
+        df['Total'] = df[payment_cols_present].sum(axis=1)
+
 
     if 'Data' in df.columns:
         df['Data'] = pd.to_datetime(df['Data'], format='%d/%m/%Y', errors='coerce')
@@ -136,12 +145,12 @@ def process_data(df_raw):
             df['DiaSemanaNome'] = df['Data'].dt.day_name().map({
                 'Monday': 'Segunda', 'Tuesday': 'Terça', 'Wednesday': 'Quarta',
                 'Thursday': 'Quinta', 'Friday': 'Sexta', 'Saturday': 'Sábado', 'Sunday': 'Domingo'
-            })
+            }).fillna('Desconhecido') # Adiciona fillna para caso haja algum dia não mapeado
     return df
 
 # --- Funções de Gráficos ---
 def create_pie_chart_payment_methods(df_data):
-    if df_data.empty or not all(col in df_data.columns for col in ['Cartão', 'Dinheiro', 'Pix']):
+    if df_data is None or df_data.empty or not all(col in df_data.columns for col in ['Cartão', 'Dinheiro', 'Pix']):
         return None
     payment_sum = df_data[['Cartão', 'Dinheiro', 'Pix']].sum().reset_index()
     payment_sum.columns = ['Método', 'Valor']
@@ -165,7 +174,7 @@ def create_pie_chart_payment_methods(df_data):
     return pie_chart + text_values
 
 def create_daily_sales_bar_chart(df_data):
-    if df_data.empty or 'DataFormatada' not in df_data.columns: return None
+    if df_data is None or df_data.empty or 'DataFormatada' not in df_data.columns: return None
     daily_data_melted = df_data.melt(
         id_vars=['DataFormatada', 'Data'],
         value_vars=['Cartão', 'Dinheiro', 'Pix'],
@@ -177,18 +186,18 @@ def create_daily_sales_bar_chart(df_data):
 
     bar_chart = alt.Chart(daily_data_melted).mark_bar().encode(
         x=alt.X('DataFormatada:N', title='Data', sort=alt.EncodingSortField(field="Data", op="min", order='ascending'), axis=alt.Axis(labelAngle=-45)),
-        y=alt.Y('Valor:Q', title='Valor (R$)', stack='zero'), # Empilha os valores para cada dia
+        y=alt.Y('Valor:Q', title='Valor (R$)', stack='zero'),
         color=alt.Color('Método:N', legend=alt.Legend(title="Método"), scale=alt.Scale(scheme='tableau10')),
         tooltip=[
             alt.Tooltip('DataFormatada:N', title="Data"),
             alt.Tooltip('Método:N'),
-            alt.Tooltip('Valor:Q', format='R$,.2f', title="Valor do Segmento")
+            alt.Tooltip('Valor:Q', format='R$,.2f', title="Valor do Segmento") # Alterado para Valor
         ]
     ).properties(height=CHART_HEIGHT, title=alt.TitleParams(text="Vendas Diárias por Método", fontSize=16, dy=-10, anchor='middle'))
     return bar_chart
 
 def create_accumulated_capital_line_chart(df_data):
-    if df_data.empty or 'Data' not in df_data.columns or 'Total' not in df_data.columns: return None
+    if df_data is None or df_data.empty or 'Data' not in df_data.columns or 'Total' not in df_data.columns: return None
     df_accumulated = df_data.sort_values('Data').copy()
     if df_accumulated.empty: return None
     df_accumulated['Total Acumulado'] = df_accumulated['Total'].cumsum()
@@ -197,7 +206,7 @@ def create_accumulated_capital_line_chart(df_data):
         line={'color':'steelblue', 'strokeWidth': 2},
         color=alt.Gradient(
             gradient='linear',
-            stops=[alt.GradientStop(color='white', offset=0.3), alt.GradientStop(color='steelblue', offset=1)], # Ajuste no gradiente para modo escuro
+            stops=[alt.GradientStop(color='white', offset=0.3), alt.GradientStop(color='steelblue', offset=1)],
             x1=1, x2=1, y1=1, y2=0
         )
     ).encode(
@@ -212,7 +221,7 @@ def create_accumulated_capital_line_chart(df_data):
     return line_chart
 
 def create_avg_sales_by_weekday_bar_chart(df_data):
-    if df_data.empty or 'DiaSemanaNome' not in df_data.columns or 'DiaSemanaNum' not in df_data.columns: return None
+    if df_data is None or df_data.empty or 'DiaSemanaNome' not in df_data.columns or 'DiaSemanaNum' not in df_data.columns: return None
     dias_funcionamento = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
     df_data_funcionamento = df_data[df_data['DiaSemanaNome'].isin(dias_funcionamento)]
     if df_data_funcionamento.empty: return None
@@ -229,93 +238,21 @@ def create_avg_sales_by_weekday_bar_chart(df_data):
     return bar_chart + text_on_bars
 
 def create_monthly_trend_line_chart(df_data):
-    if df_data.empty or 'AnoMês' not in df_data.columns or df_data['AnoMês'].nunique() <= 1: return None
-    vendas_mensais = df_data.groupby('AnoMês')['Total'].sum().reset_index()
-    vendas_mensais['Variação %'] = vendas_mensais['Total'].pct_change() * 100
-
-    line_chart = alt.Chart(vendas_mensais).mark_line(point=alt.OverlayMarkDef(color="firebrick", size=50, filled=True), strokeWidth=3).encode(
-        x=alt.X('AnoMês:N', title='Mês', sort='ascending'),
-        y=alt.Y('Total:Q', title='Total de Vendas (R$)'),
-        tooltip=[
-            alt.Tooltip('AnoMês:N', title="Mês"),
-            alt.Tooltip('Total:Q', format='R$,.2f', title="Faturamento"),
-            alt.Tooltip('Variação %:Q', format='+.1f', title="Variação MoM (%)")
-        ]
-    ).properties(height=CHART_HEIGHT, title=alt.TitleParams(text="Tendência Mensal de Faturamento", fontSize=16, dy=-10, anchor='middle'))
-    return line_chart
-
-def create_weekly_seasonality_bar_chart(df_data):
-    if df_data.empty or 'DiaSemanaNome' not in df_data.columns or 'DiaSemanaNum' not in df_data.columns or len(df_data) <=6: return None
-    dias_funcionamento = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
-    df_data_funcionamento = df_data[df_data['DiaSemanaNome'].isin(dias_funcionamento)]
-    if df_data_funcionamento.empty: return None
-
-    vendas_sum_dia_semana = df_data_funcionamento.groupby(['DiaSemanaNum', 'DiaSemanaNome'])['Total'].sum().reset_index()
-    total_periodo_saz = vendas_sum_dia_semana['Total'].sum()
-    if total_periodo_saz == 0: return None
-    vendas_sum_dia_semana['Porcentagem'] = (vendas_sum_dia_semana['Total'] / total_periodo_saz) * 100
-
-    bar_chart = alt.Chart(vendas_sum_dia_semana).mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3).encode(
-        x=alt.X('DiaSemanaNome:N', title='Dia da Semana', sort=alt.EncodingSortField(field="DiaSemanaNum", op="min", order='ascending')),
-        y=alt.Y('Porcentagem:Q', title='% do Volume Semanal'),
-        color=alt.Color('DiaSemanaNome:N', legend=None, scale=alt.Scale(scheme='tableau10')),
-        tooltip=[
-            alt.Tooltip('DiaSemanaNome:N', title="Dia"),
-            alt.Tooltip('Total:Q', format='R$,.2f', title="Total no Período"),
-            alt.Tooltip('Porcentagem:Q', format='.1f', title="% do Total")
-        ]
-    ).properties(height=CHART_HEIGHT, title=alt.TitleParams(text="Distribuição % de Vendas na Semana (Seg-Sáb)", fontSize=16, dy=-10, anchor='middle'))
-    text_on_bars = bar_chart.mark_text(dy=-10).encode(text=alt.Text('Porcentagem:Q', format=".0f") + "%")
-    return bar_chart + text_on_bars
-
-def create_sales_value_histogram(df_data):
-    if df_data.empty or 'Total' not in df_data.columns: return None
-    histogram = alt.Chart(df_data).mark_bar().encode(
-        alt.X('Total:Q', bin=alt.Bin(maxbins=20), title='Valor da Venda (R$)'),
-        alt.Y('count()', title='Frequência (Nº de Vendas)'),
-        tooltip=[
-            alt.Tooltip('count()', title="Nº de Vendas"),
-            alt.Tooltip('Total:Q', bin=True, title="Intervalo de Valor")
-        ]
-    ).properties(height=CHART_HEIGHT, title=alt.TitleParams(text="Distribuição dos Valores Totais de Venda", fontSize=16, dy=-10, anchor='middle'))
-    return histogram
-
-# --- Interface Principal ---
-def main():
-    st.title("🍔 Sistema de Vendas ClipsBurger")
-
-    df_raw, worksheet_obj = read_google_sheet()
-    df_processed = process_data(df_raw)
-
-    tab_registrar, tab_analise, tab_estatisticas = st.tabs([
-        "📝 Registrar Venda", "📈 Análise Detalhada", "📊 Estatísticas Chave"
-    ])
-
-    with tab_registrar:
-        st.header("Nova Venda")
-        with st.container(border=True):
-            with st.form("venda_form"):
-                data_venda = st.date_input("🗓️ Data da Venda", datetime.now(), key="data_venda_input")
-                c1, c2, c3 = st.columns(3)
-                cartao = c1.number_input("💳 Cartão (R$)", min_value=0.0, format="%.2f", key="cartao_input")
-                dinheiro = c2.number_input("💵 Dinheiro (R$)", min_value=0.0, format="%.2f", key="dinheiro_input")
-                pix = c3.number_input("📱 PIX (R$)", min_value=0.0, format="%.2f", key="pix_input")
-                total_venda_calculado = cartao + dinheiro + pix
-                st.markdown(f"<h3 style='text-align: center; margin-top:10px;'>Total: R$ {total_venda_calculado:,.2f}</h3>", unsafe_allow_html=True)
+    if df_data is None or df_data.empty or 'AnoMês' not in df_data.columns or df_data['AnoMês'].nunique() Total: R$ {total_venda_calculado:,.2f}", unsafe_allow_html=True)
 
                 submitted = st.form_submit_button("💾 Registrar Venda", use_container_width=True, type="primary")
                 if submitted:
                     if total_venda_calculado > 0:
                         formatted_date = data_venda.strftime('%d/%m/%Y')
                         if add_data_to_sheet(formatted_date, cartao, dinheiro, pix, worksheet_obj):
-                            st.cache_data.clear()
+                            st.cache_data.clear() # Limpa todos os caches @st.cache_data
                             st.rerun()
                     else:
                         st.warning("⚠️ O total da venda deve ser maior que zero.")
 
     # Filtros na Sidebar
-    df_para_filtrar_sidebar = df_processed.copy()
-    df_filtrado_sidebar = df_processed.copy() # Default para todos os dados
+    df_para_filtrar_sidebar = df_processed.copy() # Começa com todos os dados processados
+    df_filtrado_sidebar = df_processed.copy()   # DataFrame que será efetivamente usado após filtros
 
     with st.sidebar:
         st.header("🔍 Filtros")
@@ -324,43 +261,45 @@ def main():
             default_anos = anos_disponiveis[:1] if anos_disponiveis else []
             selected_anos = st.multiselect("Ano(s)", anos_disponiveis, default=default_anos, key="sel_anos_sidebar")
 
+            # Filtra o DataFrame para meses baseado nos anos selecionados
             if selected_anos:
-                df_filtrado_sidebar_anos = df_para_filtrar_sidebar[df_para_filtrar_sidebar['Ano'].isin(selected_anos)]
-            else: # Nenhum ano selecionado, considera todos os dados para seleção de mês
-                df_filtrado_sidebar_anos = df_para_filtrar_sidebar.copy()
+                df_para_meses = df_para_filtrar_sidebar[df_para_filtrar_sidebar['Ano'].isin(selected_anos)]
+            else: # Se nenhum ano selecionado, não há meses específicos para mostrar
+                df_para_meses = pd.DataFrame(columns=['Mês']) # DataFrame vazio para meses
 
-            if not df_filtrado_sidebar_anos.empty and 'Mês' in df_filtrado_sidebar_anos.columns:
-                meses_disponiveis_no_filtro_ano = sorted(df_filtrado_sidebar_anos['Mês'].unique())
+            if not df_para_meses.empty and 'Mês' in df_para_meses.columns:
+                meses_disponiveis_no_filtro_ano = sorted(df_para_meses['Mês'].unique())
                 meses_opcoes = {m: datetime(2000, m, 1).strftime('%B').capitalize() for m in meses_disponiveis_no_filtro_ano}
 
                 default_meses_num_sidebar = []
-                if selected_anos and (datetime.now().year in selected_anos) and (datetime.now().month in meses_opcoes):
+                # Tenta pré-selecionar o mês atual se o ano atual estiver entre os selecionados
+                if selected_anos and datetime.now().year in selected_anos and datetime.now().month in meses_opcoes:
                     default_meses_num_sidebar = [datetime.now().month]
-                elif meses_opcoes:
+                elif meses_opcoes : # Se não, seleciona todos os meses disponíveis para os anos selecionados
                      default_meses_num_sidebar = list(meses_opcoes.keys())
-
 
                 selected_meses_num_sidebar = st.multiselect(
                     "Mês(es)",
                     options=list(meses_opcoes.keys()),
-                    format_func=lambda m: meses_opcoes.get(m, str(m)),
+                    format_func=lambda m: meses_opcoes.get(m, str(m)), # Usa .get para evitar KeyError se m não estiver no map
                     default=default_meses_num_sidebar,
                     key="sel_meses_sidebar",
                     disabled=not selected_anos # Desabilita se nenhum ano for selecionado
                 )
-
-                if selected_anos: # Só aplica filtro de mês se um ano estiver selecionado
-                    if selected_meses_num_sidebar:
-                        df_filtrado_sidebar = df_filtrado_sidebar_anos[df_filtrado_sidebar_anos['Mês'].isin(selected_meses_num_sidebar)]
-                    else: # Anos selecionados, mas nenhum mês -> mostra todos os meses dos anos selecionados
-                        df_filtrado_sidebar = df_filtrado_sidebar_anos
-                # Se nenhum ano for selecionado, df_filtrado_sidebar já é df_para_filtrar_sidebar (todos os dados)
             else:
+                selected_meses_num_sidebar = [] # Garante que a variável exista
                 st.multiselect("Mês(es)", [], disabled=True, help="Selecione um ano com dados para habilitar meses.")
+
+            # Aplicar filtros ao df_filtrado_sidebar
+            if selected_anos:
+                df_filtrado_sidebar = df_para_filtrar_sidebar[df_para_filtrar_sidebar['Ano'].isin(selected_anos)]
+                if selected_meses_num_sidebar: # Se meses foram selecionados, refina o filtro
+                    df_filtrado_sidebar = df_filtrado_sidebar[df_filtrado_sidebar['Mês'].isin(selected_meses_num_sidebar)]
+            # Se nenhum ano selecionado, df_filtrado_sidebar mantém todos os dados (df_processed.copy())
+
         else:
             st.info("Sem dados para aplicar filtros.")
-            df_filtrado_sidebar = pd.DataFrame()
-
+            df_filtrado_sidebar = pd.DataFrame() # Garante que é um DataFrame vazio
 
     with tab_analise:
         st.header("Análise Detalhada das Vendas")
@@ -407,7 +346,7 @@ def main():
                 total_vendas_f = len(df_filtrado_sidebar)
                 total_faturamento_f = df_filtrado_sidebar['Total'].sum()
                 ticket_medio_f = total_faturamento_f / total_vendas_f if total_vendas_f > 0 else 0
-                maior_venda_f = df_filtrado_sidebar['Total'].max() if not df_filtrado_sidebar.empty else 0
+                maior_venda_f = df_filtrado_sidebar['Total'].max() if total_vendas_f > 0 else 0 # Corrigido aqui
 
                 col_resumo1, col_resumo2 = st.columns(2)
                 with col_resumo1:
@@ -442,8 +381,8 @@ def main():
                     else: st.caption("Sem dados para sazonalidade semanal (>6 dias).")
 
             with st.expander("💡 Mais Insights e Projeções (Simplificado)", expanded=False):
-                if not df_filtrado_sidebar.empty and 'Data' in df_filtrado_sidebar.columns:
-                    dias_distintos = df_filtrado_sidebar['Data'].nunique() # Calcula dias distintos do DataFrame filtrado
+                if not df_filtrado_sidebar.empty and 'Data' in df_filtrado_sidebar.columns: # Adicionada checagem para 'Data'
+                    dias_distintos = df_filtrado_sidebar['Data'].nunique()
                     media_diaria_faturamento = total_faturamento_f / dias_distintos if dias_distintos > 0 else 0
                     st.markdown(f"**Média Diária de Faturamento (no período):** R$ {media_diaria_faturamento:,.2f} (baseado em {dias_distintos} dias com vendas)")
                     projecao_30_dias = media_diaria_faturamento * 30
