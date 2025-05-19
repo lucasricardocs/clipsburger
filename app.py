@@ -21,10 +21,17 @@ except locale.Error:
     try:
         locale.setlocale(locale.LC_TIME, 'Portuguese_Brazil.1252')  # Alternativa para Windows
     except locale.Error:
-        st.warning("Locale pt_BR não encontrado. Nomes de meses/dias podem aparecer em inglês.")
+        try:
+            locale.setlocale(locale.LC_TIME, 'pt_BR.utf8')  # Outra alternativa comum
+        except locale.Error:
+            try:
+                locale.setlocale(locale.LC_TIME, 'C')  # Fallback para locale padrão
+            except locale.Error:
+                st.warning("Locale pt_BR não encontrado. Nomes de meses/dias podem aparecer em inglês.")
 
-# CSS específico para a seção de resumo
+# CSS específico para a seção de resumo - CORRIGIDO
 st.markdown("""
+    <style>
     /* Estilo para os containers da seção de resumo */
     .resume-kpi-container {
         border: 1px solid #4A4A4A;
@@ -137,6 +144,7 @@ st.markdown("""
         margin-top: 20px;
         box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     }
+    </style>
 """, unsafe_allow_html=True)
 
 CHART_HEIGHT = 380  # Altura padrão para gráficos grandes
@@ -379,12 +387,12 @@ def create_weekly_seasonality_bar_chart(df_data):
         return None
     
     vendas_total_dia = df_funcionamento.groupby(['DiaSemanaNum', 'DiaSemana'])['Total'].sum().reset_index()
-    total_vendas = vendas_total_dia['Total'].sum()
+    total_semanal_abs = vendas_total_dia['Total'].sum()
     
-    if total_vendas == 0:
+    if total_semanal_abs == 0:
         return None
         
-    vendas_total_dia['Porcentagem'] = (vendas_total_dia['Total'] / total_vendas) * 100
+    vendas_total_dia['Porcentagem'] = (vendas_total_dia['Total'] / total_semanal_abs) * 100
     
     bar_chart = alt.Chart(vendas_total_dia).mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3).encode(
         x=alt.X('DiaSemana:N', title='Dia da Semana', sort=alt.EncodingSortField(field="DiaSemanaNum", order='ascending')),
