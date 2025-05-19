@@ -13,7 +13,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS para resumo em 2 colunas
+# CSS para resumo em 2 colunas - Removendo possíveis conflitos com gráficos
 st.markdown("""
 <style>
     .resumo-container {
@@ -40,8 +40,20 @@ st.markdown("""
         color: #ffffff;
         font-weight: 700;
     }
+    /* Garantindo que os gráficos Altair sejam exibidos corretamente */
     [data-testid="stElementToolbar"] {
         display: none;
+    }
+    /* Garantindo que os elementos SVG dos gráficos sejam visíveis */
+    svg {
+        display: block !important;
+        visibility: visible !important;
+    }
+    /* Garantindo que os containers de gráficos tenham altura suficiente */
+    .chart-container {
+        min-height: 400px;
+        width: 100%;
+        margin-bottom: 20px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -148,8 +160,11 @@ def create_accumulated_chart(df):
     df_sorted = df.sort_values('Data').copy()
     df_sorted['Total Acumulado'] = df_sorted['Total'].cumsum()
     
+    # Converter para formato JSON compatível com Altair
+    df_json = df_sorted.to_dict(orient='records')
+    
     # Criar gráfico de área para acúmulo de capital
-    chart = alt.Chart(df_sorted).mark_area(
+    chart = alt.Chart(df_json).mark_area(
         opacity=0.6,
         line=True,
         color="#4285F4"
@@ -165,11 +180,12 @@ def create_accumulated_chart(df):
             alt.Tooltip('Total:Q', title='Venda do Dia', format='R$ ,.2f')
         ]
     ).properties(
-        height=400
+        height=400,
+        width="container"
     )
     
     # Adicionar pontos para destacar os valores individuais
-    points = alt.Chart(df_sorted).mark_circle(
+    points = alt.Chart(df_json).mark_circle(
         size=60,
         color="#1A73E8"
     ).encode(
@@ -190,8 +206,11 @@ def create_weekday_chart(df):
     # Agrupar por dia da semana
     vendas_por_dia = df.groupby('DiaSemana')['Total'].sum().reset_index()
     
+    # Converter para formato JSON compatível com Altair
+    vendas_json = vendas_por_dia.to_dict(orient='records')
+    
     # Criar gráfico de barras
-    chart = alt.Chart(vendas_por_dia).mark_bar(
+    chart = alt.Chart(vendas_json).mark_bar(
         cornerRadiusTopLeft=3,
         cornerRadiusTopRight=3
     ).encode(
@@ -208,7 +227,8 @@ def create_weekday_chart(df):
             alt.Tooltip('Total:Q', title='Total', format='R$ ,.2f')
         ]
     ).properties(
-        height=350
+        height=350,
+        width="container"
     )
     
     # Adicionar valores no topo das barras
@@ -246,12 +266,15 @@ def create_payment_methods_chart(df):
     else:
         metodo_pagamento['Porcentagem'] = 0
     
+    # Converter para formato JSON compatível com Altair
+    metodo_json = metodo_pagamento.to_dict(orient='records')
+    
     # Definir cores para os métodos
     domain = ['Cartão', 'Dinheiro', 'PIX']
     range_ = ['#4285F4', '#34A853', '#FBBC05']
     
     # Criar gráfico de pizza
-    chart = alt.Chart(metodo_pagamento).mark_arc(outerRadius=120).encode(
+    chart = alt.Chart(metodo_json).mark_arc(outerRadius=120).encode(
         theta=alt.Theta(field="Valor", type="quantitative"),
         color=alt.Color('Método:N', scale=alt.Scale(domain=domain, range=range_)),
         tooltip=[
@@ -260,11 +283,12 @@ def create_payment_methods_chart(df):
             alt.Tooltip('Porcentagem:Q', title='Porcentagem', format='.1f%')
         ]
     ).properties(
-        height=350
+        height=350,
+        width="container"
     )
     
     # Adicionar texto de porcentagem
-    text = alt.Chart(metodo_pagamento).mark_text(radius=150, size=16).encode(
+    text = alt.Chart(metodo_json).mark_text(radius=150, size=16).encode(
         theta=alt.Theta(field="Valor", type="quantitative"),
         text=alt.Text('Porcentagem:Q', format='.1f%'),
         color=alt.value('black')
@@ -282,8 +306,11 @@ def create_histogram(df):
     mean = df['Total'].mean()
     median = df['Total'].median()
     
+    # Converter para formato JSON compatível com Altair
+    df_json = df.to_dict(orient='records')
+    
     # Criar histograma
-    chart = alt.Chart(df).mark_bar(
+    chart = alt.Chart(df_json).mark_bar(
         opacity=0.7,
         color='#FBBC05'
     ).encode(
@@ -297,11 +324,12 @@ def create_histogram(df):
             alt.Tooltip('Total:Q', title='Faixa de Valor', format='R$ ,.2f')
         ]
     ).properties(
-        height=350
+        height=350,
+        width="container"
     )
     
     # Adicionar linha vertical para média
-    mean_line = alt.Chart(pd.DataFrame({'mean': [mean]})).mark_rule(
+    mean_line = alt.Chart(pd.DataFrame({'mean': [mean]}).to_dict(orient='records')).mark_rule(
         color='red',
         strokeWidth=2,
         strokeDash=[4, 4]
@@ -312,7 +340,7 @@ def create_histogram(df):
     )
     
     # Adicionar linha vertical para mediana
-    median_line = alt.Chart(pd.DataFrame({'median': [median]})).mark_rule(
+    median_line = alt.Chart(pd.DataFrame({'median': [median]}).to_dict(orient='records')).mark_rule(
         color='green',
         strokeWidth=2,
         strokeDash=[4, 4]
@@ -337,8 +365,11 @@ def create_monthly_chart(df):
     
     df_monthly.rename(columns={'Data': 'Quantidade'}, inplace=True)
     
+    # Converter para formato JSON compatível com Altair
+    monthly_json = df_monthly.to_dict(orient='records')
+    
     # Cria linha de tendência
-    line = alt.Chart(df_monthly).mark_line(
+    line = alt.Chart(monthly_json).mark_line(
         point=alt.OverlayMarkDef(filled=True, size=100),
         color='#4285F4',
         strokeWidth=3
@@ -353,7 +384,7 @@ def create_monthly_chart(df):
     )
     
     # Cria barras para quantidade
-    bars = alt.Chart(df_monthly).mark_bar(
+    bars = alt.Chart(monthly_json).mark_bar(
         opacity=0.3,
         color='#34A853'
     ).encode(
@@ -365,7 +396,10 @@ def create_monthly_chart(df):
     # Combina os dois gráficos com escalas independentes
     chart = alt.layer(line, bars).resolve_scale(
         y='independent'
-    ).properties(height=400)
+    ).properties(
+        height=400,
+        width="container"
+    )
     
     return chart
 
@@ -409,7 +443,8 @@ def main():
                     st.error("⚠️ Não é possível registrar vendas aos domingos!")
                 elif total > 0:
                     if add_data_to_sheet(data.strftime('%d/%m/%Y'), cartao, dinheiro, pix, worksheet):
-                        # Correção: Usar st.experimental_rerun() em vez de st.rerun()
+                        # Limpar cache e recarregar a página
+                        st.cache_data.clear()
                         st.experimental_rerun()
                 else:
                     st.warning("⚠️ O valor total deve ser maior que zero.")
@@ -528,9 +563,13 @@ def main():
             # Acúmulo de Capital
             st.subheader("💰 Acúmulo de Capital ao Longo do Tempo")
             
-            chart = create_accumulated_chart(df_filtered)
-            if chart:
-                st.altair_chart(chart, use_container_width=True)
+            # Usando container para garantir que o gráfico seja exibido corretamente
+            with st.container():
+                st.markdown('<div class="chart-container">', unsafe_allow_html=True)
+                chart = create_accumulated_chart(df_filtered)
+                if chart:
+                    st.altair_chart(chart, use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
     
     # Aba 3: Estatísticas
     with tab3:
@@ -546,21 +585,26 @@ def main():
                 # Análise por Dia da Semana
                 st.subheader("📅 Vendas por Dia da Semana")
                 
+                st.markdown('<div class="chart-container">', unsafe_allow_html=True)
                 chart = create_weekday_chart(df_filtered)
                 if chart:
                     st.altair_chart(chart, use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
             
             with col2:
                 # Métodos de Pagamento
                 st.subheader("💳 Métodos de Pagamento")
                 
+                st.markdown('<div class="chart-container">', unsafe_allow_html=True)
                 chart = create_payment_methods_chart(df_filtered)
                 if chart:
                     st.altair_chart(chart, use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
             
             # Histograma dos valores
             st.subheader("📊 Distribuição dos Valores de Venda")
             
+            st.markdown('<div class="chart-container">', unsafe_allow_html=True)
             chart = create_histogram(df_filtered)
             if chart:
                 st.altair_chart(chart, use_container_width=True)
@@ -575,14 +619,17 @@ def main():
                 if df_filtered['Total'].mean() > 0:
                     coef_var = (df_filtered['Total'].std() / df_filtered['Total'].mean() * 100)
                 stats_cols[3].metric("Coef. de Variação", f"{coef_var:.1f}%")
+            st.markdown('</div>', unsafe_allow_html=True)
             
             # Evolução mensal
             if 'AnoMês' in df_filtered.columns and df_filtered['AnoMês'].nunique() > 1:
                 st.subheader("📈 Evolução Mensal de Vendas")
                 
+                st.markdown('<div class="chart-container">', unsafe_allow_html=True)
                 chart = create_monthly_chart(df_filtered)
                 if chart:
                     st.altair_chart(chart, use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
