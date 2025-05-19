@@ -8,17 +8,56 @@ from gspread.exceptions import SpreadsheetNotFound
 import locale
 
 # --- Configurações Globais e Constantes ---
-SPREADSHEET_ID = '1NTScbiIna-iE7roQ9XBdjUOssRihTFFby4INAAQNXTg'
-WORKSHEET_NAME = 'Vendas'
+SPREADSHEET_ID_SECRET = "google_sheets.spreadsheet_id"  # Chave para o segredo
+WORKSHEET_NAME_SECRET = "google_sheets.worksheet_name" # Chave para o segredo
 
 # Configuração da página Streamlit
-st.set_page_config(page_title="Sistema de Registro de Vendas", layout="centered")
+st.set_page_config(page_title="Sistema de Vendas ClipsBurger", layout="centered")
 
 # Configura o locale para Português do Brasil para formatação de datas e nomes
 try:
     locale.setlocale(locale.LC_TIME, 'pt_BR.UTF-8')
 except locale.Error:
-    st.warning("Locale pt_BR.UTF-8 não encontrado. Nomes de meses/dias podem aparecer em inglês.")
+    try:
+        locale.setlocale(locale.LC_TIME, 'Portuguese_Brazil.1252') # Alternativa para Windows
+    except locale.Error:
+        st.warning("Locale pt_BR não encontrado. Nomes de meses/dias podem aparecer em inglês.")
+
+# CSS específico para a seção de resumo
+st.markdown("""
+<style>
+    /* Estilo para os containers da seção de resumo */
+    .resume-kpi-container {
+        border: 1px solid #4A4A4A; /* Borda sutil, funciona bem em tema escuro */
+        border-radius: 10px;
+        padding: 15px;
+        margin-bottom: 10px; /* Espaço entre os KPIs */
+        text-align: center; /* Centraliza o texto da métrica */
+        transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+    }
+    .resume-kpi-container:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    /* Ajuste para o st.metric dentro desses containers específicos */
+    .resume-kpi-container div[data-testid="stMetric"] {
+        background-color: transparent !important; /* Garante que não haja fundo branco da métrica */
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+    }
+    .resume-kpi-container div[data-testid="stMetricLabel"] {
+        font-size: 0.9em; /* Tamanho menor para o label da métrica */
+    }
+    .resume-kpi-container div[data-testid="stMetricValue"] {
+        font-size: 1.5em; /* Tamanho maior para o valor da métrica */
+        font-weight: bold;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+
+CHART_HEIGHT = 380 # Altura padrão para gráficos grandes
 
 # --- Funções de Cache para Acesso ao Google Sheets ---
 @st.cache_resource
@@ -28,12 +67,27 @@ def get_google_auth():
               'https://www.googleapis.com/auth/spreadsheets.readonly',
               'https://www.googleapis.com/auth/drive.readonly']
     try:
-        credentials_dict = st.secrets["google_credentials"]
+        # Carregar credenciais dos segredos do Streamlit
+        credentials_dict = {
+            "type": st.secrets["google_credentials"]["type"],
+            "project_id": st.secrets["google_credentials"]["project_id"],
+            "private_key_id": st.secrets["google_credentials"]["private_key_id"],
+            "private_key": st.secrets["google_credentials"]["private_key"].replace('\\n', '\n'),
+            "client_email": st.secrets["google_credentials"]["client_email"],
+            "client_id": st.secrets["google_credentials"]["client_id"],
+            "auth_uri": st.secrets["google_credentials"]["auth_uri"],
+            "token_uri": st.secrets["google_credentials"]["token_uri"],
+            "auth_provider_x509_cert_url": st.secrets["google_credentials"]["auth_provider_x509_cert_url"],
+            "client_x509_cert_url": st.secrets["google_credentials"]["client_x509_cert_url"]
+        }
         creds = Credentials.from_service_account_info(credentials_dict, scopes=SCOPES)
         gc = gspread.authorize(creds)
         return gc
+    except KeyError as e:
+        st.error(f"❌ Erro ao carregar segredos: Chave '{e}' não encontrada. Verifique seu `secrets.toml`.")
+        st.stop()
     except Exception as e:
-        st.error(f"Erro de autenticação com Google: {e}")
+        st.error(f"❌ Erro de autenticação com Google: {e}")
         return None
 
 @st.cache_resource
@@ -42,25 +96,45 @@ def get_worksheet():
     gc = get_google_auth()
     if gc:
         try:
-            spreadsheet = gc.open_by_key(SPREADSHEET_ID)
-            worksheet = spreadsheet.worksheet(WORKSHEET_NAME)
+            spreadsheet_id = st.secrets.get(SPREADSHEET_ID_SECRET, "ID_PADRAO_SE_NAO_ENCONTRADO") # Fallback
+            worksheet_name = st.secrets.get(WORKSHEET_NAME_SECRET, "Vendas") # Fallback
+            
+            if spreadsheet_id == "ID_PADRAO_SE_NAO_ENCONTRADO":
+                st.error(f"Chave '{SPREADSHEET_ID_SECRET}' não encontrada nos segredos.")
+                return None
+
+            spreadsheet = gc.open_by_key(spreadsheet_id)
+            worksheet = spreadsheet.worksheet(worksheet_name)
             return worksheet
         except SpreadsheetNotFound:
-            st.error(f"Planilha com ID {SPREADSHEET_ID} não encontrada.")
+            st.error(f"Planilha com ID '{spreadsheet_id}' ou aba '{worksheet_name}' não encontrada.")
+            return None
+        except KeyError as e: # Para o caso de SPREADSHEET_ID_SECRET ou WORKSHEET_NAME_SECRET não estarem nos segredos
+            st.error(f"Chave de segredo '{e}' não encontrada para detalhes da planilha. Verifique seu `secrets.toml`.")
             return None
         except Exception as e:
-            st.error(f"Erro ao acessar a planilha '{WORKSHEET_NAME}': {e}")
+            st.error(f"Erro ao acessar a planilha '{worksheet_name}': {e}")
             return None
     return None
 
-@st.cache_data
+@st.cache_data(show_spinner="Lendo dados da planilha...")
 def read_sales_data():
     """Lê todos os registros da planilha de vendas e retorna como DataFrame."""
     worksheet = get_worksheet()
     if worksheet:
         try:
             rows = worksheet.get_all_records()
+            if not rows:
+                st.toast("⚠️ Planilha de vendas está vazia.", icon="📄")
+                return pd.DataFrame(columns=['Data', 'Cartão', 'Dinheiro', 'Pix']) # Schema esperado
             df = pd.DataFrame(rows)
+            # Garante que as colunas monetárias existam, mesmo que a planilha esteja mal formatada
+            for col_monetaria in ['Cartão', 'Dinheiro', 'Pix']:
+                if col_monetaria not in df.columns:
+                    df[col_monetaria] = 0
+            if 'Data' not in df.columns: # Garante que a coluna 'Data' existe
+                df['Data'] = pd.NaT # Usar NaT para datas ausentes
+
             return df
         except Exception as e:
             st.error(f"Erro ao ler dados da planilha: {e}")
@@ -82,287 +156,314 @@ def add_data_to_sheet(date, cartao, dinheiro, pix, worksheet_obj):
         st.error(f"Erro ao adicionar dados na planilha: {e}")
         return False
 
-@st.cache_data
+@st.cache_data(show_spinner="Processando dados...")
 def process_data(df_input):
     """Processa e prepara os dados de vendas para análise."""
+    if df_input is None or df_input.empty:
+        return pd.DataFrame()
+    
     df = df_input.copy()
-    if not df.empty:
-        for col in ['Cartão', 'Dinheiro', 'Pix']:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+    
+    for col in ['Cartão', 'Dinheiro', 'Pix']:
+        if col not in df.columns: # Adiciona coluna se não existir
+            df[col] = 0
+        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        
+    df['Total'] = df['Cartão'] + df['Dinheiro'] + df['Pix']
+    
+    if 'Data' in df.columns and not df['Data'].isnull().all():
+        try:
+            df['Data'] = pd.to_datetime(df['Data'], format='%d/%m/%Y', errors='coerce')
+            df.dropna(subset=['Data'], inplace=True)
+            
+            if not df.empty:
+                df['Ano'] = df['Data'].dt.year
+                df['Mês'] = df['Data'].dt.month
+                df['MêsNome'] = df['Data'].dt.strftime('%B').str.capitalize()
+                df['AnoMês'] = df['Data'].dt.strftime('%Y-%m')
+                df['DataFormatada'] = df['Data'].dt.strftime('%d/%m/%Y')
+                df['DiaSemana'] = df['Data'].dt.strftime('%A').str.capitalize()
+                df['DiaSemanaNum'] = df['Data'].dt.dayofweek # Para ordenação
             else:
-                df[col] = 0 # Adiciona coluna se não existir para evitar erros
-        
-        df['Total'] = df['Cartão'] + df['Dinheiro'] + df['Pix']
-        
-        if 'Data' in df.columns:
-            try:
-                df['Data'] = pd.to_datetime(df['Data'], format='%d/%m/%Y', errors='coerce')
-                df.dropna(subset=['Data'], inplace=True) # Remove linhas onde a data não pôde ser convertida
-                
-                if not df.empty:
-                    df['Ano'] = df['Data'].dt.year
-                    df['Mês'] = df['Data'].dt.month
-                    df['MêsNome'] = df['Data'].dt.strftime('%B').str.capitalize()
-                    df['AnoMês'] = df['Data'].dt.strftime('%Y-%m')
-                    df['DataFormatada'] = df['Data'].dt.strftime('%d/%m/%Y')
-                    # Usar strftime('%A') para nome do dia da semana de acordo com o locale
-                    df['DiaSemana'] = df['Data'].dt.strftime('%A').str.capitalize()
-                else:
-                    st.warning("Nenhuma data válida encontrada após conversão inicial.")
+                st.toast("Nenhuma data válida encontrada após conversão.", icon="⚠️")
 
-            except Exception as e: # Alterado para Exception genérica após pd.to_datetime
-                st.error(f"Erro ao processar a coluna 'Data': {e}")
-                # Retornar colunas básicas mesmo em caso de erro para evitar quebras
-                for col_date_derived in ['Ano', 'Mês', 'MêsNome', 'AnoMês', 'DataFormatada', 'DiaSemana']:
-                    if col_date_derived not in df.columns:
-                         df[col_date_derived] = None 
+        except Exception as e:
+            st.error(f"Erro ao processar a coluna 'Data': {e}")
+            # Cria colunas derivadas vazias para evitar erros downstream
+            for col_date_derived in ['Ano', 'Mês', 'MêsNome', 'AnoMês', 'DataFormatada', 'DiaSemana', 'DiaSemanaNum']:
+                if col_date_derived not in df.columns:
+                     df[col_date_derived] = None
+    else: # Se não há coluna 'Data' ou está toda vazia
+        for col_date_derived in ['Ano', 'Mês', 'MêsNome', 'AnoMês', 'DataFormatada', 'DiaSemana', 'DiaSemanaNum']:
+            if col_date_derived not in df.columns:
+                 df[col_date_derived] = None
     return df
+
+# --- Funções de Gráficos --- (Adaptadas para usar theme="streamlit")
+def create_pie_chart_payment_methods(df_data):
+    if df_data is None or df_data.empty or not all(col in df_data.columns for col in ['Cartão', 'Dinheiro', 'Pix']): return None
+    payment_sum = df_data[['Cartão', 'Dinheiro', 'Pix']].sum().reset_index()
+    payment_sum.columns = ['Método', 'Valor']
+    total_pagamentos = payment_sum['Valor'].sum()
+    if total_pagamentos == 0: return None
+    payment_sum['Porcentagem'] = (payment_sum['Valor'] / total_pagamentos) * 100
+    pie_chart = alt.Chart(payment_sum).mark_arc(innerRadius=70, outerRadius=140).encode(
+        theta=alt.Theta("Valor:Q", stack=True),
+        color=alt.Color("Método:N", legend=alt.Legend(title="Método")),
+        tooltip=[alt.Tooltip("Método:N"), alt.Tooltip("Valor:Q", format="R$,.2f", title="Valor"), alt.Tooltip("Porcentagem:Q", format=".1f", title="%")]
+    ).properties(height=CHART_HEIGHT, title=alt.TitleParams("Distribuição por Método de Pagamento", fontSize=16, dy=-10, anchor='middle'))
+    text_values = pie_chart.mark_text(radius=105, size=14, fontWeight='bold').encode(text=alt.Text("Porcentagem:Q", format=".0f") + "%")
+    return pie_chart + text_values
+
+def create_daily_sales_bar_chart(df_data):
+    if df_data is None or df_data.empty or 'DataFormatada' not in df_data.columns: return None
+    if 'Data' not in df_data.columns and 'DataFormatada' in df_data.columns:
+        df_data_copy = df_data.copy()
+        df_data_copy.loc[:, 'Data'] = pd.to_datetime(df_data_copy['DataFormatada'], format='%d/%m/%Y', errors='coerce')
+        df_to_melt = df_data_copy
+    elif 'Data' in df_data.columns:
+        df_to_melt = df_data
+    else: return None
+    
+    daily_data = df_to_melt.melt(id_vars=['DataFormatada', 'Data'], value_vars=['Cartão', 'Dinheiro', 'Pix'], var_name='Método', value_name='Valor')
+    daily_data = daily_data[daily_data['Valor'] > 0]
+    if daily_data.empty: return None
+    
+    bar_chart = alt.Chart(daily_data).mark_bar(size=20).encode(
+        x=alt.X('DataFormatada:N', title='Data', axis=alt.Axis(labelAngle=-45), sort=alt.EncodingSortField(field="Data", op="min", order='ascending')),
+        y=alt.Y('Valor:Q', title='Valor (R$)'),
+        color=alt.Color('Método:N', legend=alt.Legend(title="Método")),
+        tooltip=['DataFormatada', 'Método', alt.Tooltip('Valor:Q', format='R$,.2f')]
+    ).properties(height=CHART_HEIGHT, title=alt.TitleParams("Vendas Diárias por Método", fontSize=16, dy=-10, anchor='middle'))
+    return bar_chart
+
+def create_accumulated_capital_line_chart(df_data):
+    if df_data is None or df_data.empty or 'Data' not in df_data.columns or 'Total' not in df_data.columns: return None
+    df_accumulated = df_data.sort_values('Data').copy()
+    if df_accumulated.empty: return None
+    df_accumulated['Total Acumulado'] = df_accumulated['Total'].cumsum()
+    line_chart = alt.Chart(df_accumulated).mark_area(line={'color':'steelblue', 'strokeWidth':2}, color=alt.Gradient(gradient='linear',stops=[alt.GradientStop(color='rgba(70,130,180,0.1)',offset=0.3),alt.GradientStop(color='rgba(70,130,180,0.7)',offset=1)],x1=1,x2=1,y1=1,y2=0)).encode(
+        x=alt.X('Data:T', title='Data', axis=alt.Axis(format="%d/%m/%y")),
+        y=alt.Y('Total Acumulado:Q', title='Capital Acumulado (R$)'),
+        tooltip=[alt.Tooltip('DataFormatada', title="Data"), alt.Tooltip('Total Acumulado:Q', format='R$,.2f')]
+    ).properties(height=CHART_HEIGHT, title=alt.TitleParams("Acúmulo de Capital", fontSize=16, dy=-10, anchor='middle'))
+    return line_chart
+
+def create_avg_sales_by_weekday_bar_chart(df_data):
+    if df_data is None or df_data.empty or 'DiaSemana' not in df_data.columns: return None
+    dias_ordem_locale = [datetime(2000, 1, i).strftime('%A').capitalize() for i in range(3, 3+7)][:6] # Seg a Sáb
+    df_funcionamento = df_data[df_data['DiaSemana'].isin(dias_ordem_locale)]
+    if df_funcionamento.empty: return None
+    
+    vendas_media_dia = df_funcionamento.groupby('DiaSemana')['Total'].mean().reset_index()
+    vendas_media_dia['DiaSemana'] = pd.Categorical(vendas_media_dia['DiaSemana'], categories=dias_ordem_locale, ordered=True)
+    vendas_media_dia = vendas_media_dia.sort_values('DiaSemana')
+
+    bar_chart = alt.Chart(vendas_media_dia).mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3).encode(
+        x=alt.X('DiaSemana:N', title='Dia da Semana', sort=dias_ordem_locale),
+        y=alt.Y('Total:Q', title='Média de Vendas (R$)'),
+        color=alt.Color('DiaSemana:N', legend=None),
+        tooltip=[alt.Tooltip('DiaSemana:N', title="Dia"), alt.Tooltip('Total:Q', format='R$,.2f', title="Média")]
+    ).properties(height=CHART_HEIGHT, title=alt.TitleParams("Média de Vendas por Dia da Semana (Seg-Sáb)", fontSize=16, dy=-10, anchor='middle'))
+    text_on_bars = bar_chart.mark_text(dy=-10).encode(text=alt.Text('Total:Q', format="R$,.0f"))
+    return bar_chart + text_on_bars
+
+def create_monthly_trend_line_chart(df_data):
+    if df_data is None or df_data.empty or 'AnoMês' not in df_data.columns or df_data['AnoMês'].nunique() <= 1: return None
+    vendas_mensais = df_data.groupby('AnoMês')['Total'].sum().reset_index()
+    vendas_mensais['Variação %'] = vendas_mensais['Total'].pct_change() * 100
+    line_chart = alt.Chart(vendas_mensais).mark_line(point=alt.OverlayMarkDef(color="firebrick",size=50,filled=True),strokeWidth=3).encode(
+        x=alt.X('AnoMês:N', title='Mês', sort='ascending'),
+        y=alt.Y('Total:Q', title='Total de Vendas (R$)'),
+        tooltip=[alt.Tooltip('AnoMês:N'), alt.Tooltip('Total:Q', format='R$,.2f'), alt.Tooltip('Variação %:Q', format='+.1f')]
+    ).properties(height=CHART_HEIGHT, title=alt.TitleParams("Tendência Mensal de Faturamento", fontSize=16, dy=-10, anchor='middle'))
+    return line_chart
+
+def create_sales_value_histogram(df_data):
+    if df_data is None or df_data.empty or 'Total' not in df_data.columns: return None
+    histogram = alt.Chart(df_data).mark_bar().encode(
+        alt.X('Total:Q', bin=alt.Bin(maxbins=20), title='Valor da Venda (R$)'),
+        alt.Y('count()', title='Frequência'),
+        tooltip=[alt.Tooltip('count()', title="Nº de Vendas"), alt.Tooltip('Total:Q', bin=True, title="Faixa de Valor")]
+    ).properties(height=CHART_HEIGHT, title=alt.TitleParams("Distribuição dos Valores de Venda", fontSize=16, dy=-10, anchor='middle'))
+    return histogram
 
 # --- Interface Principal da Aplicação ---
 def main():
-    st.title("📊 Sistema de Registro de Vendas")
+    st.title("📊 Sistema de Registro de Vendas ClipsBurger")
     
-    # Carrega os dados uma vez para uso nas abas
     df_raw = read_sales_data()
-    df_processed = process_data(df_raw) if not df_raw.empty else pd.DataFrame()
+    df_processed = process_data(df_raw.copy()) # Passar cópia para process_data
 
-    tab1, tab2, tab3 = st.tabs(["Registrar Venda", "Análise Detalhada", "Estatística"])
+    tab1, tab2, tab3 = st.tabs(["📝 Registrar Venda", "📈 Análise Detalhada", "📊 Estatísticas"])
 
     with tab1:
         st.header("Registrar Nova Venda")
         with st.form("venda_form"):
-            data_input = st.date_input("Data", datetime.now())
+            data_input = st.date_input("Data", datetime.now(), key="form_data")
             col1, col2, col3 = st.columns(3)
-            with col1:
-                cartao_input = st.number_input("Cartão (R$)", min_value=0.0, format="%.2f")
-            with col2:
-                dinheiro_input = st.number_input("Dinheiro (R$)", min_value=0.0, format="%.2f")
-            with col3:
-                pix_input = st.number_input("PIX (R$)", min_value=0.0, format="%.2f")
+            cartao_input = col1.number_input("Cartão (R$)", min_value=0.0, format="%.2f", key="form_cartao")
+            dinheiro_input = col2.number_input("Dinheiro (R$)", min_value=0.0, format="%.2f", key="form_dinheiro")
+            pix_input = col3.number_input("PIX (R$)", min_value=0.0, format="%.2f", key="form_pix")
             
             total_venda_form = cartao_input + dinheiro_input + pix_input
-            st.markdown(f"**Total da venda: R$ {total_venda_form:.2f}**")
-            submitted = st.form_submit_button("Registrar Venda")
+            st.markdown(f"**Total da venda: R$ {total_venda_form:,.2f}**")
+            submitted = st.form_submit_button("💾 Registrar Venda", type="primary")
             
             if submitted:
                 if total_venda_form > 0:
                     formatted_date = data_input.strftime('%d/%m/%Y')
-                    worksheet_obj = get_worksheet()
+                    worksheet_obj = get_worksheet() # Pega o worksheet (cacheado)
                     if add_data_to_sheet(formatted_date, cartao_input, dinheiro_input, pix_input, worksheet_obj):
-                        read_sales_data.clear() # Limpa o cache dos dados de vendas
-                        process_data.clear() # Limpa o cache dos dados processados
-                        st.experimental_rerun() # Força o recarregamento da app para refletir novos dados
+                        read_sales_data.clear()
+                        process_data.clear()
+                        st.rerun()
                 else:
-                    st.warning("Pelo menos um valor de venda deve ser maior que zero.")
+                    st.warning("O total da venda deve ser maior que zero.")
 
-    # Prepara dados para abas de análise e estatística
-    # Filtros na sidebar (afetam Tab2 e Tab3)
-    selected_anos_filter = []
-    selected_meses_filter = []
-
-    with st.sidebar:
-        st.header("🔍 Filtros")
-        if not df_processed.empty and 'Ano' in df_processed.columns and not df_processed['Ano'].dropna().empty:
-            current_month = datetime.now().month
+    # Filtros na sidebar
+    df_filtered = df_processed.copy() # Começa com todos os dados processados
+    if not df_processed.empty and 'Ano' in df_processed.columns and not df_processed['Ano'].dropna().empty:
+        with st.sidebar:
+            st.header("🔍 Filtros")
             current_year = datetime.now().year
-            
-            anos_disponiveis = sorted(df_processed['Ano'].dropna().unique().astype(int))
-            default_anos = [current_year] if current_year in anos_disponiveis else anos_disponiveis
-            selected_anos_filter = st.multiselect("Selecione o(s) Ano(s):", options=anos_disponiveis, default=default_anos)
+            anos_disponiveis = sorted(df_processed['Ano'].dropna().unique().astype(int), reverse=True)
+            default_anos = [current_year] if current_year in anos_disponiveis else (anos_disponiveis[:1] if anos_disponiveis else [])
+            selected_anos_filter = st.multiselect("Ano(s):", options=anos_disponiveis, default=default_anos, key="filter_ano")
 
+            df_para_filtro_mes = df_processed.copy()
             if selected_anos_filter:
-                df_para_filtro_mes = df_processed[df_processed['Ano'].isin(selected_anos_filter)]
-                if not df_para_filtro_mes.empty and 'Mês' in df_para_filtro_mes.columns and not df_para_filtro_mes['Mês'].dropna().empty:
-                    meses_numeros_disponiveis = sorted(df_para_filtro_mes['Mês'].dropna().unique().astype(int))
-                    # Gera nomes dos meses com base no locale
-                    meses_nomes_map = {m: datetime(2000, m, 1).strftime('%B').capitalize() for m in meses_numeros_disponiveis}
-                    meses_opcoes = [f"{m} - {meses_nomes_map[m]}" for m in meses_numeros_disponiveis]
-                    
-                    default_mes_opcao_str = f"{current_month} - {datetime(2000, current_month, 1).strftime('%B').capitalize()}"
-                    default_meses_selecionados = [default_mes_opcao_str] if default_mes_opcao_str in meses_opcoes else meses_opcoes
-                    
-                    selected_meses_str = st.multiselect("Selecione o(s) Mês(es):", options=meses_opcoes, default=default_meses_selecionados)
-                    selected_meses_filter = [int(m.split(" - ")[0]) for m in selected_meses_str]
-        else:
-            st.sidebar.info("Não há dados suficientes para aplicar filtros de data.")
+                df_para_filtro_mes = df_para_filtro_mes[df_para_filtro_mes['Ano'].isin(selected_anos_filter)]
+            
+            selected_meses_filter = []
+            if not df_para_filtro_mes.empty and 'Mês' in df_para_filtro_mes.columns and not df_para_filtro_mes['Mês'].dropna().empty:
+                current_month = datetime.now().month
+                meses_numeros_disponiveis = sorted(df_para_filtro_mes['Mês'].dropna().unique().astype(int))
+                meses_nomes_map = {m: datetime(2000, m, 1).strftime('%B').capitalize() for m in meses_numeros_disponiveis}
+                
+                default_meses_sel = []
+                if selected_anos_filter and (current_year in selected_anos_filter) and (current_month in meses_nomes_map):
+                    default_meses_sel = [current_month]
+                elif meses_numeros_disponiveis: # Se não, default para todos os meses disponíveis para os anos selecionados
+                    default_meses_sel = meses_numeros_disponiveis
 
-    # Aplicar filtros aos dados processados
-    df_filtered = df_processed.copy()
-    if not df_filtered.empty:
-        if selected_anos_filter and 'Ano' in df_filtered.columns:
-            df_filtered = df_filtered[df_filtered['Ano'].isin(selected_anos_filter)]
-        if selected_meses_filter and 'Mês' in df_filtered.columns:
-            df_filtered = df_filtered[df_filtered['Mês'].isin(selected_meses_filter)]
-    
+                selected_meses_filter = st.multiselect("Mês(es):", 
+                                                       options=meses_numeros_disponiveis, 
+                                                       format_func=lambda m: f"{m:02d} - {meses_nomes_map.get(m, str(m))}",
+                                                       default=default_meses_sel,
+                                                       key="filter_mes",
+                                                       disabled=not selected_anos_filter or not meses_numeros_disponiveis) # Desabilita se não houver anos ou meses
+
+            # Aplica filtros
+            if selected_anos_filter:
+                df_filtered = df_processed[df_processed['Ano'].isin(selected_anos_filter)]
+                if selected_meses_filter and 'Mês' in df_filtered.columns: # Só filtra por mês se meses foram selecionados
+                    df_filtered = df_filtered[df_filtered['Mês'].isin(selected_meses_filter)]
+            # Se nenhum filtro de ano, df_filtered já é df_processed.copy()
+    else: # df_processed está vazio ou não tem coluna 'Ano'
+        with st.sidebar:
+            st.header("🔍 Filtros")
+            st.info("Sem dados para aplicar filtros.")
+        df_filtered = pd.DataFrame() # Garante que df_filtered é um DF vazio
+
+
     with tab2:
         st.header("Análise Detalhada de Vendas")
-        if not df_filtered.empty and 'DataFormatada' in df_filtered.columns:
-            st.subheader("Dados Filtrados")
-            st.dataframe(df_filtered[['DataFormatada', 'Cartão', 'Dinheiro', 'Pix', 'Total']], use_container_width=True, height=300)
-
-            st.subheader("Distribuição por Método de Pagamento")
-            payment_filtered_data = pd.DataFrame({
-                'Método': ['Cartão', 'Dinheiro', 'PIX'],
-                'Valor': [df_filtered['Cartão'].sum(), df_filtered['Dinheiro'].sum(), df_filtered['Pix'].sum()]
-            })
-            pie_chart = alt.Chart(payment_filtered_data).mark_arc(innerRadius=50).encode(
-                theta=alt.Theta("Valor:Q", stack=True),
-                color=alt.Color("Método:N", legend=alt.Legend(title="Método")),
-                tooltip=["Método", "Valor"]
-            ).properties(width=700, height=500)
-            text = pie_chart.mark_text(radius=120, size=16).encode(text="Valor:Q")
-            st.altair_chart(pie_chart + text, use_container_width=True)
-
-            st.subheader("Vendas Diárias por Método de Pagamento")
-            daily_data = df_filtered.melt(id_vars=['DataFormatada'], value_vars=['Cartão', 'Dinheiro', 'Pix'], var_name='Método', value_name='Valor')
-            bar_chart = alt.Chart(daily_data).mark_bar(size=20).encode(
-                x=alt.X('DataFormatada:N', title='Data', axis=alt.Axis(labelAngle=-45), sort=alt.EncodingSortField(field="DataFormatada", op="min", order='ascending')),
-                y=alt.Y('Valor:Q', title='Valor (R$)'),
-                color=alt.Color('Método:N', legend=alt.Legend(title="Método")),
-                tooltip=['DataFormatada', 'Método', 'Valor']
-            ).properties(width=700, height=500)
-            st.altair_chart(bar_chart, use_container_width=True)
-
-            st.subheader("Acúmulo de Capital ao Longo do Tempo")
-            if 'Data' in df_filtered.columns:
-                df_accumulated = df_filtered.sort_values('Data').copy()
-                df_accumulated['Total Acumulado'] = df_accumulated['Total'].cumsum()
-                line_chart = alt.Chart(df_accumulated).mark_line(point=True, strokeWidth=3).encode(
-                    x=alt.X('Data:T', title='Data'),
-                    y=alt.Y('Total Acumulado:Q', title='Capital Acumulado (R$)'),
-                    tooltip=['DataFormatada', 'Total Acumulado']
-                ).properties(width=700, height=500)
-                st.altair_chart(line_chart, use_container_width=True)
-            else:
-                st.info("Coluna 'Data' não encontrada para gráfico de acúmulo.")
+        if df_filtered.empty:
+            st.info("ℹ️ Sem dados para exibir com os filtros atuais ou a planilha está vazia.")
         else:
-            st.info("Não há dados para exibir na Análise Detalhada ou os dados filtrados estão vazios.")
+            with st.container(border=True):
+                st.subheader("📋 Tabela de Vendas Filtradas")
+                cols_display = ['DataFormatada', 'DiaSemana', 'Cartão', 'Dinheiro', 'Pix', 'Total']
+                cols_presentes = [col for col in cols_display if col in df_filtered.columns]
+                st.dataframe(df_filtered[cols_presentes], use_container_width=True, height=350, hide_index=True)
+
+            charts_col1, charts_col2 = st.columns(2)
+            with charts_col1:
+                with st.container(border=True):
+                    chart = create_pie_chart_payment_methods(df_filtered)
+                    if chart: st.altair_chart(chart, use_container_width=True, theme="streamlit")
+                    else: st.caption("Sem dados para gráfico de métodos de pagamento.")
+            with charts_col2:
+                with st.container(border=True):
+                    chart = create_daily_sales_bar_chart(df_filtered)
+                    if chart: st.altair_chart(chart, use_container_width=True, theme="streamlit")
+                    else: st.caption("Sem dados para gráfico de vendas diárias.")
+            
+            with st.container(border=True): # Gráfico de capital acumulado ocupando largura total
+                chart = create_accumulated_capital_line_chart(df_filtered)
+                if chart: st.altair_chart(chart, use_container_width=True, theme="streamlit")
+                else: st.caption("Sem dados para gráfico de capital acumulado.")
+
 
     with tab3:
         st.header("📊 Estatísticas de Vendas")
-        if not df_filtered.empty and 'Total' in df_filtered.columns:
-            st.subheader("💰 Resumo Financeiro")
-            total_vendas = len(df_filtered)
-            total_faturamento = df_filtered['Total'].sum()
-            media_por_venda = df_filtered['Total'].mean() if total_vendas > 0 else 0
-            maior_venda = df_filtered['Total'].max() if total_vendas > 0 else 0
-            menor_venda = df_filtered['Total'].min() if total_vendas > 0 else 0
-
-            cols1 = st.columns(2)
-            cols1[0].metric("🔢 Total de Vendas", f"{total_vendas}")
-            cols1[1].metric("💵 Faturamento Total", f"R$ {total_faturamento:,.2f}")
-            cols2 = st.columns(2)
-            cols2[0].metric("📈 Média por Venda", f"R$ {media_por_venda:,.2f}")
-            cols2[1].metric("⬆️ Maior Venda", f"R$ {maior_venda:,.2f}")
-            cols3 = st.columns(1)
-            cols3[0].metric("⬇️ Menor Venda", f"R$ {menor_venda:,.2f}")
-
-            st.markdown("---")
-            st.subheader("💳 Métodos de Pagamento")
-            cartao_total = df_filtered['Cartão'].sum()
-            dinheiro_total = df_filtered['Dinheiro'].sum()
-            pix_total = df_filtered['Pix'].sum()
-            total_pagamentos = cartao_total + dinheiro_total + pix_total
-            cartao_pct = (cartao_total / total_pagamentos * 100) if total_pagamentos > 0 else 0
-            dinheiro_pct = (dinheiro_total / total_pagamentos * 100) if total_pagamentos > 0 else 0
-            pix_pct = (pix_total / total_pagamentos * 100) if total_pagamentos > 0 else 0
-
-            payment_cols = st.columns(3)
-            payment_cols[0].markdown(f"**💳 Cartão:** R$ {cartao_total:.2f} ({cartao_pct:.1f}%)")
-            payment_cols[1].markdown(f"**💵 Dinheiro:** R$ {dinheiro_total:.2f} ({dinheiro_pct:.1f}%)")
-            payment_cols[2].markdown(f"**📱 PIX:** R$ {pix_total:.2f} ({pix_pct:.1f}%)")
-
-            if total_pagamentos > 0:
-                payment_data_stats = pd.DataFrame({'Método': ['Cartão', 'Dinheiro', 'PIX'], 'Valor': [cartao_total, dinheiro_total, pix_total]})
-                pie_chart_stats = alt.Chart(payment_data_stats).mark_arc(innerRadius=50).encode(
-                    theta=alt.Theta("Valor:Q", stack=True), color=alt.Color("Método:N", legend=alt.Legend(title="Método")),
-                    tooltip=["Método", "Valor"]
-                ).properties(height=500)
-                text_stats = pie_chart_stats.mark_text(radius=120, size=16).encode(text="Valor:Q")
-                st.altair_chart(pie_chart_stats + text_stats, use_container_width=True)
-            
-            st.markdown("---")
-            st.subheader("📅 Análise Temporal")
-            if total_vendas > 1 and 'Data' in df_filtered.columns and 'DiaSemana' in df_filtered.columns:
-                metodo_preferido = "Cartão" if cartao_total >= max(dinheiro_total, pix_total) else \
-                                  "Dinheiro" if dinheiro_total >= max(cartao_total, pix_total) else "PIX"
-                emoji_metodo = "💳" if metodo_preferido == "Cartão" else "💵" if metodo_preferido == "Dinheiro" else "📱"
-                
-                stats_cols_temporal = st.columns(3)
-                stats_cols_temporal[0].markdown(f"**{emoji_metodo} Método Preferido:** {metodo_preferido}")
-                
-                dias_distintos = df_filtered['Data'].nunique()
-                media_diaria = total_faturamento / dias_distintos if dias_distintos > 0 else 0
-                stats_cols_temporal[1].markdown(f"**📊 Média Diária:** R$ {media_diaria:.2f}")
-                
-                dia_mais_vendas = df_filtered.groupby('DiaSemana')['Total'].sum().idxmax() if not df_filtered.empty else "N/A"
-                stats_cols_temporal[2].markdown(f"**📆 Dia com Mais Vendas:** {dia_mais_vendas}")
-
-                # Gráfico de média por dia da semana (Seg-Sex, usando locale)
-                dias_uteis_nomes_locale = [datetime(2000, 1, i).strftime('%A').capitalize() for i in range(3, 3+5)] # Seg a Sex
-                df_dias_uteis = df_filtered[df_filtered['DiaSemana'].isin(dias_uteis_nomes_locale)]
-                if not df_dias_uteis.empty:
-                    vendas_por_dia_uteis = df_dias_uteis.groupby('DiaSemana')['Total'].mean().reset_index()
-                    # Garantir a ordem correta dos dias da semana no gráfico
-                    vendas_por_dia_uteis['DiaSemana'] = pd.Categorical(vendas_por_dia_uteis['DiaSemana'], categories=dias_uteis_nomes_locale, ordered=True)
-                    vendas_por_dia_uteis = vendas_por_dia_uteis.sort_values('DiaSemana')
-
-                    chart_dias_uteis = alt.Chart(vendas_por_dia_uteis).mark_bar().encode(
-                        x=alt.X('DiaSemana:N', title='Dia da Semana', sort=dias_uteis_nomes_locale),
-                        y=alt.Y('Total:Q', title='Média de Vendas (R$)'),
-                        tooltip=['DiaSemana', 'Total']
-                    ).properties(title='Média de Vendas por Dia da Semana (Seg-Sex)', height=500)
-                    st.altair_chart(chart_dias_uteis, use_container_width=True)
-            
-            if 'AnoMês' in df_filtered.columns and df_filtered['AnoMês'].nunique() > 1:
-                st.subheader("📈 Tendência Mensal")
-                vendas_mensais = df_filtered.groupby('AnoMês')['Total'].sum().reset_index()
-                if len(vendas_mensais) >= 2:
-                    ultimo_mes_val = vendas_mensais.iloc[-1]['Total']
-                    penultimo_mes_val = vendas_mensais.iloc[-2]['Total']
-                    variacao = ((ultimo_mes_val - penultimo_mes_val) / penultimo_mes_val * 100) if penultimo_mes_val > 0 else 0
-                    emoji_tendencia = "🚀" if variacao > 10 else "📈" if variacao > 0 else "📉" if variacao < 0 else "➡️"
-                    st.markdown(f"**{emoji_tendencia} Variação Mensal:** {variacao:.1f}%")
-                    
-                    trend_chart = alt.Chart(vendas_mensais).mark_line(point=True).encode(
-                        x=alt.X('AnoMês:N', title='Mês', sort=alt.EncodingSortField(field="AnoMês", op="min", order='ascending')),
-                        y=alt.Y('Total:Q', title='Total de Vendas (R$)'),
-                        tooltip=['AnoMês', 'Total']
-                    ).properties(title='Tendência Mensal de Vendas', height=500)
-                    st.altair_chart(trend_chart, use_container_width=True)
-
-            # Mais estatísticas (Avançadas, Projeções, Frequência, Sazonalidade, Evolução Métodos)
-            # ... (O restante do código da Tab3 pode ser adaptado de forma similar, 
-            #      garantindo que 'df_filtered' e as colunas derivadas de data estejam corretas)
-            # Por exemplo, para Sazonalidade Semanal:
-            st.markdown("---")
-            st.subheader("📅 Sazonalidade Semanal (Todos os Dias)")
-            if 'DiaSemana' in df_filtered.columns and len(df_filtered) > 6:
-                todos_dias_semana_locale = [datetime(2000, 1, i).strftime('%A').capitalize() for i in range(3, 3+7)] # Seg a Dom
-                vendas_dia_semana_total = df_filtered.groupby('DiaSemana')['Total'].sum().reset_index()
-                if not vendas_dia_semana_total.empty:
-                    total_semanal_abs = vendas_dia_semana_total['Total'].sum()
-                    if total_semanal_abs > 0:
-                        vendas_dia_semana_total['Porcentagem'] = (vendas_dia_semana_total['Total'] / total_semanal_abs * 100)
-                        vendas_dia_semana_total['DiaSemana'] = pd.Categorical(vendas_dia_semana_total['DiaSemana'], categories=todos_dias_semana_locale, ordered=True)
-                        vendas_dia_semana_total = vendas_dia_semana_total.sort_values('DiaSemana')
-
-                        chart_sazonalidade = alt.Chart(vendas_dia_semana_total).mark_bar().encode(
-                            x=alt.X('DiaSemana:N', title='Dia da Semana', sort=todos_dias_semana_locale),
-                            y=alt.Y('Porcentagem:Q', title='% do Volume Semanal'),
-                            tooltip=['DiaSemana', 'Total', 'Porcentagem']
-                        ).properties(title='Distribuição Semanal de Vendas (Volume Total %)', height=500)
-                        st.altair_chart(chart_sazonalidade, use_container_width=True)
-
-                        melhor_dia_df = vendas_dia_semana_total.loc[vendas_dia_semana_total['Total'].idxmax()]
-                        pior_dia_df = vendas_dia_semana_total.loc[vendas_dia_semana_total['Total'].idxmin()]
-                        best_worst_cols = st.columns(2)
-                        best_worst_cols[0].markdown(f"**🔝 Melhor dia:** {melhor_dia_df['DiaSemana']} ({melhor_dia_df['Porcentagem']:.1f}% do total)")
-                        best_worst_cols[1].markdown(f"**🔻 Pior dia:** {pior_dia_df['DiaSemana']} ({pior_dia_df['Porcentagem']:.1f}% do total)")
-
+        if df_filtered.empty:
+            st.info("ℹ️ Sem dados para exibir com os filtros atuais ou a planilha está vazia.")
         else:
-            st.info("Não há dados para exibir na aba Estatísticas ou os dados filtrados estão vazios.")
+            with st.container(border=True): # Container para a seção de resumo
+                st.subheader("🚀 Resumo Financeiro do Período")
+                total_vendas = len(df_filtered)
+                total_faturamento = df_filtered['Total'].sum()
+                media_por_venda = total_faturamento / total_vendas if total_vendas > 0 else 0
+                maior_venda = df_filtered['Total'].max() if total_vendas > 0 else 0
+
+                # --- Seção de Resumo 2x2 ---
+                col_resumo1, col_resumo2 = st.columns(2)
+                with col_resumo1:
+                    # Usando a classe CSS definida no st.markdown global
+                    st.markdown('<div class="resume-kpi-container">', unsafe_allow_html=True)
+                    st.metric(label="💰 Faturamento Total", value=f"R$ {total_faturamento:,.2f}")
+                    st.markdown('</div>', unsafe_allow_html=True)
+
+                    st.markdown('<div class="resume-kpi-container">', unsafe_allow_html=True)
+                    st.metric(label="💸 Ticket Médio", value=f"R$ {media_por_venda:,.2f}")
+                    st.markdown('</div>', unsafe_allow_html=True)
+                
+                with col_resumo2:
+                    st.markdown('<div class="resume-kpi-container">', unsafe_allow_html=True)
+                    st.metric(label="📈 Total de Vendas", value=f"{total_vendas:,} vendas")
+                    st.markdown('</div>', unsafe_allow_html=True)
+
+                    st.markdown('<div class="resume-kpi-container">', unsafe_allow_html=True)
+                    st.metric(label="⭐ Maior Venda Única", value=f"R$ {maior_venda:,.2f}")
+                    st.markdown('</div>', unsafe_allow_html=True)
+            # --- Fim da Seção de Resumo ---
+
+            st.markdown("---") # Separador visual
+
+            stats_col_graf1, stats_col_graf2 = st.columns(2)
+            with stats_col_graf1:
+                with st.container(border=True):
+                    chart = create_avg_sales_by_weekday_bar_chart(df_filtered)
+                    if chart: st.altair_chart(chart, use_container_width=True, theme="streamlit")
+                    else: st.caption("Sem dados para gráfico de média por dia da semana.")
+                with st.container(border=True):
+                    chart = create_sales_value_histogram(df_filtered)
+                    if chart: st.altair_chart(chart, use_container_width=True, theme="streamlit")
+                    else: st.caption("Sem dados para histograma de valores de venda.")
+            with stats_col_graf2:
+                with st.container(border=True):
+                    chart = create_monthly_trend_line_chart(df_filtered)
+                    if chart: st.altair_chart(chart, use_container_width=True, theme="streamlit")
+                    else: st.caption("Sem dados suficientes para tendência mensal (>1 mês).")
+                with st.container(border=True):
+                    chart = create_weekly_seasonality_bar_chart(df_filtered)
+                    if chart: st.altair_chart(chart, use_container_width=True, theme="streamlit")
+                    else: st.caption("Sem dados suficientes para sazonalidade semanal (>6 dias).")
+            
+            with st.expander("💡 Mais Insights e Projeções (Simplificado)", expanded=False):
+                if not df_filtered.empty and 'Data' in df_filtered.columns and 'Total' in df_filtered.columns:
+                    dias_distintos = df_filtered['Data'].nunique()
+                    if dias_distintos > 0:
+                        media_diaria_faturamento = total_faturamento / dias_distintos
+                        st.markdown(f"**Média Diária (no período):** R$ {media_diaria_faturamento:,.2f} ({dias_distintos} dias com vendas)")
+                        projecao_30_dias = media_diaria_faturamento * 30
+                        st.markdown(f"**Projeção Próximos 30 dias:** R$ {projecao_30_dias:,.2f}")
+                    else:
+                        st.caption("Não há dias distintos com vendas no período selecionado.")
+                else:
+                    st.caption("Sem dados para insights adicionais.")
 
 if __name__ == "__main__":
     main()
