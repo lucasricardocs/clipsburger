@@ -36,30 +36,19 @@ except locale.Error:
             except locale.Error:
                 st.warning("Locale pt_BR não encontrado. Nomes de meses/dias podem aparecer em inglês.")
 
-# Configuração de tema para os gráficos Altair
+# Configuração para usar tema escuro para os gráficos Altair
 def configure_altair_theme():
     return {
         'config': {
-            'background': 'transparent',
-            'title': {'color': '#ffffff', 'fontSize': 16, 'font': 'Inter'},
+            'title': {'color': '#ffffff'},
             'axis': {
                 'labelColor': '#cccccc',
                 'titleColor': '#ffffff',
-                'gridColor': '#555555',
-                'domainColor': '#555555',
-                'tickColor': '#555555',
-                'grid': False,  # Remove linhas horizontais por padrão
+                'gridColor': '#555555'
             },
             'legend': {
                 'labelColor': '#cccccc',
-                'titleColor': '#ffffff',
-                'symbolType': 'circle'
-            },
-            'range': {
-                'category': ['#4c78a8', '#f58518', '#e45756', '#72b7b2', '#54a24b', '#eeca3b']
-            },
-            'view': {
-                'stroke': 'transparent'  # Remove a borda do gráfico
+                'titleColor': '#ffffff'
             }
         }
     }
@@ -184,24 +173,17 @@ def create_pie_chart_payment_methods(df_data):
         return None
     payment_sum['Porcentagem'] = (payment_sum['Valor'] / total_pagamentos) * 100
 
-    # Gráfico de pizza melhorado com cores mais vibrantes e estilo moderno
-    pie_chart = alt.Chart(payment_sum).mark_arc(innerRadius=80, padAngle=0.03).encode(
+    pie_chart = alt.Chart(payment_sum).mark_arc(innerRadius=50).encode(
         theta=alt.Theta("Valor:Q", stack=True),
-        color=alt.Color("Método:N", 
-                       scale=alt.Scale(range=['#4c78a8', '#f58518', '#72b7b2']),
-                       legend=alt.Legend(title="Método", orient="bottom")),
+        color=alt.Color("Método:N", legend=alt.Legend(title="Método")),
         tooltip=[
             alt.Tooltip("Método:N"),
             alt.Tooltip("Valor:Q", format="R$,.2f", title="Valor"),
             alt.Tooltip("Porcentagem:Q", format=".1f", title="% do Total")
         ]
-    ).properties(
-        height=CHART_HEIGHT, 
-        title=alt.TitleParams("Distribuição por Método de Pagamento", fontSize=18, anchor='middle')
-    )
+    ).properties(height=CHART_HEIGHT, title=alt.TitleParams("Distribuição por Método de Pagamento", fontSize=16, dy=-10, anchor='middle'))
     
-    # Texto no centro do gráfico
-    text_values = pie_chart.mark_text(radius=110, size=14, fontWeight='bold', color='white').encode(
+    text_values = pie_chart.mark_text(radius=105, size=14, fontWeight='bold').encode(
         text=alt.Text("Porcentagem:Q", format=".0f") + "%"
     )
     
@@ -230,30 +212,15 @@ def create_daily_sales_bar_chart(df_data):
     if daily_data.empty:
         return None
 
-    # Gráfico de barras melhorado com barras arredondadas e cores mais vibrantes
-    bar_chart = alt.Chart(daily_data).mark_bar(
-        cornerRadiusTopLeft=4,
-        cornerRadiusTopRight=4,
-        size=16
-    ).encode(
+    bar_chart = alt.Chart(daily_data).mark_bar(size=20).encode(
         x=alt.X('DataFormatada:N', 
                 title='Data', 
-                axis=alt.Axis(labelAngle=-45, labelFontSize=11), 
+                axis=alt.Axis(labelAngle=-45), 
                 sort=alt.EncodingSortField(field="Data", op="min", order='ascending')),
-        y=alt.Y('Valor:Q', 
-                title='Valor (R$)', 
-                stack='zero',
-                axis=alt.Axis(grid=False, domain=True)),  # Remove linhas horizontais
-        color=alt.Color('Método:N', 
-                       scale=alt.Scale(range=['#4c78a8', '#f58518', '#72b7b2']),
-                       legend=alt.Legend(title="Método", orient="bottom")),
+        y=alt.Y('Valor:Q', title='Valor (R$)', stack='zero'),
+        color=alt.Color('Método:N', legend=alt.Legend(title="Método")),
         tooltip=['DataFormatada', 'Método', alt.Tooltip('Valor:Q', format='R$,.2f')]
-    ).properties(
-        height=CHART_HEIGHT, 
-        title=alt.TitleParams("Vendas Diárias por Método", fontSize=18, anchor='middle')
-    ).configure_view(
-        strokeWidth=0  # Remove a borda do gráfico
-    )
+    ).properties(height=CHART_HEIGHT, title=alt.TitleParams("Vendas Diárias por Método", fontSize=16, dy=-10, anchor='middle'))
     
     return bar_chart
 
@@ -268,84 +235,24 @@ def create_accumulated_capital_line_chart(df_data):
         
     df_accumulated['Total Acumulado'] = df_accumulated['Total'].cumsum()
 
-    # Gráfico de área melhorado com gradiente e linha mais suave
     line_chart = alt.Chart(df_accumulated).mark_area(
-        line={'color':'#4c78a8', 'strokeWidth': 3},
-        point=False,
-        interpolate='monotone',
+        line={'color':'steelblue', 'strokeWidth': 2},
         color=alt.Gradient(
             gradient='linear',
-            stops=[
-                alt.GradientStop(color='rgba(76,120,168,0.1)', offset=0.2), 
-                alt.GradientStop(color='rgba(76,120,168,0.7)', offset=1)
-            ],
+            stops=[alt.GradientStop(color='rgba(70,130,180,0.1)', offset=0.3), 
+                   alt.GradientStop(color='rgba(70,130,180,0.7)', offset=1)],
             x1=1, x2=1, y1=1, y2=0
         )
     ).encode(
-        x=alt.X('Data:T', 
-                title='Data', 
-                axis=alt.Axis(format="%d/%m/%y", labelAngle=-45, labelFontSize=11, grid=False)),
-        y=alt.Y('Total Acumulado:Q', 
-                title='Capital Acumulado (R$)',
-                axis=alt.Axis(grid=False)),  # Remove linhas horizontais
+        x=alt.X('Data:T', title='Data', axis=alt.Axis(format="%d/%m/%y")),
+        y=alt.Y('Total Acumulado:Q', title='Capital Acumulado (R$)'),
         tooltip=[
             alt.Tooltip('DataFormatada', title="Data"), 
             alt.Tooltip('Total Acumulado:Q', format='R$,.2f')
         ]
-    ).properties(
-        height=CHART_HEIGHT, 
-        title=alt.TitleParams("Acúmulo de Capital", fontSize=18, anchor='middle')
-    ).configure_view(
-        strokeWidth=0  # Remove a borda do gráfico
-    )
+    ).properties(height=CHART_HEIGHT, title=alt.TitleParams("Acúmulo de Capital", fontSize=16, dy=-10, anchor='middle'))
     
     return line_chart
-
-def create_heatmap_sales_by_weekday_month(df_data):
-    """Cria um heatmap de vendas por dia da semana e mês"""
-    if df_data is None or df_data.empty or 'DiaSemana' not in df_data.columns or 'MêsNome' not in df_data.columns:
-        return None
-    
-    # Agrupa os dados por dia da semana e mês
-    heatmap_data = df_data.groupby(['DiaSemana', 'MêsNome', 'DiaSemanaNum', 'Mês'])['Total'].mean().reset_index()
-    
-    if heatmap_data.empty:
-        return None
-    
-    # Ordena os dias da semana corretamente
-    dias_ordem_numerica = list(range(7))  # 0=Segunda, ..., 6=Domingo
-    nomes_dias_map = {i: (datetime(2000,1,3) + timedelta(days=i)).strftime('%A').capitalize() for i in dias_ordem_numerica}
-    
-    # Ordena os meses corretamente
-    meses_ordem = list(range(1, 13))
-    
-    # Cria o heatmap
-    heatmap = alt.Chart(heatmap_data).mark_rect().encode(
-        x=alt.X('MêsNome:N', 
-                title='Mês', 
-                sort=meses_ordem,
-                axis=alt.Axis(labelAngle=0)),
-        y=alt.Y('DiaSemana:N', 
-                title='Dia da Semana', 
-                sort=alt.EncodingSortField(field="DiaSemanaNum", order='ascending'),
-                axis=alt.Axis(labelAlign='right')),
-        color=alt.Color('Total:Q', 
-                       scale=alt.Scale(scheme='viridis'),
-                       legend=alt.Legend(title="Média de Vendas (R$)")),
-        tooltip=[
-            alt.Tooltip('DiaSemana:N', title="Dia"),
-            alt.Tooltip('MêsNome:N', title="Mês"),
-            alt.Tooltip('Total:Q', format='R$,.2f', title="Média")
-        ]
-    ).properties(
-        width=600,
-        height=300,
-        title=alt.TitleParams("Média de Vendas por Dia e Mês", fontSize=18, anchor='middle')
-    ).configure_view(
-        strokeWidth=0
-    )
-    
-    return heatmap
 
 def create_avg_sales_by_weekday_bar_chart(df_data):
     """Cria gráfico de barras para média de vendas por dia da semana (incluindo sábado)"""
@@ -363,40 +270,14 @@ def create_avg_sales_by_weekday_bar_chart(df_data):
     
     vendas_media_dia = df_funcionamento.groupby(['DiaSemanaNum', 'DiaSemana'])['Total'].mean().reset_index()
     
-    # Gráfico de barras melhorado com cores por dia e valores nos topos
-    bar_chart = alt.Chart(vendas_media_dia).mark_bar(
-        cornerRadiusTopLeft=6,
-        cornerRadiusTopRight=6
-    ).encode(
-        x=alt.X('DiaSemana:N', 
-                title='Dia da Semana', 
-                sort=alt.EncodingSortField(field="DiaSemanaNum", order='ascending'),
-                axis=alt.Axis(labelAngle=0)),
-        y=alt.Y('Total:Q', 
-                title='Média de Vendas (R$)',
-                axis=alt.Axis(grid=False)),  # Remove linhas horizontais
-        color=alt.Color('DiaSemana:N', 
-                       scale=alt.Scale(scheme='tableau10'),
-                       legend=None),
+    bar_chart = alt.Chart(vendas_media_dia).mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3).encode(
+        x=alt.X('DiaSemana:N', title='Dia da Semana', sort=alt.EncodingSortField(field="DiaSemanaNum", order='ascending')),
+        y=alt.Y('Total:Q', title='Média de Vendas (R$)'),
+        color=alt.Color('DiaSemana:N', legend=None),
         tooltip=[alt.Tooltip('DiaSemana:N', title="Dia"), alt.Tooltip('Total:Q', format='R$,.2f', title="Média")]
-    ).properties(
-        height=CHART_HEIGHT, 
-        title=alt.TitleParams(text="Média de Vendas por Dia da Semana", fontSize=18, anchor='middle')
-    ).configure_view(
-        strokeWidth=0
-    )
+    ).properties(height=CHART_HEIGHT, title=alt.TitleParams(text="Média de Vendas por Dia da Semana (Seg-Sáb)", fontSize=16, dy=-10, anchor='middle'))
     
-    # Adiciona texto com valores no topo das barras
-    text_on_bars = alt.Chart(vendas_media_dia).mark_text(
-        dy=-8,
-        color='white',
-        fontSize=12,
-        fontWeight='bold'
-    ).encode(
-        x='DiaSemana:N',
-        y='Total:Q',
-        text=alt.Text('Total:Q', format="R$,.0f")
-    )
+    text_on_bars = bar_chart.mark_text(dy=-10).encode(text=alt.Text('Total:Q', format="R$,.0f"))
     
     return bar_chart + text_on_bars
 
@@ -422,134 +303,20 @@ def create_weekly_seasonality_bar_chart(df_data):
         
     vendas_total_dia['Porcentagem'] = (vendas_total_dia['Total'] / total_semanal_abs * 100)
     
-    # Gráfico de barras melhorado com cores por dia e valores nos topos
-    bar_chart = alt.Chart(vendas_total_dia).mark_bar(
-        cornerRadiusTopLeft=6,
-        cornerRadiusTopRight=6
-    ).encode(
-        x=alt.X('DiaSemana:N', 
-                title='Dia da Semana', 
-                sort=alt.EncodingSortField(field="DiaSemanaNum", order='ascending'),
-                axis=alt.Axis(labelAngle=0)),
-        y=alt.Y('Porcentagem:Q', 
-                title='% do Volume Semanal',
-                axis=alt.Axis(grid=False)),  # Remove linhas horizontais
-        color=alt.Color('DiaSemana:N', 
-                       scale=alt.Scale(scheme='tableau10'),
-                       legend=None),
+    bar_chart = alt.Chart(vendas_total_dia).mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3).encode(
+        x=alt.X('DiaSemana:N', title='Dia da Semana', sort=alt.EncodingSortField(field="DiaSemanaNum", order='ascending')),
+        y=alt.Y('Porcentagem:Q', title='% do Volume Semanal'),
+        color=alt.Color('DiaSemana:N', legend=None),
         tooltip=[
             alt.Tooltip('DiaSemana:N', title="Dia"), 
             alt.Tooltip('Total:Q', format='R$,.2f', title="Total"),
             alt.Tooltip('Porcentagem:Q', format='.1f', title="% do Total")
         ]
-    ).properties(
-        height=CHART_HEIGHT, 
-        title=alt.TitleParams(text="Distribuição Semanal de Vendas", fontSize=18, anchor='middle')
-    ).configure_view(
-        strokeWidth=0
-    )
+    ).properties(height=CHART_HEIGHT, title=alt.TitleParams(text="Distribuição Semanal de Vendas (Seg-Sáb)", fontSize=16, dy=-10, anchor='middle'))
     
-    # Adiciona texto com valores no topo das barras
-    text_on_bars = alt.Chart(vendas_total_dia).mark_text(
-        dy=-8,
-        color='white',
-        fontSize=12,
-        fontWeight='bold'
-    ).encode(
-        x='DiaSemana:N',
-        y='Porcentagem:Q',
-        text=alt.Text('Porcentagem:Q', format='.1f') + "%"
-    )
+    text_on_bars = bar_chart.mark_text(dy=-10).encode(text=alt.Text('Porcentagem:Q', format='.1f') + "%")
     
     return bar_chart + text_on_bars
-
-def create_monthly_trend_chart(df_data):
-    """Cria gráfico de tendência mensal com linha e pontos"""
-    if df_data is None or df_data.empty or 'AnoMês' not in df_data.columns:
-        return None
-    
-    vendas_mensais = df_data.groupby('AnoMês')['Total'].sum().reset_index()
-    if len(vendas_mensais) < 2:
-        return None
-    
-    # Gráfico de linha com pontos e área sombreada
-    line_chart = alt.Chart(vendas_mensais).mark_line(
-        point=True,
-        strokeWidth=3,
-        color='#4c78a8',
-        interpolate='monotone'
-    ).encode(
-        x=alt.X('AnoMês:N', 
-                title='Mês',
-                axis=alt.Axis(labelAngle=-45, labelFontSize=11, grid=False)),
-        y=alt.Y('Total:Q', 
-                title='Total de Vendas (R$)',
-                axis=alt.Axis(grid=False)),
-        tooltip=['AnoMês', alt.Tooltip('Total:Q', format='R$,.2f')]
-    )
-    
-    # Adiciona área sombreada abaixo da linha
-    area = alt.Chart(vendas_mensais).mark_area(
-        opacity=0.3,
-        color='#4c78a8',
-        interpolate='monotone'
-    ).encode(
-        x='AnoMês:N',
-        y='Total:Q'
-    )
-    
-    # Combina os gráficos
-    chart = (area + line_chart).properties(
-        height=CHART_HEIGHT,
-        title=alt.TitleParams("Tendência de Vendas Mensais", fontSize=18, anchor='middle')
-    ).configure_view(
-        strokeWidth=0
-    )
-    
-    return chart
-
-def create_payment_method_evolution_chart(df_data):
-    """Cria gráfico de evolução dos métodos de pagamento ao longo do tempo"""
-    if df_data is None or df_data.empty or 'AnoMês' not in df_data.columns:
-        return None
-    
-    # Agrupa os dados por mês e método de pagamento
-    payment_evolution = df_data.groupby('AnoMês')[['Cartão', 'Dinheiro', 'Pix']].sum().reset_index()
-    
-    if payment_evolution.empty or len(payment_evolution) < 2:
-        return None
-    
-    # Converte para formato longo para facilitar a visualização
-    payment_evolution_long = payment_evolution.melt(
-        id_vars=['AnoMês'],
-        value_vars=['Cartão', 'Dinheiro', 'Pix'],
-        var_name='Método',
-        value_name='Valor'
-    )
-    
-    # Cria o gráfico de linhas com pontos
-    evolution_chart = alt.Chart(payment_evolution_long).mark_line(
-        point=True,
-        strokeWidth=2
-    ).encode(
-        x=alt.X('AnoMês:N', 
-                title='Mês',
-                axis=alt.Axis(labelAngle=-45, labelFontSize=11, grid=False)),
-        y=alt.Y('Valor:Q', 
-                title='Valor (R$)',
-                axis=alt.Axis(grid=False)),
-        color=alt.Color('Método:N', 
-                       scale=alt.Scale(range=['#4c78a8', '#f58518', '#72b7b2']),
-                       legend=alt.Legend(title="Método", orient="bottom")),
-        tooltip=['AnoMês', 'Método', alt.Tooltip('Valor:Q', format='R$,.2f')]
-    ).properties(
-        height=CHART_HEIGHT,
-        title=alt.TitleParams("Evolução dos Métodos de Pagamento", fontSize=18, anchor='middle')
-    ).configure_view(
-        strokeWidth=0
-    )
-    
-    return evolution_chart
 
 # --- Função Principal ---
 def main():
@@ -640,105 +407,45 @@ def main():
         if not df_filtered.empty and 'DataFormatada' in df_filtered.columns:
             st.subheader("Dados Filtrados")
             
-            # Tabela sem container e não expansível
-            st.dataframe(df_filtered[['DataFormatada', 'Cartão', 'Dinheiro', 'Pix', 'Total']], 
-                        use_container_width=True, 
-                        height=300)
+            # Usando expander para melhorar a visualização
+            with st.expander("Ver dados detalhados", expanded=True):
+                st.dataframe(df_filtered[['DataFormatada', 'Cartão', 'Dinheiro', 'Pix', 'Total']], use_container_width=True, height=300)
 
-            # Duas colunas para os gráficos principais
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.subheader("Distribuição por Método")
-                payment_filtered_data = pd.DataFrame({
-                    'Método': ['Cartão', 'Dinheiro', 'PIX'],
-                    'Valor': [df_filtered['Cartão'].sum(), df_filtered['Dinheiro'].sum(), df_filtered['Pix'].sum()]
-                })
-                pie_chart = alt.Chart(payment_filtered_data).mark_arc(innerRadius=50, padAngle=0.03).encode(
-                    theta=alt.Theta("Valor:Q", stack=True),
-                    color=alt.Color("Método:N", 
-                                   scale=alt.Scale(range=['#4c78a8', '#f58518', '#72b7b2']),
-                                   legend=alt.Legend(title="Método", orient="bottom")),
-                    tooltip=["Método", alt.Tooltip("Valor:Q", format="R$,.2f")]
-                ).properties(height=300)
-                text = pie_chart.mark_text(radius=90, size=14, fontWeight='bold', color='white').encode(
-                    text=alt.Text("Valor:Q", format="R$,.0f")
-                )
-                st.altair_chart(pie_chart + text, use_container_width=True)
-            
-            with col2:
-                st.subheader("Evolução dos Métodos")
-                if 'AnoMês' in df_filtered.columns:
-                    payment_evolution = df_filtered.groupby('AnoMês')[['Cartão', 'Dinheiro', 'Pix']].sum().reset_index()
-                    if not payment_evolution.empty and len(payment_evolution) > 1:
-                        payment_evolution_long = payment_evolution.melt(
-                            id_vars=['AnoMês'],
-                            value_vars=['Cartão', 'Dinheiro', 'Pix'],
-                            var_name='Método',
-                            value_name='Valor'
-                        )
-                        evolution_chart = alt.Chart(payment_evolution_long).mark_line(
-                            point=True,
-                            strokeWidth=2
-                        ).encode(
-                            x=alt.X('AnoMês:N', title='Mês', axis=alt.Axis(labelAngle=-45, grid=False)),
-                            y=alt.Y('Valor:Q', title='Valor (R$)', axis=alt.Axis(grid=False)),
-                            color=alt.Color('Método:N', scale=alt.Scale(range=['#4c78a8', '#f58518', '#72b7b2'])),
-                            tooltip=['AnoMês', 'Método', alt.Tooltip('Valor:Q', format='R$,.2f')]
-                        ).properties(height=300)
-                        st.altair_chart(evolution_chart, use_container_width=True)
-                    else:
-                        st.info("Dados insuficientes para mostrar evolução dos métodos.")
-                else:
-                    st.info("Dados de mês não disponíveis para evolução.")
+            st.subheader("Distribuição por Método de Pagamento")
+            payment_filtered_data = pd.DataFrame({
+                'Método': ['Cartão', 'Dinheiro', 'PIX'],
+                'Valor': [df_filtered['Cartão'].sum(), df_filtered['Dinheiro'].sum(), df_filtered['Pix'].sum()]
+            })
+            pie_chart = alt.Chart(payment_filtered_data).mark_arc(innerRadius=50).encode(
+                theta=alt.Theta("Valor:Q", stack=True),
+                color=alt.Color("Método:N", legend=alt.Legend(title="Método")),
+                tooltip=["Método", "Valor"]
+            ).properties(width=700, height=500)
+            text = pie_chart.mark_text(radius=120, size=16).encode(text="Valor:Q")
+            st.altair_chart(pie_chart + text, use_container_width=True, theme=None)
 
             st.subheader("Vendas Diárias por Método de Pagamento")
             daily_data = df_filtered.melt(id_vars=['DataFormatada'], value_vars=['Cartão', 'Dinheiro', 'Pix'], var_name='Método', value_name='Valor')
-            bar_chart = alt.Chart(daily_data).mark_bar(
-                cornerRadiusTopLeft=4,
-                cornerRadiusTopRight=4,
-                size=16
-            ).encode(
-                x=alt.X('DataFormatada:N', title='Data', axis=alt.Axis(labelAngle=-45, grid=False)),
-                y=alt.Y('Valor:Q', title='Valor (R$)', stack='zero', axis=alt.Axis(grid=False)),
-                color=alt.Color('Método:N', scale=alt.Scale(range=['#4c78a8', '#f58518', '#72b7b2'])),
-                tooltip=['DataFormatada', 'Método', alt.Tooltip('Valor:Q', format='R$,.2f')]
-            ).properties(height=400)
-            st.altair_chart(bar_chart, use_container_width=True)
+            bar_chart = alt.Chart(daily_data).mark_bar(size=20).encode(
+                x=alt.X('DataFormatada:N', title='Data', axis=alt.Axis(labelAngle=-45), sort=alt.EncodingSortField(field="DataFormatada", op="min", order='ascending')),
+                y=alt.Y('Valor:Q', title='Valor (R$)'),
+                color=alt.Color('Método:N', legend=alt.Legend(title="Método")),
+                tooltip=['DataFormatada', 'Método', 'Valor']
+            ).properties(width=700, height=500)
+            st.altair_chart(bar_chart, use_container_width=True, theme=None)
 
             st.subheader("Acúmulo de Capital ao Longo do Tempo")
             if 'Data' in df_filtered.columns:
                 df_accumulated = df_filtered.sort_values('Data').copy()
                 df_accumulated['Total Acumulado'] = df_accumulated['Total'].cumsum()
-                line_chart = alt.Chart(df_accumulated).mark_area(
-                    line={'color':'#4c78a8', 'strokeWidth': 3},
-                    point=True,
-                    interpolate='monotone',
-                    color=alt.Gradient(
-                        gradient='linear',
-                        stops=[
-                            alt.GradientStop(color='rgba(76,120,168,0.1)', offset=0.2), 
-                            alt.GradientStop(color='rgba(76,120,168,0.7)', offset=1)
-                        ],
-                        x1=1, x2=1, y1=1, y2=0
-                    )
-                ).encode(
-                    x=alt.X('Data:T', title='Data', axis=alt.Axis(format="%d/%m/%y", labelAngle=-45, grid=False)),
-                    y=alt.Y('Total Acumulado:Q', title='Capital Acumulado (R$)', axis=alt.Axis(grid=False)),
-                    tooltip=['DataFormatada', alt.Tooltip('Total Acumulado:Q', format='R$,.2f')]
-                ).properties(height=400)
-                st.altair_chart(line_chart, use_container_width=True)
+                line_chart = alt.Chart(df_accumulated).mark_line(point=True, strokeWidth=3).encode(
+                    x=alt.X('Data:T', title='Data'),
+                    y=alt.Y('Total Acumulado:Q', title='Capital Acumulado (R$)'),
+                    tooltip=['DataFormatada', 'Total Acumulado']
+                ).properties(width=700, height=500)
+                st.altair_chart(line_chart, use_container_width=True, theme=None)
             else:
                 st.info("Coluna 'Data' não encontrada para gráfico de acúmulo.")
-                
-            # Novo gráfico: Heatmap de vendas por dia da semana e mês
-            if 'DiaSemana' in df_filtered.columns and 'MêsNome' in df_filtered.columns:
-                st.subheader("Padrão de Vendas por Dia e Mês")
-                heatmap = create_heatmap_sales_by_weekday_month(df_filtered)
-                if heatmap:
-                    st.altair_chart(heatmap, use_container_width=True)
-                else:
-                    st.info("Dados insuficientes para o heatmap de vendas.")
         else:
             st.info("Não há dados para exibir na Análise Detalhada ou os dados filtrados estão vazios.")
 
@@ -755,17 +462,24 @@ def main():
             # Usando cards para destacar as métricas principais
             cols1 = st.columns(2)
             with cols1[0]:
-                st.metric("🔢 Total de Vendas", f"{total_vendas}")
+                with st.container():
+                    st.metric("🔢 Total de Vendas", f"{total_vendas}")
             with cols1[1]:
-                st.metric("💵 Faturamento Total", f"R$ {total_faturamento:,.2f}")
+                with st.container():
+                    st.metric("💵 Faturamento Total", f"R$ {total_faturamento:,.2f}")
             
-            cols2 = st.columns(3)
+            cols2 = st.columns(2)
             with cols2[0]:
-                st.metric("📈 Média por Venda", f"R$ {media_por_venda:,.2f}")
+                with st.container():
+                    st.metric("📈 Média por Venda", f"R$ {media_por_venda:,.2f}")
             with cols2[1]:
-                st.metric("⬆️ Maior Venda", f"R$ {maior_venda:,.2f}")
-            with cols2[2]:
-                st.metric("⬇️ Menor Venda", f"R$ {menor_venda:,.2f}")
+                with st.container():
+                    st.metric("⬆️ Maior Venda", f"R$ {maior_venda:,.2f}")
+            
+            cols3 = st.columns(1)
+            with cols3[0]:
+                with st.container():
+                    st.metric("⬇️ Menor Venda", f"R$ {menor_venda:,.2f}")
 
             st.markdown("---")
             st.subheader("💳 Métodos de Pagamento")
@@ -788,17 +502,12 @@ def main():
 
             if total_pagamentos > 0:
                 payment_data_stats = pd.DataFrame({'Método': ['Cartão', 'Dinheiro', 'PIX'], 'Valor': [cartao_total, dinheiro_total, pix_total]})
-                pie_chart_stats = alt.Chart(payment_data_stats).mark_arc(innerRadius=80, padAngle=0.03).encode(
-                    theta=alt.Theta("Valor:Q", stack=True),
-                    color=alt.Color("Método:N", 
-                                   scale=alt.Scale(range=['#4c78a8', '#f58518', '#72b7b2']),
-                                   legend=alt.Legend(title="Método", orient="bottom")),
-                    tooltip=["Método", alt.Tooltip("Valor:Q", format="R$,.2f")]
-                ).properties(height=350)
-                text_stats = pie_chart_stats.mark_text(radius=110, size=14, fontWeight='bold', color='white').encode(
-                    text=alt.Text("Valor:Q", format="R$,.0f")
-                )
-                st.altair_chart(pie_chart_stats + text_stats, use_container_width=True)
+                pie_chart_stats = alt.Chart(payment_data_stats).mark_arc(innerRadius=50).encode(
+                    theta=alt.Theta("Valor:Q", stack=True), color=alt.Color("Método:N", legend=alt.Legend(title="Método")),
+                    tooltip=["Método", "Valor"]
+                ).properties(height=500)
+                text_stats = pie_chart_stats.mark_text(radius=120, size=16).encode(text="Valor:Q")
+                st.altair_chart(pie_chart_stats + text_stats, use_container_width=True, theme=None)
             
             st.markdown("---")
             st.subheader("📅 Análise Temporal")
@@ -834,29 +543,12 @@ def main():
                     vendas_por_dia_uteis['DiaSemanaOrdem'] = vendas_por_dia_uteis['DiaSemana'].map({dia: i for i, dia in enumerate(dias_ordem_locale)})
                     vendas_por_dia_uteis = vendas_por_dia_uteis.sort_values('DiaSemanaOrdem')
 
-                    chart_dias_uteis = alt.Chart(vendas_por_dia_uteis).mark_bar(
-                        cornerRadiusTopLeft=6,
-                        cornerRadiusTopRight=6
-                    ).encode(
-                        x=alt.X('DiaSemana:N', title='Dia da Semana', sort=dias_ordem_locale, axis=alt.Axis(labelAngle=0, grid=False)),
-                        y=alt.Y('Total:Q', title='Média de Vendas (R$)', axis=alt.Axis(grid=False)),
-                        color=alt.Color('DiaSemana:N', scale=alt.Scale(scheme='tableau10'), legend=None),
-                        tooltip=['DiaSemana', alt.Tooltip('Total:Q', format='R$,.2f')]
-                    ).properties(height=350)
-                    
-                    # Adiciona texto com valores no topo das barras
-                    text_on_bars = alt.Chart(vendas_por_dia_uteis).mark_text(
-                        dy=-8,
-                        color='white',
-                        fontSize=12,
-                        fontWeight='bold'
-                    ).encode(
-                        x='DiaSemana:N',
-                        y='Total:Q',
-                        text=alt.Text('Total:Q', format="R$,.0f")
-                    )
-                    
-                    st.altair_chart(chart_dias_uteis + text_on_bars, use_container_width=True)
+                    chart_dias_uteis = alt.Chart(vendas_por_dia_uteis).mark_bar().encode(
+                        x=alt.X('DiaSemana:N', title='Dia da Semana', sort=dias_ordem_locale),
+                        y=alt.Y('Total:Q', title='Média de Vendas (R$)'),
+                        tooltip=['DiaSemana', 'Total']
+                    ).properties(title='Média de Vendas por Dia da Semana (Seg-Sáb)', height=500)
+                    st.altair_chart(chart_dias_uteis, use_container_width=True, theme=None)
             
             if 'AnoMês' in df_filtered.columns and df_filtered['AnoMês'].nunique() > 1:
                 st.subheader("📈 Tendência Mensal")
@@ -870,20 +562,15 @@ def main():
                     # Usando card para destacar a variação mensal
                     st.warning(f"**{emoji_tendencia} Variação do último mês:** {variacao:.1f}% ({'-' if variacao < 0 else '+'} R$ {abs(ultimo_mes_val - penultimo_mes_val):.2f})")
                     
-                    # Gráfico de tendência mensal melhorado
-                    monthly_trend = create_monthly_trend_chart(df_filtered)
-                    if monthly_trend:
-                        st.altair_chart(monthly_trend, use_container_width=True)
+                    chart_tendencia = alt.Chart(vendas_mensais).mark_line(point=True).encode(
+                        x=alt.X('AnoMês:N', title='Mês'),
+                        y=alt.Y('Total:Q', title='Total de Vendas (R$)'),
+                        tooltip=['AnoMês', 'Total']
+                    ).properties(title='Tendência de Vendas Mensais', height=400)
+                    st.altair_chart(chart_tendencia, use_container_width=True, theme=None)
             
             # Sazonalidade semanal
             if 'DiaSemana' in df_filtered.columns and 'DiaSemanaNum' in df_filtered.columns and len(df_filtered) > 6:
-                st.subheader("📊 Sazonalidade Semanal")
-                
-                # Gráfico de sazonalidade semanal melhorado
-                seasonality_chart = create_weekly_seasonality_bar_chart(df_filtered)
-                if seasonality_chart:
-                    st.altair_chart(seasonality_chart, use_container_width=True)
-                
                 dias_ordem_numerica = list(range(6))  # 0=Segunda, ..., 5=Sábado
                 nomes_dias_map = {i: (datetime(2000,1,3) + timedelta(days=i)).strftime('%A').capitalize() for i in dias_ordem_numerica}
                 dias_ordem_locale = [nomes_dias_map[i] for i in dias_ordem_numerica]
@@ -894,15 +581,25 @@ def main():
                     total_semanal_abs = vendas_dia_semana_total['Total'].sum()
                     
                     if total_semanal_abs > 0:
+                        vendas_dia_semana_total['Porcentagem'] = (vendas_dia_semana_total['Total'] / total_semanal_abs * 100)
+                        
+                        chart_sazonalidade = alt.Chart(vendas_dia_semana_total).mark_bar().encode(
+                            x=alt.X('DiaSemana:N', title='Dia da Semana', sort=alt.EncodingSortField(field="DiaSemanaNum", order='ascending')),
+                            y=alt.Y('Porcentagem:Q', title='% do Volume Semanal'),
+                            color=alt.Color('DiaSemana:N', legend=None),
+                            tooltip=['DiaSemana', 'Total', 'Porcentagem']
+                        ).properties(title='Distribuição Semanal de Vendas (Seg-Sáb)', height=500)
+                        st.altair_chart(chart_sazonalidade, use_container_width=True, theme=None)
+
                         melhor_dia_df = vendas_dia_semana_total.loc[vendas_dia_semana_total['Total'].idxmax()]
                         pior_dia_df = vendas_dia_semana_total.loc[vendas_dia_semana_total['Total'].idxmin()]
                         
                         # Usando cards para destacar melhor e pior dia
                         best_worst_cols = st.columns(2)
                         with best_worst_cols[0]:
-                            st.success(f"**🔝 Melhor dia:** {melhor_dia_df['DiaSemana']} (R$ {melhor_dia_df['Total']:.2f})")
+                            st.success(f"**🔝 Melhor dia:** {melhor_dia_df['DiaSemana']} ({melhor_dia_df['Porcentagem']:.1f}% do total)")
                         with best_worst_cols[1]:
-                            st.error(f"**🔻 Pior dia:** {pior_dia_df['DiaSemana']} (R$ {pior_dia_df['Total']:.2f})")
+                            st.error(f"**🔻 Pior dia:** {pior_dia_df['DiaSemana']} ({pior_dia_df['Porcentagem']:.1f}% do total)")
 
         else:
             st.info("Não há dados para exibir na aba Estatísticas ou os dados filtrados estão vazios.")
