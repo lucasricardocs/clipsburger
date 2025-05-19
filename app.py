@@ -1,17 +1,10 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
+import altair as alt
 import gspread
 from datetime import datetime
 from google.oauth2.service_account import Credentials
 from gspread.exceptions import SpreadsheetNotFound
-
-from bokeh.plotting import figure
-from bokeh.models import ColumnDataSource, HoverTool, DataTable, TableColumn
-from bokeh.models.widgets import NumberFormatter
-from bokeh.palettes import Category10, Spectral6
-from bokeh.transform import cumsum
-from math import pi
 
 # Configuração da página
 st.set_page_config(
@@ -135,6 +128,10 @@ def process_data(df_raw):
                 }
                 df['DiaSemana'] = df['DiaSemana'].map(dias_semana_map)
                 
+                # Adicionar ordem dos dias da semana para garantir ordenação correta
+                ordem_dias = {'Segunda': 1, 'Terça': 2, 'Quarta': 3, 'Quinta': 4, 'Sexta': 5, 'Sábado': 6, 'Domingo': 7}
+                df['DiaSemanaOrdem'] = df['DiaSemana'].map(ordem_dias)
+                
                 # Remover domingos
                 df = df[df['DiaSemana'] != 'Domingo'].copy()
         except Exception as e:
@@ -142,247 +139,235 @@ def process_data(df_raw):
     
     return df
 
-def create_accumulated_line_chart(df):
-    """Cria gráfico de linha para capital acumulado usando Bokeh"""
+def create_accumulated_chart(df):
+    """Cria gráfico de linha para capital acumulado usando Altair"""
     if df.empty or 'Data' not in df.columns:
         return None
-        
+    
+    # Ordenar por data e calcular acumulado
     df_sorted = df.sort_values('Data').copy()
     df_sorted['Total Acumulado'] = df_sorted['Total'].cumsum()
     
-    source = ColumnDataSource(df_sorted)
-    
-    p = figure(
-        x_axis_type='datetime', 
-        title='Acúmulo de Capital ao Longo do Tempo', 
-        height=400, 
-        sizing_mode='stretch_width',
-        toolbar_location='above'
-    )
-    
-    # Linha principal
-    p.line('Data', 'Total Acumulado', source=source, line_width=3, color='#4285F4')
-    
-    # Pontos
-    p.circle('Data', 'Total Acumulado', source=source, size=8, color='#4285F4', alpha=0.7)
-    
-    # Tooltip
-    hover = HoverTool(
-        tooltips=[
-            ('Data', '@DataFormatada'),
-            ('Acumulado', 'R$ @{Total Acumulado}{0,0.00}'),
-            ('Venda do dia', 'R$ @{Total}{0,0.00}')
+    # Criar gráfico de área para acúmulo de capital
+    chart = alt.Chart(df_sorted).mark_area(
+        opacity=0.6,
+        line=True,
+        color="#4285F4"
+    ).encode(
+        x=alt.X('Data:T', 
+               title='Data',
+               axis=alt.Axis(format='%d/%m/%Y', labelAngle=-45)),
+        y=alt.Y('Total Acumulado:Q', 
+               title='Capital Acumulado (R$)'),
+        tooltip=[
+            alt.Tooltip('DataFormatada:N', title='Data'),
+            alt.Tooltip('Total Acumulado:Q', title='Acumulado', format='R$ ,.2f'),
+            alt.Tooltip('Total:Q', title='Venda do Dia', format='R$ ,.2f')
         ]
+    ).properties(
+        height=400
     )
-    p.add_tools(hover)
     
-    # Estilo
-    p.yaxis.axis_label = 'Capital Acumulado (R$)'
-    p.xaxis.axis_label = 'Data'
-    p.background_fill_color = "#f5f5f5"
-    p.border_fill_color = "whitesmoke"
-    p.outline_line_color = "#dddddd"
+    # Adicionar pontos para destacar os valores individuais
+    points = alt.Chart(df_sorted).mark_circle(
+        size=60,
+        color="#1A73E8"
+    ).encode(
+        x='Data:T',
+        y='Total Acumulado:Q'
+    )
     
-    return p
+    return chart + points
 
-def create_bar_chart_day_of_week(df):
-    """Cria gráfico de barras agrupado por dia da semana usando Bokeh"""
+def create_weekday_chart(df):
+    """Cria gráfico de barras por dia da semana usando Altair"""
     if df.empty or 'DiaSemana' not in df.columns:
         return None
-        
+    
     # Dias da semana em ordem correta
     dias_ordem = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
     
     # Agrupar por dia da semana
-    vendas_por_dia = df.groupby('DiaSemana')['Total'].sum().reindex(dias_ordem).fillna(0)
+    vendas_por_dia = df.groupby('DiaSemana')['Total'].sum().reset_index()
     
-    source = ColumnDataSource(data=dict(
-        dia=vendas_por_dia.index.tolist(),
-        total=vendas_por_dia.values
-    ))
-    
-    p = figure(
-        x_range=dias_ordem, 
-        title='Faturamento por Dia da Semana', 
-        height=350, 
-        sizing_mode='stretch_width',
-        toolbar_location='above'
-    )
-    
-    # Barras
-    p.vbar(
-        x='dia', 
-        top='total', 
-        width=0.7, 
-        source=source, 
-        color='#34A853',
-        line_color='white',
-        alpha=0.8
-    )
-    
-    # Tooltip
-    hover = HoverTool(
-        tooltips=[
-            ('Dia', '@dia'),
-            ('Total', 'R$ @total{0,0.00}')
+    # Criar gráfico de barras
+    chart = alt.Chart(vendas_por_dia).mark_bar(
+        cornerRadiusTopLeft=3,
+        cornerRadiusTopRight=3
+    ).encode(
+        x=alt.X('DiaSemana:N', 
+               title='Dia da Semana',
+               sort=dias_ordem),
+        y=alt.Y('Total:Q', 
+               title='Faturamento Total (R$)'),
+        color=alt.Color('DiaSemana:N', 
+                      scale=alt.Scale(scheme='tableau10'),
+                      legend=None),
+        tooltip=[
+            alt.Tooltip('DiaSemana:N', title='Dia'),
+            alt.Tooltip('Total:Q', title='Total', format='R$ ,.2f')
         ]
+    ).properties(
+        height=350
     )
-    p.add_tools(hover)
     
-    # Estilo
-    p.yaxis.axis_label = 'Faturamento (R$)'
-    p.xaxis.axis_label = 'Dia da Semana'
-    p.background_fill_color = "#f5f5f5"
-    p.border_fill_color = "whitesmoke"
-    p.outline_line_color = "#dddddd"
+    # Adicionar valores no topo das barras
+    text = chart.mark_text(
+        align='center',
+        baseline='bottom',
+        dy=-5,
+        fontSize=12,
+        fontWeight='bold'
+    ).encode(
+        text=alt.Text('Total:Q', format='R$ ,.0f')
+    )
     
-    return p
+    return chart + text
 
-def create_pie_chart_payment_methods(df):
-    """Cria gráfico de pizza para métodos de pagamento usando Bokeh"""
+def create_payment_methods_chart(df):
+    """Cria gráfico de pizza para métodos de pagamento usando Altair"""
     if df.empty:
         return None
     
-    # Somar valores por método de pagamento
-    pagamentos = df[['Cartão', 'Dinheiro', 'Pix']].sum()
-    pagamentos = pagamentos[pagamentos > 0]
+    # Calcular total por método de pagamento
+    metodo_pagamento = pd.DataFrame({
+        'Método': ['Cartão', 'Dinheiro', 'PIX'],
+        'Valor': [
+            df['Cartão'].sum(),
+            df['Dinheiro'].sum(),
+            df['Pix'].sum()
+        ]
+    })
     
-    # Preparar dados
-    data = pd.Series(pagamentos).reset_index(name='value').rename(columns={'index': 'method'})
-    data['angle'] = data['value']/data['value'].sum() * 2*pi
-    data['percentage'] = data['value']/data['value'].sum() * 100
+    # Calcular porcentagens
+    total = metodo_pagamento['Valor'].sum()
+    if total > 0:
+        metodo_pagamento['Porcentagem'] = (metodo_pagamento['Valor'] / total * 100).round(1)
+    else:
+        metodo_pagamento['Porcentagem'] = 0
     
-    # Cores para os métodos de pagamento
-    colors = {'Cartão': '#4285F4', 'Dinheiro': '#34A853', 'Pix': '#FBBC05'}
-    data['color'] = data['method'].map(colors)
+    # Definir cores para os métodos
+    domain = ['Cartão', 'Dinheiro', 'PIX']
+    range_ = ['#4285F4', '#34A853', '#FBBC05']
     
-    source = ColumnDataSource(data)
-    
-    p = figure(
-        height=350, 
-        title='Distribuição por Método de Pagamento', 
-        toolbar_location='above', 
-        tools='hover',
-        tooltips=[
-            ('Método', '@method'),
-            ('Valor', 'R$ @value{0,0.00}'),
-            ('Porcentagem', '@percentage{0.0}%')
-        ],
-        sizing_mode='stretch_width'
+    # Criar gráfico de pizza
+    chart = alt.Chart(metodo_pagamento).mark_arc(outerRadius=120).encode(
+        theta=alt.Theta(field="Valor", type="quantitative"),
+        color=alt.Color('Método:N', scale=alt.Scale(domain=domain, range=range_)),
+        tooltip=[
+            alt.Tooltip('Método:N', title='Método'),
+            alt.Tooltip('Valor:Q', title='Valor', format='R$ ,.2f'),
+            alt.Tooltip('Porcentagem:Q', title='Porcentagem', format='.1f%')
+        ]
+    ).properties(
+        height=350
     )
     
-    # Gráfico de pizza
-    p.wedge(
-        x=0, 
-        y=1, 
-        radius=0.8,
-        start_angle=cumsum('angle', include_zero=True), 
-        end_angle=cumsum('angle'),
-        line_color='white', 
-        fill_color='color', 
-        legend_field='method', 
-        source=source
+    # Adicionar texto de porcentagem
+    text = alt.Chart(metodo_pagamento).mark_text(radius=150, size=16).encode(
+        theta=alt.Theta(field="Valor", type="quantitative"),
+        text=alt.Text('Porcentagem:Q', format='.1f%'),
+        color=alt.value('black')
     )
     
-    # Remover eixos desnecessários
-    p.axis.visible = False
-    p.grid.grid_line_color = None
-    p.background_fill_color = "#f5f5f5"
-    p.border_fill_color = "whitesmoke"
-    p.outline_line_color = "#dddddd"
-    
-    return p
+    return chart + text
 
 def create_histogram(df):
-    """Cria histograma dos valores de venda usando Bokeh"""
+    """Cria histograma dos valores de venda usando Altair"""
     if df.empty or 'Total' not in df.columns:
         return None
     
-    # Calcular histograma
-    hist, edges = np.histogram(df['Total'], bins=20)
+    # Calcular estatísticas para destacar no tooltip
+    count = len(df)
+    mean = df['Total'].mean()
+    median = df['Total'].median()
     
-    # Criar dataframe com os valores do histograma
-    hist_df = pd.DataFrame({
-        'count': hist,
-        'left': edges[:-1],
-        'right': edges[1:]
-    })
-    hist_df['interval'] = [f'{left:.2f} - {right:.2f}' for left, right in zip(hist_df['left'], hist_df['right'])]
-    
-    source = ColumnDataSource(hist_df)
-    
-    p = figure(
-        title='Distribuição dos Valores de Venda', 
-        height=350, 
-        sizing_mode='stretch_width',
-        toolbar_location='above'
+    # Criar histograma
+    chart = alt.Chart(df).mark_bar(
+        opacity=0.7,
+        color='#FBBC05'
+    ).encode(
+        x=alt.X('Total:Q', 
+               bin=alt.Bin(maxbins=20), 
+               title='Valor da Venda (R$)'),
+        y=alt.Y('count()', 
+               title='Frequência'),
+        tooltip=[
+            alt.Tooltip('count()', title='Quantidade'),
+            alt.Tooltip('Total:Q', title='Faixa de Valor', format='R$ ,.2f')
+        ]
+    ).properties(
+        height=350
     )
     
-    # Barras do histograma
-    p.quad(
-        bottom=0, 
-        top='count', 
-        left='left', 
-        right='right',
-        source=source,
-        fill_color='#FBBC05',
-        line_color='white',
-        alpha=0.8
+    # Adicionar linha vertical para média
+    mean_line = alt.Chart(pd.DataFrame({'mean': [mean]})).mark_rule(
+        color='red',
+        strokeWidth=2,
+        strokeDash=[4, 4]
+    ).encode(
+        x='mean:Q',
+        size=alt.value(2),
+        tooltip=alt.Tooltip('mean:Q', title='Média', format='R$ ,.2f')
     )
     
-    # Tooltip
-    hover = HoverTool(
-        tooltips=[
-            ('Intervalo', '@interval'),
-            ('Contagem', '@count')
+    # Adicionar linha vertical para mediana
+    median_line = alt.Chart(pd.DataFrame({'median': [median]})).mark_rule(
+        color='green',
+        strokeWidth=2,
+        strokeDash=[4, 4]
+    ).encode(
+        x='median:Q',
+        size=alt.value(2),
+        tooltip=alt.Tooltip('median:Q', title='Mediana', format='R$ ,.2f')
+    )
+    
+    return chart + mean_line + median_line
+
+def create_monthly_chart(df):
+    """Cria gráfico de evolução mensal usando Altair"""
+    if df.empty or 'AnoMês' not in df.columns:
+        return None
+    
+    # Agrupar por mês
+    df_monthly = df.groupby('AnoMês').agg({
+        'Total': 'sum',
+        'Data': 'count'
+    }).reset_index()
+    
+    df_monthly.rename(columns={'Data': 'Quantidade'}, inplace=True)
+    
+    # Cria linha de tendência
+    line = alt.Chart(df_monthly).mark_line(
+        point=alt.OverlayMarkDef(filled=True, size=100),
+        color='#4285F4',
+        strokeWidth=3
+    ).encode(
+        x=alt.X('AnoMês:N', title='Mês', sort=None),
+        y=alt.Y('Total:Q', title='Faturamento Total (R$)'),
+        tooltip=[
+            alt.Tooltip('AnoMês:N', title='Mês'),
+            alt.Tooltip('Total:Q', title='Faturamento', format='R$ ,.2f'),
+            alt.Tooltip('Quantidade:Q', title='Quantidade de Vendas')
         ]
     )
-    p.add_tools(hover)
     
-    # Estilo
-    p.yaxis.axis_label = 'Frequência'
-    p.xaxis.axis_label = 'Valor da Venda (R$)'
-    p.background_fill_color = "#f5f5f5"
-    p.border_fill_color = "whitesmoke"
-    p.outline_line_color = "#dddddd"
-    
-    return p
-
-def create_data_table(df):
-    """Cria tabela de dados usando Bokeh"""
-    if df.empty:
-        return None
-    
-    # Preparar dados para a tabela
-    if 'Data' in df.columns:
-        df_table = df[['DataFormatada', 'Cartão', 'Dinheiro', 'Pix', 'Total', 'DiaSemana']].copy()
-    else:
-        return None
-    
-    # Fonte de dados para a tabela
-    source = ColumnDataSource(df_table)
-    
-    # Definir colunas da tabela
-    columns = [
-        TableColumn(field="DataFormatada", title="Data"),
-        TableColumn(field="DiaSemana", title="Dia da Semana"),
-        TableColumn(field="Cartão", title="Cartão (R$)", formatter=NumberFormatter(format="R$ 0,0.00")),
-        TableColumn(field="Dinheiro", title="Dinheiro (R$)", formatter=NumberFormatter(format="R$ 0,0.00")),
-        TableColumn(field="Pix", title="PIX (R$)", formatter=NumberFormatter(format="R$ 0,0.00")),
-        TableColumn(field="Total", title="Total (R$)", formatter=NumberFormatter(format="R$ 0,0.00"))
-    ]
-    
-    # Criar tabela
-    data_table = DataTable(
-        source=source, 
-        columns=columns, 
-        width=800, 
-        height=300, 
-        sizing_mode='stretch_width',
-        index_position=None
+    # Cria barras para quantidade
+    bars = alt.Chart(df_monthly).mark_bar(
+        opacity=0.3,
+        color='#34A853'
+    ).encode(
+        x='AnoMês:N',
+        y=alt.Y('Quantidade:Q', title='Quantidade de Vendas',
+              axis=alt.Axis(titleColor='#34A853'))
     )
     
-    return data_table
+    # Combina os dois gráficos com escalas independentes
+    chart = alt.layer(line, bars).resolve_scale(
+        y='independent'
+    ).properties(height=400)
+    
+    return chart
 
 def main():
     st.title("📊 Sistema de Registro de Vendas")
@@ -488,10 +473,20 @@ def main():
             # Mostrar dados filtrados em uma tabela
             st.subheader("🧾 Dados Filtrados")
             
-            # Tabela Bokeh
-            data_table = create_data_table(df_filtered)
-            if data_table:
-                st.bokeh_chart(data_table, use_container_width=True)
+            # Tabela usando componente nativo do Streamlit
+            st.dataframe(
+                df_filtered[['DataFormatada', 'DiaSemana', 'Cartão', 'Dinheiro', 'Pix', 'Total']], 
+                use_container_width=True,
+                column_config={
+                    "DataFormatada": st.column_config.TextColumn("Data"),
+                    "DiaSemana": st.column_config.TextColumn("Dia da Semana"),
+                    "Cartão": st.column_config.NumberColumn("Cartão (R$)", format="R$ %.2f"),
+                    "Dinheiro": st.column_config.NumberColumn("Dinheiro (R$)", format="R$ %.2f"),
+                    "Pix": st.column_config.NumberColumn("PIX (R$)", format="R$ %.2f"),
+                    "Total": st.column_config.NumberColumn("Total (R$)", format="R$ %.2f")
+                },
+                height=300
+            )
             
             # Resumo dos dados
             total_vendas = len(df_filtered)
@@ -533,9 +528,9 @@ def main():
             # Acúmulo de Capital
             st.subheader("💰 Acúmulo de Capital ao Longo do Tempo")
             
-            line_chart = create_accumulated_line_chart(df_filtered)
-            if line_chart:
-                st.bokeh_chart(line_chart, use_container_width=True)
+            chart = create_accumulated_chart(df_filtered)
+            if chart:
+                st.altair_chart(chart, use_container_width=True)
     
     # Aba 3: Estatísticas
     with tab3:
@@ -544,26 +539,46 @@ def main():
         if df_filtered.empty:
             st.info("Não há dados para exibir com os filtros selecionados.")
         else:
-            # Análise por Dia da Semana
-            st.subheader("📅 Análise por Dia da Semana")
+            # Layout em duas colunas para os primeiros gráficos
+            col1, col2 = st.columns(2)
             
-            bar_chart = create_bar_chart_day_of_week(df_filtered)
-            if bar_chart:
-                st.bokeh_chart(bar_chart, use_container_width=True)
+            with col1:
+                # Análise por Dia da Semana
+                st.subheader("📅 Vendas por Dia da Semana")
+                
+                chart = create_weekday_chart(df_filtered)
+                if chart:
+                    st.altair_chart(chart, use_container_width=True)
             
-            # Métodos de Pagamento
-            st.subheader("💳 Métodos de Pagamento")
-            
-            pie_chart = create_pie_chart_payment_methods(df_filtered)
-            if pie_chart:
-                st.bokeh_chart(pie_chart, use_container_width=True)
+            with col2:
+                # Métodos de Pagamento
+                st.subheader("💳 Métodos de Pagamento")
+                
+                chart = create_payment_methods_chart(df_filtered)
+                if chart:
+                    st.altair_chart(chart, use_container_width=True)
             
             # Histograma dos valores
             st.subheader("📊 Distribuição dos Valores de Venda")
             
-            histogram = create_histogram(df_filtered)
-            if histogram:
-                st.bokeh_chart(histogram, use_container_width=True)
+            chart = create_histogram(df_filtered)
+            if chart:
+                st.altair_chart(chart, use_container_width=True)
+                
+                # Estatísticas adicionais
+                stats_cols = st.columns(4)
+                stats_cols[0].metric("Média", f"R$ {df_filtered['Total'].mean():.2f}")
+                stats_cols[1].metric("Mediana", f"R$ {df_filtered['Total'].median():.2f}")
+                stats_cols[2].metric("Desvio Padrão", f"R$ {df_filtered['Total'].std():.2f}")
+                stats_cols[3].metric("Coef. de Variação", f"{(df_filtered['Total'].std() / df_filtered['Total'].mean() * 100):.1f}%")
+            
+            # Evolução mensal
+            if 'AnoMês' in df_filtered.columns and df_filtered['AnoMês'].nunique() > 1:
+                st.subheader("📈 Evolução Mensal de Vendas")
+                
+                chart = create_monthly_chart(df_filtered)
+                if chart:
+                    st.altair_chart(chart, use_container_width=True)
 
 if __name__ == "__main__":
     main()
