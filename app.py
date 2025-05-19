@@ -3,10 +3,11 @@ import gspread
 import pandas as pd
 from datetime import datetime
 import pygwalker as pyg
+import altair as alt
 from google.oauth2.service_account import Credentials
 from gspread.exceptions import SpreadsheetNotFound
 
-# Configuração da página - PyGWalker funciona melhor em layout wide
+# Configuração da página
 st.set_page_config(
     page_title="Sistema de Registro de Vendas", 
     layout="wide",
@@ -43,9 +44,17 @@ st.markdown("""
     [data-testid="stElementToolbar"] {
         display: none;
     }
-    /* Melhorias para o PyGWalker */
-    iframe {
-        border: none !important;
+    .chart-container {
+        background-color: #121212;
+        border-radius: 10px;
+        padding: 15px;
+        margin-bottom: 20px;
+        border: 1px solid #333;
+    }
+    .chart-title {
+        color: #4dabf7;
+        font-size: 1.2em;
+        margin-bottom: 10px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -135,16 +144,9 @@ def process_data(df_raw):
                 # Remover domingos
                 df = df[df['DiaSemana'] != 'Domingo'].copy()
                 
-                # Adicionar colunas para facilitar análise no PyGWalker
-                df['DiaDaSemana_num'] = df['DiaSemana'].map({
-                    'Segunda': 1, 'Terça': 2, 'Quarta': 3, 
-                    'Quinta': 4, 'Sexta': 5, 'Sábado': 6
-                })
-                
-                # Coluna para valor acumulado (será calculado posteriormente)
-                df['Semana'] = df['Data'].dt.isocalendar().week
-                df['Dia'] = df['Data'].dt.day
-                
+                # Ordenar dias da semana
+                ordem_dias = {'Segunda': 0, 'Terça': 1, 'Quarta': 2, 'Quinta': 3, 'Sexta': 4, 'Sábado': 5}
+                df['DiaSemana_order'] = df['DiaSemana'].map(ordem_dias)
         except Exception as e:
             st.warning(f"Erro ao processar datas: {e}")
     
@@ -174,6 +176,64 @@ def calculate_metrics(df):
         'melhor_dia': melhor_dia
     }
 
+def create_favorite_charts(df):
+    """Cria os gráficos favoritos pré-definidos usando PyGWalker"""
+    charts = {}
+    
+    if df.empty:
+        return charts
+    
+    try:
+        # 1. Gráfico de Tendência de Vendas (acumulado ao longo do tempo)
+        df_acum = df.sort_values('Data').copy()
+        df_acum['Total Acumulado'] = df_acum['Total'].cumsum()
+        
+        # 2. Prepare os dados para gráficos por dia da semana
+        dia_semana_stats = df.groupby('DiaSemana').agg(
+            Total=('Total', 'sum'),
+            Quantidade=('Total', 'count'),
+            Media=('Total', 'mean')
+        ).reset_index()
+        
+        # Ordenar dias da semana corretamente
+        ordem_dias = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
+        dia_semana_stats['DiaSemana_ordem'] = dia_semana_stats['DiaSemana'].map(
+            {dia: i for i, dia in enumerate(ordem_dias)}
+        )
+        dia_semana_stats = dia_semana_stats.sort_values('DiaSemana_ordem')
+        
+        # 3. Preparar dados para gráfico de métodos de pagamento
+        metodo_pagamento = pd.DataFrame({
+            'Método': ['Cartão', 'Dinheiro', 'PIX'],
+            'Valor': [
+                df['Cartão'].sum(),
+                df['Dinheiro'].sum(),
+                df['Pix'].sum()
+            ]
+        })
+        total = metodo_pagamento['Valor'].sum()
+        if total > 0:
+            metodo_pagamento['Porcentagem'] = (metodo_pagamento['Valor'] / total * 100).round(1)
+        else:
+            metodo_pagamento['Porcentagem'] = 0
+        
+        # Armazenar os dataframes para uso com PyGWalker
+        charts['df_acumulado'] = df_acum
+        charts['df_dia_semana'] = dia_semana_stats
+        charts['df_metodos'] = metodo_pagamento
+        
+        # Preparar dados para gráfico de vendas mensais
+        vendas_mensais = df.groupby('AnoMês').agg(
+            Total=('Total', 'sum'),
+            Quantidade=('Total', 'count')
+        ).reset_index()
+        charts['df_mensal'] = vendas_mensais
+    
+    except Exception as e:
+        st.error(f"Erro ao preparar dados para gráficos: {e}")
+    
+    return charts
+
 def main():
     st.title("📊 Sistema de Registro de Vendas")
     
@@ -181,9 +241,10 @@ def main():
     df = process_data(df_raw)
     
     # Abas principais do aplicativo
-    tab1, tab2, tab3 = st.tabs([
+    tab1, tab2, tab3, tab4 = st.tabs([
         "📝 Registrar Venda", 
-        "📊 Análise Interativa", 
+        "📈 Meus Gráficos Favoritos", 
+        "🔍 Análise Interativa",
         "📋 Dados"
     ])
     
@@ -242,28 +303,18 @@ def main():
         else:
             st.info("Não há dados disponíveis para filtrar.")
             df_filtered = pd.DataFrame()
-        
-        # Exibir informações sobre PyGWalker
-        st.markdown("---")
-        st.markdown("### 📊 PyGWalker")
-        st.markdown("""
-        O PyGWalker oferece uma interface interativa para análise de dados:
-        - Arraste e solte campos para criar visualizações
-        - Escolha entre diferentes tipos de gráficos
-        - Explore os dados dinamicamente
-        - Experimente combinações de dimensões e métricas
-        """)
     
-    # Aba 2: Análise Interativa (PyGWalker)
+    # Preparar dados para gráficos
+    metrics = calculate_metrics(df_filtered)
+    charts_data = create_favorite_charts(df_filtered)
+    
+    # Aba 2: Meus Gráficos Favoritos
     with tab2:
-        st.header("Análise Interativa com PyGWalker")
+        st.header("Meus Gráficos Favoritos")
         
         if df_filtered.empty:
-            st.info("Não há dados para visualizar. Selecione outro período nos filtros.")
+            st.info("Não há dados para exibir com os filtros selecionados.")
         else:
-            # Calcular e exibir métricas
-            metrics = calculate_metrics(df_filtered)
-            
             # Exibir resumo em formato de cards
             st.markdown(f"""
             <div class="resumo-container">
@@ -286,6 +337,100 @@ def main():
             </div>
             """, unsafe_allow_html=True)
             
+            # Seção 1: Gráfico de acumulação de capital
+            st.markdown('<div class="chart-container"><div class="chart-title">💰 Acúmulo de Capital ao Longo do Tempo</div>', unsafe_allow_html=True)
+            if 'df_acumulado' in charts_data:
+                df_acum = charts_data['df_acumulado']
+                # Gráfico com Altair para garantir melhor renderização
+                chart = alt.Chart(df_acum).mark_area(
+                    color="lightblue",
+                    line=True
+                ).encode(
+                    x=alt.X('Data:T', title='Data'),
+                    y=alt.Y('Total Acumulado:Q', title='Capital Acumulado (R$)'),
+                    tooltip=['DataFormatada:N', alt.Tooltip('Total Acumulado:Q', format='R$ ,.2f')]
+                ).properties(height=400)
+                
+                st.altair_chart(chart, use_container_width=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            # Seção 2: Gráfico de vendas por dia da semana
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown('<div class="chart-container"><div class="chart-title">📊 Vendas por Dia da Semana</div>', unsafe_allow_html=True)
+                if 'df_dia_semana' in charts_data:
+                    df_dias = charts_data['df_dia_semana']
+                    chart = alt.Chart(df_dias).mark_bar().encode(
+                        x=alt.X('DiaSemana:N', sort=['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'], title='Dia da Semana'),
+                        y=alt.Y('Total:Q', title='Total de Vendas (R$)'),
+                        color=alt.Color('DiaSemana:N', legend=None),
+                        tooltip=[
+                            alt.Tooltip('DiaSemana:N', title='Dia'),
+                            alt.Tooltip('Total:Q', title='Total', format='R$ ,.2f'),
+                            alt.Tooltip('Quantidade:Q', title='Quantidade')
+                        ]
+                    ).properties(height=300)
+                    st.altair_chart(chart, use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+            
+            with col2:
+                st.markdown('<div class="chart-container"><div class="chart-title">💳 Distribuição por Método de Pagamento</div>', unsafe_allow_html=True)
+                if 'df_metodos' in charts_data:
+                    df_met = charts_data['df_metodos']
+                    chart = alt.Chart(df_met).mark_arc().encode(
+                        theta=alt.Theta(field="Valor", type="quantitative"),
+                        color=alt.Color(field="Método", type="nominal", 
+                                       scale=alt.Scale(domain=['Cartão', 'Dinheiro', 'PIX'],
+                                                     range=['#4285F4', '#34A853', '#FBBC05'])),
+                        tooltip=[
+                            alt.Tooltip('Método:N'),
+                            alt.Tooltip('Valor:Q', format='R$ ,.2f'),
+                            alt.Tooltip('Porcentagem:Q', format='.1f%')
+                        ]
+                    ).properties(height=300)
+                    st.altair_chart(chart, use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+            
+            # Seção 3: Vendas mensais
+            st.markdown('<div class="chart-container"><div class="chart-title">📈 Evolução Mensal de Vendas</div>', unsafe_allow_html=True)
+            if 'df_mensal' in charts_data and not charts_data['df_mensal'].empty:
+                df_mensal = charts_data['df_mensal']
+                chart = alt.Chart(df_mensal).mark_line(point=True).encode(
+                    x=alt.X('AnoMês:N', title='Mês', sort=None),
+                    y=alt.Y('Total:Q', title='Total (R$)'),
+                    tooltip=[
+                        alt.Tooltip('AnoMês:N', title='Mês'),
+                        alt.Tooltip('Total:Q', title='Total', format='R$ ,.2f'),
+                        alt.Tooltip('Quantidade:Q', title='Quantidade')
+                    ]
+                ).properties(height=350)
+                
+                bars = alt.Chart(df_mensal).mark_bar(opacity=0.3).encode(
+                    x='AnoMês:N',
+                    y='Quantidade:Q'
+                )
+                
+                st.altair_chart(chart + bars, use_container_width=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            # Seção 4: Histograma dos valores
+            st.markdown('<div class="chart-container"><div class="chart-title">📊 Distribuição dos Valores de Venda</div>', unsafe_allow_html=True)
+            chart = alt.Chart(df_filtered).mark_bar().encode(
+                x=alt.X('Total:Q', bin=alt.Bin(maxbins=20), title='Valor da Venda (R$)'),
+                y='count()',
+                tooltip=['count()', alt.Tooltip('Total:Q', format='R$ ,.2f')]
+            ).properties(height=300)
+            st.altair_chart(chart, use_container_width=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Aba 3: Análise Interativa (PyGWalker)
+    with tab3:
+        st.header("Análise Interativa com PyGWalker")
+        
+        if df_filtered.empty:
+            st.info("Não há dados para visualizar. Selecione outro período nos filtros.")
+        else:
             # Preparar dados para o PyGWalker
             # Calculando o total acumulado para cada linha
             if 'Data' in df_filtered.columns:
@@ -299,22 +444,15 @@ def main():
             else:
                 df_viz = df_filtered.copy()
             
-            st.write("### Arraste e solte para criar suas análises")
-            st.write("""
-            **Sugestões de visualizações:**
-            - Tendência de vendas ao longo do tempo
-            - Comparação entre os métodos de pagamento
-            - Análise do ticket médio por dia da semana
-            - Distribuição das vendas por valor
-            """)
+            st.write("### Análise interativa: arraste e solte campos para criar visualizações")
             
             # Configurar e renderizar o PyGWalker
             try:
                 # Configuração personalizada para o PyGWalker
                 config = {
-                    "theme": "dark",  # Tema escuro para combinar com o modo escuro do Streamlit
-                    "enableQueryEditor": False,  # Esconder o editor de consultas
-                    "defaultConfigPanelCollapsed": False,  # Expandir o painel de configuração
+                    "theme": "dark",
+                    "enableQueryEditor": False,
+                    "defaultConfigPanelCollapsed": False,
                 }
                 
                 # Renderizar o PyGWalker como um componente HTML
@@ -324,16 +462,13 @@ def main():
             except Exception as e:
                 st.error(f"Erro ao carregar o PyGWalker: {e}")
                 st.warning("""
-                O PyGWalker requer recursos avançados e pode não funcionar em alguns ambientes. 
-                Caso esteja enfrentando problemas, verifique se o navegador é atualizado e se não 
-                há bloqueio de scripts.
+                Se o PyGWalker não carregar, é possível usar os gráficos pré-definidos 
+                na aba "Meus Gráficos Favoritos".
                 """)
-                # Carregar uma tabela como fallback
-                st.write("### Visualizando dados como tabela (fallback)")
-                st.dataframe(df_viz.head(100))
-            
-    # Aba 3: Dados
-    with tab3:
+                st.dataframe(df_viz.head(50))
+    
+    # Aba 4: Dados
+    with tab4:
         st.header("Dados de Vendas")
         
         if df_filtered.empty:
@@ -341,50 +476,16 @@ def main():
         else:
             # Dados de vendas filtrados
             st.subheader("🧾 Dados Filtrados")
-            st.dataframe(df_filtered, use_container_width=True)
-            
-            # Análises resumidas
-            st.subheader("📊 Análises Resumidas")
-            
-            # Vendas por Dia da Semana
-            if 'DiaSemana' in df_filtered.columns:
-                dias_vendas = df_filtered.groupby('DiaSemana').agg(
-                    Total=('Total', 'sum'),
-                    Quantidade=('Total', 'count'),
-                    Média=('Total', 'mean')
-                ).reset_index()
-                
-                st.write("#### Vendas por Dia da Semana")
-                st.dataframe(
-                    dias_vendas,
-                    use_container_width=True,
-                    column_config={
-                        "DiaSemana": st.column_config.TextColumn("Dia"),
-                        "Total": st.column_config.NumberColumn("Total (R$)", format="R$ %.2f"),
-                        "Quantidade": st.column_config.NumberColumn("Quantidade"),
-                        "Média": st.column_config.NumberColumn("Média (R$)", format="R$ %.2f")
-                    }
-                )
-            
-            # Vendas por Método de Pagamento
-            metodos = pd.DataFrame({
-                'Método': ['Cartão', 'Dinheiro', 'PIX'],
-                'Valor': [
-                    df_filtered['Cartão'].sum(),
-                    df_filtered['Dinheiro'].sum(),
-                    df_filtered['Pix'].sum()
-                ]
-            })
-            metodos['Porcentagem'] = (metodos['Valor'] / metodos['Valor'].sum() * 100).round(2)
-            
-            st.write("#### Métodos de Pagamento")
             st.dataframe(
-                metodos,
+                df_filtered[['DataFormatada', 'DiaSemana', 'Cartão', 'Dinheiro', 'Pix', 'Total']],
                 use_container_width=True,
                 column_config={
-                    "Método": st.column_config.TextColumn("Método"),
-                    "Valor": st.column_config.NumberColumn("Valor Total", format="R$ %.2f"),
-                    "Porcentagem": st.column_config.NumberColumn("Percentual", format="%.2f%%")
+                    "DataFormatada": st.column_config.TextColumn("Data"),
+                    "DiaSemana": st.column_config.TextColumn("Dia da Semana"),
+                    "Cartão": st.column_config.NumberColumn("Cartão (R$)", format="R$ %.2f"),
+                    "Dinheiro": st.column_config.NumberColumn("Dinheiro (R$)", format="R$ %.2f"),
+                    "Pix": st.column_config.NumberColumn("PIX (R$)", format="R$ %.2f"),
+                    "Total": st.column_config.NumberColumn("Total (R$)", format="R$ %.2f")
                 }
             )
 
