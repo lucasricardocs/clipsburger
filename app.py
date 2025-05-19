@@ -29,120 +29,45 @@ except locale.Error:
             except locale.Error:
                 st.warning("Locale pt_BR não encontrado. Nomes de meses/dias podem aparecer em inglês.")
 
-# CSS específico para a seção de resumo - CORRIGIDO
+# CSS específico para o modo escuro na tab3 (resumo financeiro)
 st.markdown("""
     <style>
-    /* Estilo para os containers da seção de resumo */
-    .resume-kpi-container {
-        border: 1px solid #4A4A4A;
-        border-radius: 10px;
-        padding: 15px;
-        margin-bottom: 10px;
-        text-align: center;
-        transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
-    }
-    .resume-kpi-container:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-    }
-    /* Ajuste para o st.metric dentro desses containers específicos */
-    .resume-kpi-container div[data-testid="stMetric"] {
-        background-color: transparent !important;
-        border: none !important;
-        box-shadow: none !important;
-        padding: 0 !important;
-    }
-    .resume-kpi-container div[data-testid="stMetricLabel"] {
-        font-size: 0.9em;
-    }
-    .resume-kpi-container div[data-testid="stMetricValue"] {
-        font-size: 1.5em;
-        font-weight: bold;
-    }
-    
-    /* Estilo específico para as tabs */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-    }
-    
-    .stTabs [data-baseweb="tab"] {
-        background-color: #f0f0f0;
-        border-radius: 4px 4px 0 0;
-        padding: 10px 16px;
-        border: 1px solid #e0e0e0;
-    }
-    
-    .stTabs [aria-selected="true"] {
-        background-color: #4A4A4A;
-        color: white;
-    }
-    
-    /* Estilo específico para os resumos nas tabs 2 e 3 */
-    [data-testid="stVerticalBlock"] > [data-testid="stVerticalBlock"]:has(div:contains("Análise Detalhada")) .stDataFrame,
+    /* Estilo específico para os resumos na tab3 */
     [data-testid="stVerticalBlock"] > [data-testid="stVerticalBlock"]:has(div:contains("Estatísticas")) .stMetric {
-        border: 1px solid #e0e0e0;
+        border: 1px solid #555555;
         border-radius: 8px;
         padding: 10px;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
         margin-bottom: 15px;
+        background-color: #2d2d2d;
     }
     
-    /* Estilo para os gráficos nas tabs */
-    [data-testid="stVerticalBlock"] > [data-testid="stVerticalBlock"]:has(div:contains("Análise Detalhada")) [data-testid="element-container"],
-    [data-testid="stVerticalBlock"] > [data-testid="stVerticalBlock"]:has(div:contains("Estatísticas")) [data-testid="element-container"] {
-        background-color: #fafafa;
-        border-radius: 8px;
-        padding: 5px;
-        margin-top: 10px;
-    }
-    
-    /* Estilo específico para os containers de KPI nas tabs 2 e 3 */
-    .tab2-kpi-container, .tab3-kpi-container {
-        background-color: #f9f9f9;
-        border: 1px solid #ddd;
+    /* Estilo específico para a seção de resumo financeiro na tab3 */
+    .tab3-kpi-container {
+        background-color: #2d2d2d;
+        border: 1px solid #555555;
         border-radius: 8px;
         padding: 15px;
         margin-bottom: 15px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
         transition: all 0.3s ease;
+        color: #f0f0f0;
     }
     
-    .tab2-kpi-container:hover, .tab3-kpi-container:hover {
-        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        border-color: #aaa;
+    .tab3-kpi-container:hover {
+        box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        border-color: #777777;
+        background-color: #3a3a3a;
     }
     
-    /* Estilo para tabelas de dados nas tabs 2 e 3 */
-    .tab2-data-table, .tab3-data-table {
-        border-collapse: collapse;
-        width: 100%;
-        margin-bottom: 20px;
+    /* Ajuste para textos em containers da tab3 */
+    .tab3-kpi-container div[data-testid="stMetricLabel"] {
+        color: #cccccc;
     }
     
-    .tab2-data-table th, .tab3-data-table th {
-        background-color: #4A4A4A;
-        color: white;
-        padding: 12px;
-        text-align: left;
-    }
-    
-    .tab2-data-table td, .tab3-data-table td {
-        padding: 10px;
-        border-bottom: 1px solid #ddd;
-    }
-    
-    .tab2-data-table tr:nth-child(even), .tab3-data-table tr:nth-child(even) {
-        background-color: #f2f2f2;
-    }
-    
-    /* Estilo para gráficos específicos nas tabs 2 e 3 */
-    .tab2-chart-container, .tab3-chart-container {
-        background-color: white;
-        border: 1px solid #eaeaea;
-        border-radius: 8px;
-        padding: 15px;
-        margin-top: 20px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    .tab3-kpi-container div[data-testid="stMetricValue"] {
+        color: #ffffff;
+        font-weight: bold;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -392,7 +317,7 @@ def create_weekly_seasonality_bar_chart(df_data):
     if total_semanal_abs == 0:
         return None
         
-    vendas_total_dia['Porcentagem'] = (vendas_total_dia['Total'] / total_semanal_abs) * 100
+    vendas_total_dia['Porcentagem'] = (vendas_total_dia['Total'] / total_semanal_abs * 100)
     
     bar_chart = alt.Chart(vendas_total_dia).mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3).encode(
         x=alt.X('DiaSemana:N', title='Dia da Semana', sort=alt.EncodingSortField(field="DiaSemanaNum", order='ascending')),
@@ -497,16 +422,9 @@ def main():
         st.header("Análise Detalhada de Vendas")
         if not df_filtered.empty and 'DataFormatada' in df_filtered.columns:
             st.subheader("Dados Filtrados")
-            
-            # Aplicando o CSS para o container de dados na tab2
-            st.markdown('<div class="tab2-kpi-container">', unsafe_allow_html=True)
             st.dataframe(df_filtered[['DataFormatada', 'Cartão', 'Dinheiro', 'Pix', 'Total']], use_container_width=True, height=300)
-            st.markdown('</div>', unsafe_allow_html=True)
 
             st.subheader("Distribuição por Método de Pagamento")
-            
-            # Aplicando o CSS para o container de gráfico na tab2
-            st.markdown('<div class="tab2-chart-container">', unsafe_allow_html=True)
             payment_filtered_data = pd.DataFrame({
                 'Método': ['Cartão', 'Dinheiro', 'PIX'],
                 'Valor': [df_filtered['Cartão'].sum(), df_filtered['Dinheiro'].sum(), df_filtered['Pix'].sum()]
@@ -518,12 +436,8 @@ def main():
             ).properties(width=700, height=500)
             text = pie_chart.mark_text(radius=120, size=16).encode(text="Valor:Q")
             st.altair_chart(pie_chart + text, use_container_width=True, theme="streamlit")
-            st.markdown('</div>', unsafe_allow_html=True)
 
             st.subheader("Vendas Diárias por Método de Pagamento")
-            
-            # Aplicando o CSS para o container de gráfico na tab2
-            st.markdown('<div class="tab2-chart-container">', unsafe_allow_html=True)
             daily_data = df_filtered.melt(id_vars=['DataFormatada'], value_vars=['Cartão', 'Dinheiro', 'Pix'], var_name='Método', value_name='Valor')
             bar_chart = alt.Chart(daily_data).mark_bar(size=20).encode(
                 x=alt.X('DataFormatada:N', title='Data', axis=alt.Axis(labelAngle=-45), sort=alt.EncodingSortField(field="DataFormatada", op="min", order='ascending')),
@@ -532,12 +446,8 @@ def main():
                 tooltip=['DataFormatada', 'Método', 'Valor']
             ).properties(width=700, height=500)
             st.altair_chart(bar_chart, use_container_width=True, theme="streamlit")
-            st.markdown('</div>', unsafe_allow_html=True)
 
             st.subheader("Acúmulo de Capital ao Longo do Tempo")
-            
-            # Aplicando o CSS para o container de gráfico na tab2
-            st.markdown('<div class="tab2-chart-container">', unsafe_allow_html=True)
             if 'Data' in df_filtered.columns:
                 df_accumulated = df_filtered.sort_values('Data').copy()
                 df_accumulated['Total Acumulado'] = df_accumulated['Total'].cumsum()
@@ -549,7 +459,6 @@ def main():
                 st.altair_chart(line_chart, use_container_width=True, theme="streamlit")
             else:
                 st.info("Coluna 'Data' não encontrada para gráfico de acúmulo.")
-            st.markdown('</div>', unsafe_allow_html=True)
         else:
             st.info("Não há dados para exibir na Análise Detalhada ou os dados filtrados estão vazios.")
 
@@ -563,7 +472,7 @@ def main():
             maior_venda = df_filtered['Total'].max() if total_vendas > 0 else 0
             menor_venda = df_filtered['Total'].min() if total_vendas > 0 else 0
 
-            # Aplicando o CSS para os containers de KPI na tab3
+            # Aplicando o CSS para os containers de KPI na tab3 - APENAS AQUI
             cols1 = st.columns(2)
             with cols1[0]:
                 st.markdown('<div class="tab3-kpi-container">', unsafe_allow_html=True)
@@ -600,24 +509,12 @@ def main():
             dinheiro_pct = (dinheiro_total / total_pagamentos * 100) if total_pagamentos > 0 else 0
             pix_pct = (pix_total / total_pagamentos * 100) if total_pagamentos > 0 else 0
 
-            # Aplicando o CSS para os containers de métodos de pagamento na tab3
             payment_cols = st.columns(3)
-            with payment_cols[0]:
-                st.markdown('<div class="tab3-kpi-container">', unsafe_allow_html=True)
-                st.markdown(f"**💳 Cartão:** R$ {cartao_total:.2f} ({cartao_pct:.1f}%)")
-                st.markdown('</div>', unsafe_allow_html=True)
-            with payment_cols[1]:
-                st.markdown('<div class="tab3-kpi-container">', unsafe_allow_html=True)
-                st.markdown(f"**💵 Dinheiro:** R$ {dinheiro_total:.2f} ({dinheiro_pct:.1f}%)")
-                st.markdown('</div>', unsafe_allow_html=True)
-            with payment_cols[2]:
-                st.markdown('<div class="tab3-kpi-container">', unsafe_allow_html=True)
-                st.markdown(f"**📱 PIX:** R$ {pix_total:.2f} ({pix_pct:.1f}%)")
-                st.markdown('</div>', unsafe_allow_html=True)
+            payment_cols[0].markdown(f"**💳 Cartão:** R$ {cartao_total:.2f} ({cartao_pct:.1f}%)")
+            payment_cols[1].markdown(f"**💵 Dinheiro:** R$ {dinheiro_total:.2f} ({dinheiro_pct:.1f}%)")
+            payment_cols[2].markdown(f"**📱 PIX:** R$ {pix_total:.2f} ({pix_pct:.1f}%)")
 
             if total_pagamentos > 0:
-                # Aplicando o CSS para o container de gráfico na tab3
-                st.markdown('<div class="tab3-chart-container">', unsafe_allow_html=True)
                 payment_data_stats = pd.DataFrame({'Método': ['Cartão', 'Dinheiro', 'PIX'], 'Valor': [cartao_total, dinheiro_total, pix_total]})
                 pie_chart_stats = alt.Chart(payment_data_stats).mark_arc(innerRadius=50).encode(
                     theta=alt.Theta("Valor:Q", stack=True), color=alt.Color("Método:N", legend=alt.Legend(title="Método")),
@@ -625,7 +522,6 @@ def main():
                 ).properties(height=500)
                 text_stats = pie_chart_stats.mark_text(radius=120, size=16).encode(text="Valor:Q")
                 st.altair_chart(pie_chart_stats + text_stats, use_container_width=True, theme="streamlit")
-                st.markdown('</div>', unsafe_allow_html=True)
             
             st.markdown("---")
             st.subheader("📅 Análise Temporal")
@@ -634,32 +530,20 @@ def main():
                                   "Dinheiro" if dinheiro_total >= max(cartao_total, pix_total) else "PIX"
                 emoji_metodo = "💳" if metodo_preferido == "Cartão" else "💵" if metodo_preferido == "Dinheiro" else "📱"
                 
-                # Aplicando o CSS para os containers de análise temporal na tab3
                 stats_cols_temporal = st.columns(3)
-                with stats_cols_temporal[0]:
-                    st.markdown('<div class="tab3-kpi-container">', unsafe_allow_html=True)
-                    st.markdown(f"**{emoji_metodo} Método Preferido:** {metodo_preferido}")
-                    st.markdown('</div>', unsafe_allow_html=True)
+                stats_cols_temporal[0].markdown(f"**{emoji_metodo} Método Preferido:** {metodo_preferido}")
                 
                 dias_distintos = df_filtered['Data'].nunique()
                 media_diaria = total_faturamento / dias_distintos if dias_distintos > 0 else 0
-                with stats_cols_temporal[1]:
-                    st.markdown('<div class="tab3-kpi-container">', unsafe_allow_html=True)
-                    st.markdown(f"**📊 Média Diária:** R$ {media_diaria:.2f}")
-                    st.markdown('</div>', unsafe_allow_html=True)
+                stats_cols_temporal[1].markdown(f"**📊 Média Diária:** R$ {media_diaria:.2f}")
                 
                 dia_mais_vendas = df_filtered.groupby('DiaSemana')['Total'].sum().idxmax() if not df_filtered.empty else "N/A"
-                with stats_cols_temporal[2]:
-                    st.markdown('<div class="tab3-kpi-container">', unsafe_allow_html=True)
-                    st.markdown(f"**📆 Dia com Mais Vendas:** {dia_mais_vendas}")
-                    st.markdown('</div>', unsafe_allow_html=True)
+                stats_cols_temporal[2].markdown(f"**📆 Dia com Mais Vendas:** {dia_mais_vendas}")
 
                 # Gráfico de média por dia da semana (Seg-Sáb, usando locale)
                 dias_uteis_nomes_locale = [datetime(2000, 1, i).strftime('%A').capitalize() for i in range(3, 3+6)]  # Seg a Sáb
                 df_dias_uteis = df_filtered[df_filtered['DiaSemana'].isin(dias_uteis_nomes_locale)]
                 if not df_dias_uteis.empty:
-                    # Aplicando o CSS para o container de gráfico na tab3
-                    st.markdown('<div class="tab3-chart-container">', unsafe_allow_html=True)
                     vendas_por_dia_uteis = df_dias_uteis.groupby('DiaSemana')['Total'].mean().reset_index()
                     # Garantir a ordem correta dos dias da semana no gráfico
                     dias_ordem_numerica = list(range(6))  # 0=Segunda, ..., 5=Sábado
@@ -675,7 +559,6 @@ def main():
                         tooltip=['DiaSemana', 'Total']
                     ).properties(title='Média de Vendas por Dia da Semana (Seg-Sáb)', height=500)
                     st.altair_chart(chart_dias_uteis, use_container_width=True, theme="streamlit")
-                    st.markdown('</div>', unsafe_allow_html=True)
             
             if 'AnoMês' in df_filtered.columns and df_filtered['AnoMês'].nunique() > 1:
                 st.subheader("📈 Tendência Mensal")
@@ -686,20 +569,14 @@ def main():
                     variacao = ((ultimo_mes_val - penultimo_mes_val) / penultimo_mes_val * 100) if penultimo_mes_val > 0 else 0
                     emoji_tendencia = "🚀" if variacao > 10 else "📈" if variacao > 0 else "📉" if variacao < 0 else "➡️"
                     
-                    # Aplicando o CSS para o container de tendência mensal na tab3
-                    st.markdown('<div class="tab3-kpi-container">', unsafe_allow_html=True)
                     st.markdown(f"**{emoji_tendencia} Variação do último mês:** {variacao:.1f}% ({'-' if variacao < 0 else '+'} R$ {abs(ultimo_mes_val - penultimo_mes_val):.2f})")
-                    st.markdown('</div>', unsafe_allow_html=True)
                     
-                    # Aplicando o CSS para o container de gráfico na tab3
-                    st.markdown('<div class="tab3-chart-container">', unsafe_allow_html=True)
                     chart_tendencia = alt.Chart(vendas_mensais).mark_line(point=True).encode(
                         x=alt.X('AnoMês:N', title='Mês'),
                         y=alt.Y('Total:Q', title='Total de Vendas (R$)'),
                         tooltip=['AnoMês', 'Total']
                     ).properties(title='Tendência de Vendas Mensais', height=400)
                     st.altair_chart(chart_tendencia, use_container_width=True, theme="streamlit")
-                    st.markdown('</div>', unsafe_allow_html=True)
             
             # Sazonalidade semanal
             if 'DiaSemana' in df_filtered.columns and 'DiaSemanaNum' in df_filtered.columns and len(df_filtered) > 6:
@@ -715,8 +592,6 @@ def main():
                     if total_semanal_abs > 0:
                         vendas_dia_semana_total['Porcentagem'] = (vendas_dia_semana_total['Total'] / total_semanal_abs * 100)
                         
-                        # Aplicando o CSS para o container de gráfico na tab3
-                        st.markdown('<div class="tab3-chart-container">', unsafe_allow_html=True)
                         chart_sazonalidade = alt.Chart(vendas_dia_semana_total).mark_bar().encode(
                             x=alt.X('DiaSemana:N', title='Dia da Semana', sort=alt.EncodingSortField(field="DiaSemanaNum", order='ascending')),
                             y=alt.Y('Porcentagem:Q', title='% do Volume Semanal'),
@@ -724,21 +599,12 @@ def main():
                             tooltip=['DiaSemana', 'Total', 'Porcentagem']
                         ).properties(title='Distribuição Semanal de Vendas (Seg-Sáb)', height=500)
                         st.altair_chart(chart_sazonalidade, use_container_width=True, theme="streamlit")
-                        st.markdown('</div>', unsafe_allow_html=True)
 
                         melhor_dia_df = vendas_dia_semana_total.loc[vendas_dia_semana_total['Total'].idxmax()]
                         pior_dia_df = vendas_dia_semana_total.loc[vendas_dia_semana_total['Total'].idxmin()]
-                        
-                        # Aplicando o CSS para os containers de melhor/pior dia na tab3
                         best_worst_cols = st.columns(2)
-                        with best_worst_cols[0]:
-                            st.markdown('<div class="tab3-kpi-container">', unsafe_allow_html=True)
-                            st.markdown(f"**🔝 Melhor dia:** {melhor_dia_df['DiaSemana']} ({melhor_dia_df['Porcentagem']:.1f}% do total)")
-                            st.markdown('</div>', unsafe_allow_html=True)
-                        with best_worst_cols[1]:
-                            st.markdown('<div class="tab3-kpi-container">', unsafe_allow_html=True)
-                            st.markdown(f"**🔻 Pior dia:** {pior_dia_df['DiaSemana']} ({pior_dia_df['Porcentagem']:.1f}% do total)")
-                            st.markdown('</div>', unsafe_allow_html=True)
+                        best_worst_cols[0].markdown(f"**🔝 Melhor dia:** {melhor_dia_df['DiaSemana']} ({melhor_dia_df['Porcentagem']:.1f}% do total)")
+                        best_worst_cols[1].markdown(f"**🔻 Pior dia:** {pior_dia_df['DiaSemana']} ({pior_dia_df['Porcentagem']:.1f}% do total)")
 
         else:
             st.info("Não há dados para exibir na aba Estatísticas ou os dados filtrados estão vazios.")
