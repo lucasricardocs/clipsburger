@@ -32,17 +32,7 @@ except locale.Error:
 # CSS específico para o modo escuro na tab3 (resumo financeiro)
 st.markdown("""
     <style>
-    /* Estilo específico para os resumos na tab3 */
-    [data-testid="stVerticalBlock"] > [data-testid="stVerticalBlock"]:has(div:contains("Estatísticas")) .stMetric {
-        border: 1px solid #555555;
-        border-radius: 8px;
-        padding: 10px;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-        margin-bottom: 15px;
-        background-color: #2d2d2d;
-    }
-    
-    /* Estilo específico para a seção de resumo financeiro na tab3 */
+    /* Estilo para os containers da seção de resumo financeiro na tab3 */
     .tab3-kpi-container {
         background-color: #2d2d2d;
         border: 1px solid #555555;
@@ -60,14 +50,24 @@ st.markdown("""
         background-color: #3a3a3a;
     }
     
-    /* Ajuste para textos em containers da tab3 */
+    /* Ajuste para textos nos elementos metric dentro dos containers */
     .tab3-kpi-container div[data-testid="stMetricLabel"] {
         color: #cccccc;
+        font-size: 0.9em;
     }
     
     .tab3-kpi-container div[data-testid="stMetricValue"] {
         color: #ffffff;
         font-weight: bold;
+        font-size: 1.5em;
+    }
+    
+    /* Ajuste para o st.metric dentro desses containers específicos */
+    .tab3-kpi-container div[data-testid="stMetric"] {
+        background-color: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -472,32 +472,37 @@ def main():
             maior_venda = df_filtered['Total'].max() if total_vendas > 0 else 0
             menor_venda = df_filtered['Total'].min() if total_vendas > 0 else 0
 
-            # Aplicando o CSS para os containers de KPI na tab3 - APENAS AQUI
+            # Aplicando o CSS para os containers de KPI na tab3 - CORRIGIDO
             cols1 = st.columns(2)
             with cols1[0]:
-                st.markdown('<div class="tab3-kpi-container">', unsafe_allow_html=True)
-                st.metric("🔢 Total de Vendas", f"{total_vendas}")
-                st.markdown('</div>', unsafe_allow_html=True)
+                with st.container():
+                    st.markdown('<div class="tab3-kpi-container">', unsafe_allow_html=True)
+                    st.metric("🔢 Total de Vendas", f"{total_vendas}")
+                    st.markdown('</div>', unsafe_allow_html=True)
             with cols1[1]:
-                st.markdown('<div class="tab3-kpi-container">', unsafe_allow_html=True)
-                st.metric("💵 Faturamento Total", f"R$ {total_faturamento:,.2f}")
-                st.markdown('</div>', unsafe_allow_html=True)
+                with st.container():
+                    st.markdown('<div class="tab3-kpi-container">', unsafe_allow_html=True)
+                    st.metric("💵 Faturamento Total", f"R$ {total_faturamento:,.2f}")
+                    st.markdown('</div>', unsafe_allow_html=True)
             
             cols2 = st.columns(2)
             with cols2[0]:
-                st.markdown('<div class="tab3-kpi-container">', unsafe_allow_html=True)
-                st.metric("📈 Média por Venda", f"R$ {media_por_venda:,.2f}")
-                st.markdown('</div>', unsafe_allow_html=True)
+                with st.container():
+                    st.markdown('<div class="tab3-kpi-container">', unsafe_allow_html=True)
+                    st.metric("📈 Média por Venda", f"R$ {media_por_venda:,.2f}")
+                    st.markdown('</div>', unsafe_allow_html=True)
             with cols2[1]:
-                st.markdown('<div class="tab3-kpi-container">', unsafe_allow_html=True)
-                st.metric("⬆️ Maior Venda", f"R$ {maior_venda:,.2f}")
-                st.markdown('</div>', unsafe_allow_html=True)
+                with st.container():
+                    st.markdown('<div class="tab3-kpi-container">', unsafe_allow_html=True)
+                    st.metric("⬆️ Maior Venda", f"R$ {maior_venda:,.2f}")
+                    st.markdown('</div>', unsafe_allow_html=True)
             
             cols3 = st.columns(1)
             with cols3[0]:
-                st.markdown('<div class="tab3-kpi-container">', unsafe_allow_html=True)
-                st.metric("⬇️ Menor Venda", f"R$ {menor_venda:,.2f}")
-                st.markdown('</div>', unsafe_allow_html=True)
+                with st.container():
+                    st.markdown('<div class="tab3-kpi-container">', unsafe_allow_html=True)
+                    st.metric("⬇️ Menor Venda", f"R$ {menor_venda:,.2f}")
+                    st.markdown('</div>', unsafe_allow_html=True)
 
             st.markdown("---")
             st.subheader("💳 Métodos de Pagamento")
