@@ -236,23 +236,37 @@ def create_accumulated_capital_line_chart(df_data):
     df_accumulated['Total Acumulado'] = df_accumulated['Total'].cumsum()
 
     line_chart = alt.Chart(df_accumulated).mark_area(
-        line={'color':'steelblue', 'strokeWidth': 2},
+        line={'color':'#4c78a8', 'strokeWidth': 3}, # Cor principal do tema
+        point=True, # Adiciona pontos para destacar os dias
+        interpolate='monotone', # Linha mais suave
         color=alt.Gradient(
             gradient='linear',
-            stops=[alt.GradientStop(color='rgba(70,130,180,0.1)', offset=0.3), 
-                   alt.GradientStop(color='rgba(70,130,180,0.7)', offset=1)],
+            stops=[alt.GradientStop(color='rgba(76,120,168,0.1)', offset=0.2), # Usando a cor principal com transparência
+                   alt.GradientStop(color='rgba(76,120,168,0.7)', offset=1)],
             x1=1, x2=1, y1=1, y2=0
         )
     ).encode(
-        x=alt.X('Data:T', title='Data', axis=alt.Axis(format="%d/%m/%y")),
-        y=alt.Y('Total Acumulado:Q', title='Capital Acumulado (R$)'),
+        x=alt.X('Data:T',
+                title='Data',
+                axis=alt.Axis(format="%d/%m/%y", labelAngle=-45, labelFontSize=11, grid=False) # Remove linhas verticais
+               ),
+        y=alt.Y('Total Acumulado:Q',
+                title='Capital Acumulado (R$)',
+                axis=alt.Axis(grid=False) # Remove linhas horizontais
+               ),
         tooltip=[
             alt.Tooltip('DataFormatada', title="Data"), 
             alt.Tooltip('Total Acumulado:Q', format='R$,.2f')
         ]
-    ).properties(height=CHART_HEIGHT, title=alt.TitleParams("Acúmulo de Capital", fontSize=16, dy=-10, anchor='middle'))
+    ).properties(
+        height=CHART_HEIGHT,
+        title=alt.TitleParams("Acúmulo de Capital", fontSize=18, anchor='middle', font='Inter') # Fonte consistente
+    ).configure_view(
+        strokeWidth=0  # Remove a borda do gráfico
+    )
     
     return line_chart
+
 
 def create_avg_sales_by_weekday_bar_chart(df_data):
     """Cria gráfico de barras para média de vendas por dia da semana (incluindo sábado)"""
