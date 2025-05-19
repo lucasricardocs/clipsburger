@@ -409,8 +409,8 @@ def main():
                     st.error("⚠️ Não é possível registrar vendas aos domingos!")
                 elif total > 0:
                     if add_data_to_sheet(data.strftime('%d/%m/%Y'), cartao, dinheiro, pix, worksheet):
-                        st.cache_data.clear()
-                        st.rerun()
+                        # Correção: Usar st.experimental_rerun() em vez de st.rerun()
+                        st.experimental_rerun()
                 else:
                     st.warning("⚠️ O valor total deve ser maior que zero.")
     
@@ -425,7 +425,7 @@ def main():
             
             # Filtro de Ano
             anos = sorted(df['Ano'].unique(), reverse=True)
-            default_anos = [current_year] if current_year in anos else anos[:1]
+            default_anos = [current_year] if current_year in anos else anos[:1] if anos else []
             selected_anos = st.multiselect(
                 "Selecione o(s) Ano(s):",
                 options=anos,
@@ -570,7 +570,11 @@ def main():
                 stats_cols[0].metric("Média", f"R$ {df_filtered['Total'].mean():.2f}")
                 stats_cols[1].metric("Mediana", f"R$ {df_filtered['Total'].median():.2f}")
                 stats_cols[2].metric("Desvio Padrão", f"R$ {df_filtered['Total'].std():.2f}")
-                stats_cols[3].metric("Coef. de Variação", f"{(df_filtered['Total'].std() / df_filtered['Total'].mean() * 100):.1f}%")
+                # Correção: Adicionando verificação para evitar divisão por zero
+                coef_var = 0
+                if df_filtered['Total'].mean() > 0:
+                    coef_var = (df_filtered['Total'].std() / df_filtered['Total'].mean() * 100)
+                stats_cols[3].metric("Coef. de Variação", f"{coef_var:.1f}%")
             
             # Evolução mensal
             if 'AnoMês' in df_filtered.columns and df_filtered['AnoMês'].nunique() > 1:
