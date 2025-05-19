@@ -13,46 +13,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS para resumo em 2 colunas - Removendo possíveis conflitos com gráficos
-st.markdown("""
-<style>
-    .resumo-container {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 15px;
-        margin-bottom: 25px;
-    }
-    .resumo-item {
-        background-color: #1e1e1e;
-        color: #ffffff;
-        padding: 20px;
-        border-radius: 10px;
-        border: 1px solid #333333;
-    }
-    .resumo-titulo {
-        font-size: 1.1em;
-        color: #4dabf7;
-        margin-bottom: 10px;
-        font-weight: 600;
-    }
-    .resumo-valor {
-        font-size: 1.8em;
-        color: #ffffff;
-        font-weight: 700;
-    }
-    /* Garantindo que os gráficos Altair sejam exibidos corretamente */
-    [data-testid="stElementToolbar"] {
-        display: none;
-    }
-    /* Garantindo que os containers de gráficos tenham altura suficiente */
-    .chart-container {
-        min-height: 400px;
-        width: 100%;
-        margin-bottom: 20px;
-    }
-</style>
-""", unsafe_allow_html=True)
-
 @st.cache_data(ttl=300)
 def read_google_sheet():
     """Função para ler os dados da planilha Google Sheets"""
@@ -512,40 +472,23 @@ def main():
                 if not vendas_por_dia.empty:
                     melhor_dia = vendas_por_dia.idxmax()
             
-            # Exibir métricas em cards
+            # Exibir métricas em cards usando colunas do Streamlit em vez de CSS personalizado
             st.subheader("📌 Resumo")
             
-            st.markdown(f"""
-            <div class="resumo-container">
-                <div class="resumo-item">
-                    <div class="resumo-titulo">Total de Vendas</div>
-                    <div class="resumo-valor">{total_vendas}</div>
-                </div>
-                <div class="resumo-item">
-                    <div class="resumo-titulo">Faturamento Total</div>
-                    <div class="resumo-valor">R$ {total_faturamento:,.2f}</div>
-                </div>
-                <div class="resumo-item">
-                    <div class="resumo-titulo">Ticket Médio</div>
-                    <div class="resumo-valor">R$ {media_por_venda:,.2f}</div>
-                </div>
-                <div class="resumo-item">
-                    <div class="resumo-titulo">Melhor Dia</div>
-                    <div class="resumo-valor">{melhor_dia if melhor_dia else 'N/A'}</div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Total de Vendas", f"{total_vendas}")
+                st.metric("Ticket Médio", f"R$ {media_por_venda:,.2f}")
+            with col2:
+                st.metric("Faturamento Total", f"R$ {total_faturamento:,.2f}")
+                st.metric("Melhor Dia", f"{melhor_dia if melhor_dia else 'N/A'}")
             
             # Acúmulo de Capital
             st.subheader("💰 Acúmulo de Capital ao Longo do Tempo")
             
-            # Usando container para garantir que o gráfico seja exibido corretamente
-            with st.container():
-                st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-                chart = create_accumulated_chart(df_filtered)
-                if chart:
-                    st.altair_chart(chart, use_container_width=True)
-                st.markdown('</div>', unsafe_allow_html=True)
+            chart = create_accumulated_chart(df_filtered)
+            if chart:
+                st.altair_chart(chart, use_container_width=True)
     
     # Aba 3: Estatísticas
     with tab3:
@@ -561,26 +504,21 @@ def main():
                 # Análise por Dia da Semana
                 st.subheader("📅 Vendas por Dia da Semana")
                 
-                st.markdown('<div class="chart-container">', unsafe_allow_html=True)
                 chart = create_weekday_chart(df_filtered)
                 if chart:
                     st.altair_chart(chart, use_container_width=True)
-                st.markdown('</div>', unsafe_allow_html=True)
             
             with col2:
                 # Métodos de Pagamento
                 st.subheader("💳 Métodos de Pagamento")
                 
-                st.markdown('<div class="chart-container">', unsafe_allow_html=True)
                 chart = create_payment_methods_chart(df_filtered)
                 if chart:
                     st.altair_chart(chart, use_container_width=True)
-                st.markdown('</div>', unsafe_allow_html=True)
             
             # Histograma dos valores
             st.subheader("📊 Distribuição dos Valores de Venda")
             
-            st.markdown('<div class="chart-container">', unsafe_allow_html=True)
             chart = create_histogram(df_filtered)
             if chart:
                 st.altair_chart(chart, use_container_width=True)
@@ -595,17 +533,14 @@ def main():
                 if df_filtered['Total'].mean() > 0:
                     coef_var = (df_filtered['Total'].std() / df_filtered['Total'].mean() * 100)
                 stats_cols[3].metric("Coef. de Variação", f"{coef_var:.1f}%")
-            st.markdown('</div>', unsafe_allow_html=True)
             
             # Evolução mensal
             if 'AnoMês' in df_filtered.columns and df_filtered['AnoMês'].nunique() > 1:
                 st.subheader("📈 Evolução Mensal de Vendas")
                 
-                st.markdown('<div class="chart-container">', unsafe_allow_html=True)
                 chart = create_monthly_chart(df_filtered)
                 if chart:
                     st.altair_chart(chart, use_container_width=True)
-                st.markdown('</div>', unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
