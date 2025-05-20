@@ -13,46 +13,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS para resumo em 2 colunas - Removendo possíveis conflitos com gráficos
-st.markdown("""
-<style>
-    .resumo-container {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 15px;
-        margin-bottom: 25px;
-    }
-    .resumo-item {
-        background-color: #1e1e1e;
-        color: #ffffff;
-        padding: 20px;
-        border-radius: 10px;
-        border: 1px solid #333333;
-    }
-    .resumo-titulo {
-        font-size: 1.1em;
-        color: #4dabf7;
-        margin-bottom: 10px;
-        font-weight: 600;
-    }
-    .resumo-valor {
-        font-size: 1.8em;
-        color: #ffffff;
-        font-weight: 700;
-    }
-    /* Garantindo que os gráficos Altair sejam exibidos corretamente */
-    [data-testid="stElementToolbar"] {
-        display: none;
-    }
-    /* Garantindo que os containers de gráficos tenham altura suficiente */
-    .chart-container {
-        min-height: 400px;
-        width: 100%;
-        margin-bottom: 20px;
-    }
-</style>
-""", unsafe_allow_html=True)
-
 @st.cache_data(ttl=300)
 def read_google_sheet():
     """Função para ler os dados da planilha Google Sheets"""
@@ -155,11 +115,10 @@ def create_accumulated_chart(df):
     df_sorted = df.sort_values('Data').copy()
     df_sorted['Total Acumulado'] = df_sorted['Total'].cumsum()
     
-    # Criar gráfico de área para acúmulo de capital
-    chart = alt.Chart(df_sorted).mark_area(
-        opacity=0.6,
-        line=True,
-        color="#4285F4"
+    # Criar gráfico de linha simples para acúmulo de capital
+    chart = alt.Chart(df_sorted).mark_line(
+        color="#4285F4",
+        strokeWidth=3
     ).encode(
         x=alt.X('Data:T', 
                title='Data',
@@ -197,19 +156,20 @@ def create_weekday_chart(df):
     # Agrupar por dia da semana
     vendas_por_dia = df.groupby('DiaSemana')['Total'].sum().reset_index()
     
-    # Criar gráfico de barras
+    # Garantir que todos os dias da semana estejam presentes
+    for dia in dias_ordem:
+        if dia not in vendas_por_dia['DiaSemana'].values:
+            vendas_por_dia = pd.concat([vendas_por_dia, pd.DataFrame({'DiaSemana': [dia], 'Total': [0]})], ignore_index=True)
+    
+    # Criar gráfico de barras simples
     chart = alt.Chart(vendas_por_dia).mark_bar(
-        cornerRadiusTopLeft=3,
-        cornerRadiusTopRight=3
+        color="#4285F4"
     ).encode(
         x=alt.X('DiaSemana:N', 
                title='Dia da Semana',
                sort=dias_ordem),
         y=alt.Y('Total:Q', 
                title='Faturamento Total (R$)'),
-        color=alt.Color('DiaSemana:N', 
-                      scale=alt.Scale(scheme='tableau10'),
-                      legend=None),
         tooltip=[
             alt.Tooltip('DiaSemana:N', title='Dia'),
             alt.Tooltip('Total:Q', title='Total', format='R$ ,.2f')
@@ -218,18 +178,7 @@ def create_weekday_chart(df):
         height=350
     )
     
-    # Adicionar valores no topo das barras
-    text = chart.mark_text(
-        align='center',
-        baseline='bottom',
-        dy=-5,
-        fontSize=12,
-        fontWeight='bold'
-    ).encode(
-        text=alt.Text('Total:Q', format='R$ ,.0f')
-    )
-    
-    return chart + text
+    return chart
 
 def create_payment_methods_chart(df):
     """Cria gráfico de pizza para métodos de pagamento usando Altair"""
@@ -237,47 +186,35 @@ def create_payment_methods_chart(df):
         return None
     
     # Calcular total por método de pagamento
-    metodo_pagamento = pd.DataFrame({
-        'Método': ['Cartão', 'Dinheiro', 'PIX'],
-        'Valor': [
-            df['Cartão'].sum(),
-            df['Dinheiro'].sum(),
-            df['Pix'].sum()
-        ]
-    })
+    cartao_total = df['Cartão'].sum()
+    dinheiro_total = df['Dinheiro'].sum()
+    pix_total = df['Pix'].sum()
+    
+    # Criar DataFrame simplificado
+    data = {
+        'metodo': ['Cartão', 'Dinheiro', 'PIX'],
+        'valor': [cartao_total, dinheiro_total, pix_total]
+    }
+    metodo_pagamento = pd.DataFrame(data)
     
     # Calcular porcentagens
-    total = metodo_pagamento['Valor'].sum()
+    total = metodo_pagamento['valor'].sum()
     if total > 0:
-        metodo_pagamento['Porcentagem'] = (metodo_pagamento['Valor'] / total * 100).round(1)
+        metodo_pagamento['porcentagem'] = (metodo_pagamento['valor'] / total * 100).round(1)
     else:
-        metodo_pagamento['Porcentagem'] = 0
+        metodo_pagamento['porcentagem'] = 0
     
     # Definir cores para os métodos
     domain = ['Cartão', 'Dinheiro', 'PIX']
     range_ = ['#4285F4', '#34A853', '#FBBC05']
     
-    # Criar gráfico de pizza
-    chart = alt.Chart(metodo_pagamento).mark_arc(outerRadius=120).encode(
-        theta=alt.Theta(field="Valor", type="quantitative"),
-        color=alt.Color('Método:N', scale=alt.Scale(domain=domain, range=range_)),
-        tooltip=[
-            alt.Tooltip('Método:N', title='Método'),
-            alt.Tooltip('Valor:Q', title='Valor', format='R$ ,.2f'),
-            alt.Tooltip('Porcentagem:Q', title='Porcentagem', format='.1f%')
-        ]
-    ).properties(
-        height=350
+    # Criar gráfico de pizza simplificado
+    pie = alt.Chart(metodo_pagamento).mark_arc(outerRadius=120).encode(
+        theta=alt.Theta(field="valor", type="quantitative"),
+        color=alt.Color('metodo:N', scale=alt.Scale(domain=domain, range=range_))
     )
     
-    # Adicionar texto de porcentagem
-    text = alt.Chart(metodo_pagamento).mark_text(radius=150, size=16).encode(
-        theta=alt.Theta(field="Valor", type="quantitative"),
-        text=alt.Text('Porcentagem:Q', format='.1f%'),
-        color=alt.value('black')
-    )
-    
-    return chart + text
+    return pie
 
 def create_histogram(df):
     """Cria histograma dos valores de venda usando Altair"""
@@ -288,49 +225,20 @@ def create_histogram(df):
     mean = df['Total'].mean()
     median = df['Total'].median()
     
-    # Criar histograma
+    # Criar histograma simplificado
     chart = alt.Chart(df).mark_bar(
-        opacity=0.7,
         color='#FBBC05'
     ).encode(
         x=alt.X('Total:Q', 
                bin=alt.Bin(maxbins=20), 
                title='Valor da Venda (R$)'),
         y=alt.Y('count()', 
-               title='Frequência'),
-        tooltip=[
-            alt.Tooltip('count()', title='Quantidade'),
-            alt.Tooltip('Total:Q', title='Faixa de Valor', format='R$ ,.2f')
-        ]
+               title='Frequência')
     ).properties(
         height=350
     )
     
-    # Adicionar linha vertical para média
-    mean_df = pd.DataFrame({'mean': [mean]})
-    mean_line = alt.Chart(mean_df).mark_rule(
-        color='red',
-        strokeWidth=2,
-        strokeDash=[4, 4]
-    ).encode(
-        x='mean:Q',
-        size=alt.value(2),
-        tooltip=alt.Tooltip('mean:Q', title='Média', format='R$ ,.2f')
-    )
-    
-    # Adicionar linha vertical para mediana
-    median_df = pd.DataFrame({'median': [median]})
-    median_line = alt.Chart(median_df).mark_rule(
-        color='green',
-        strokeWidth=2,
-        strokeDash=[4, 4]
-    ).encode(
-        x='median:Q',
-        size=alt.value(2),
-        tooltip=alt.Tooltip('median:Q', title='Mediana', format='R$ ,.2f')
-    )
-    
-    return chart + mean_line + median_line
+    return chart
 
 def create_monthly_chart(df):
     """Cria gráfico de evolução mensal usando Altair"""
@@ -345,34 +253,14 @@ def create_monthly_chart(df):
     
     df_monthly.rename(columns={'Data': 'Quantidade'}, inplace=True)
     
-    # Cria linha de tendência
-    line = alt.Chart(df_monthly).mark_line(
-        point=alt.OverlayMarkDef(filled=True, size=100),
+    # Cria linha de tendência simplificada
+    chart = alt.Chart(df_monthly).mark_line(
+        point=True,
         color='#4285F4',
         strokeWidth=3
     ).encode(
         x=alt.X('AnoMês:N', title='Mês', sort=None),
-        y=alt.Y('Total:Q', title='Faturamento Total (R$)'),
-        tooltip=[
-            alt.Tooltip('AnoMês:N', title='Mês'),
-            alt.Tooltip('Total:Q', title='Faturamento', format='R$ ,.2f'),
-            alt.Tooltip('Quantidade:Q', title='Quantidade de Vendas')
-        ]
-    )
-    
-    # Cria barras para quantidade
-    bars = alt.Chart(df_monthly).mark_bar(
-        opacity=0.3,
-        color='#34A853'
-    ).encode(
-        x='AnoMês:N',
-        y=alt.Y('Quantidade:Q', title='Quantidade de Vendas',
-              axis=alt.Axis(titleColor='#34A853'))
-    )
-    
-    # Combina os dois gráficos com escalas independentes
-    chart = alt.layer(line, bars).resolve_scale(
-        y='independent'
+        y=alt.Y('Total:Q', title='Faturamento Total (R$)')
     ).properties(
         height=400
     )
@@ -512,40 +400,45 @@ def main():
                 if not vendas_por_dia.empty:
                     melhor_dia = vendas_por_dia.idxmax()
             
-            # Exibir métricas em cards
+            # Exibir métricas em cards usando colunas do Streamlit em vez de CSS personalizado
             st.subheader("📌 Resumo")
             
-            st.markdown(f"""
-            <div class="resumo-container">
-                <div class="resumo-item">
-                    <div class="resumo-titulo">Total de Vendas</div>
-                    <div class="resumo-valor">{total_vendas}</div>
-                </div>
-                <div class="resumo-item">
-                    <div class="resumo-titulo">Faturamento Total</div>
-                    <div class="resumo-valor">R$ {total_faturamento:,.2f}</div>
-                </div>
-                <div class="resumo-item">
-                    <div class="resumo-titulo">Ticket Médio</div>
-                    <div class="resumo-valor">R$ {media_por_venda:,.2f}</div>
-                </div>
-                <div class="resumo-item">
-                    <div class="resumo-titulo">Melhor Dia</div>
-                    <div class="resumo-valor">{melhor_dia if melhor_dia else 'N/A'}</div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Total de Vendas", f"{total_vendas}")
+                st.metric("Ticket Médio", f"R$ {media_por_venda:,.2f}")
+            with col2:
+                st.metric("Faturamento Total", f"R$ {total_faturamento:,.2f}")
+                st.metric("Melhor Dia", f"{melhor_dia if melhor_dia else 'N/A'}")
             
             # Acúmulo de Capital
             st.subheader("💰 Acúmulo de Capital ao Longo do Tempo")
             
-            # Usando container para garantir que o gráfico seja exibido corretamente
-            with st.container():
-                st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-                chart = create_accumulated_chart(df_filtered)
-                if chart:
-                    st.altair_chart(chart, use_container_width=True)
-                st.markdown('</div>', unsafe_allow_html=True)
+            # Usar vega-lite diretamente para garantir renderização
+            if not df_filtered.empty:
+                # Criar dados para o gráfico
+                df_acumulado = df_filtered.sort_values('Data').copy()
+                df_acumulado['Total Acumulado'] = df_acumulado['Total'].cumsum()
+                df_acumulado['DataFormatada'] = df_acumulado['Data'].dt.strftime('%d/%m/%Y')
+                
+                # Converter para formato JSON para Vega-Lite
+                data_json = df_acumulado[['DataFormatada', 'Total', 'Total Acumulado']].to_dict(orient='records')
+                
+                # Definir especificação Vega-Lite
+                vega_spec = {
+                    "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+                    "data": {"values": data_json},
+                    "mark": {"type": "line", "point": True},
+                    "encoding": {
+                        "x": {"field": "DataFormatada", "type": "nominal", "title": "Data"},
+                        "y": {"field": "Total Acumulado", "type": "quantitative", "title": "Capital Acumulado (R$)"}
+                    },
+                    "width": "container",
+                    "height": 400
+                }
+                
+                # Renderizar usando st.vega_lite_chart
+                st.vega_lite_chart(vega_spec, use_container_width=True)
     
     # Aba 3: Estatísticas
     with tab3:
@@ -561,29 +454,102 @@ def main():
                 # Análise por Dia da Semana
                 st.subheader("📅 Vendas por Dia da Semana")
                 
-                st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-                chart = create_weekday_chart(df_filtered)
-                if chart:
-                    st.altair_chart(chart, use_container_width=True)
-                st.markdown('</div>', unsafe_allow_html=True)
+                # Usar vega-lite diretamente para garantir renderização
+                if not df_filtered.empty:
+                    # Agrupar por dia da semana
+                    vendas_por_dia = df_filtered.groupby('DiaSemana')['Total'].sum().reset_index()
+                    
+                    # Converter para formato JSON para Vega-Lite
+                    data_json = vendas_por_dia.to_dict(orient='records')
+                    
+                    # Definir especificação Vega-Lite
+                    vega_spec = {
+                        "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+                        "data": {"values": data_json},
+                        "mark": "bar",
+                        "encoding": {
+                            "x": {"field": "DiaSemana", "type": "nominal", "title": "Dia da Semana", 
+                                 "sort": ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"]},
+                            "y": {"field": "Total", "type": "quantitative", "title": "Faturamento Total (R$)"},
+                            "color": {"value": "#4285F4"}
+                        },
+                        "width": "container",
+                        "height": 350
+                    }
+                    
+                    # Renderizar usando st.vega_lite_chart
+                    st.vega_lite_chart(vega_spec, use_container_width=True)
             
             with col2:
                 # Métodos de Pagamento
                 st.subheader("💳 Métodos de Pagamento")
                 
-                st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-                chart = create_payment_methods_chart(df_filtered)
-                if chart:
-                    st.altair_chart(chart, use_container_width=True)
-                st.markdown('</div>', unsafe_allow_html=True)
+                # Usar vega-lite diretamente para garantir renderização
+                if not df_filtered.empty:
+                    # Calcular total por método de pagamento
+                    cartao_total = df_filtered['Cartão'].sum()
+                    dinheiro_total = df_filtered['Dinheiro'].sum()
+                    pix_total = df_filtered['Pix'].sum()
+                    
+                    # Criar dados para o gráfico
+                    data = [
+                        {"metodo": "Cartão", "valor": cartao_total},
+                        {"metodo": "Dinheiro", "valor": dinheiro_total},
+                        {"metodo": "PIX", "valor": pix_total}
+                    ]
+                    
+                    # Definir especificação Vega-Lite
+                    vega_spec = {
+                        "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+                        "data": {"values": data},
+                        "mark": {"type": "arc", "innerRadius": 0, "outerRadius": 120},
+                        "encoding": {
+                            "theta": {"field": "valor", "type": "quantitative"},
+                            "color": {
+                                "field": "metodo", 
+                                "type": "nominal",
+                                "scale": {
+                                    "domain": ["Cartão", "Dinheiro", "PIX"],
+                                    "range": ["#4285F4", "#34A853", "#FBBC05"]
+                                }
+                            }
+                        },
+                        "width": "container",
+                        "height": 350
+                    }
+                    
+                    # Renderizar usando st.vega_lite_chart
+                    st.vega_lite_chart(vega_spec, use_container_width=True)
             
             # Histograma dos valores
             st.subheader("📊 Distribuição dos Valores de Venda")
             
-            st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-            chart = create_histogram(df_filtered)
-            if chart:
-                st.altair_chart(chart, use_container_width=True)
+            # Usar vega-lite diretamente para garantir renderização
+            if not df_filtered.empty:
+                # Converter para formato JSON para Vega-Lite
+                data_json = df_filtered[['Total']].to_dict(orient='records')
+                
+                # Definir especificação Vega-Lite
+                vega_spec = {
+                    "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+                    "data": {"values": data_json},
+                    "mark": "bar",
+                    "encoding": {
+                        "x": {
+                            "field": "Total", 
+                            "type": "quantitative", 
+                            "bin": {"maxbins": 20},
+                            "title": "Valor da Venda (R$)"
+                        },
+                        "y": {"aggregate": "count", "title": "Frequência"},
+                        "color": {"value": "#FBBC05"}
+                    },
+                    "width": "container",
+                    "height": 350
+                }
+                
+                # Renderizar usando st.vega_lite_chart
+                st.vega_lite_chart(vega_spec, use_container_width=True)
                 
                 # Estatísticas adicionais
                 stats_cols = st.columns(4)
@@ -595,17 +561,39 @@ def main():
                 if df_filtered['Total'].mean() > 0:
                     coef_var = (df_filtered['Total'].std() / df_filtered['Total'].mean() * 100)
                 stats_cols[3].metric("Coef. de Variação", f"{coef_var:.1f}%")
-            st.markdown('</div>', unsafe_allow_html=True)
             
             # Evolução mensal
             if 'AnoMês' in df_filtered.columns and df_filtered['AnoMês'].nunique() > 1:
                 st.subheader("📈 Evolução Mensal de Vendas")
                 
-                st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-                chart = create_monthly_chart(df_filtered)
-                if chart:
-                    st.altair_chart(chart, use_container_width=True)
-                st.markdown('</div>', unsafe_allow_html=True)
+                # Usar vega-lite diretamente para garantir renderização
+                # Agrupar por mês
+                df_monthly = df_filtered.groupby('AnoMês').agg({
+                    'Total': 'sum',
+                    'Data': 'count'
+                }).reset_index()
+                
+                df_monthly.rename(columns={'Data': 'Quantidade'}, inplace=True)
+                
+                # Converter para formato JSON para Vega-Lite
+                data_json = df_monthly.to_dict(orient='records')
+                
+                # Definir especificação Vega-Lite
+                vega_spec = {
+                    "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+                    "data": {"values": data_json},
+                    "mark": {"type": "line", "point": True},
+                    "encoding": {
+                        "x": {"field": "AnoMês", "type": "nominal", "title": "Mês"},
+                        "y": {"field": "Total", "type": "quantitative", "title": "Faturamento Total (R$)"},
+                        "color": {"value": "#4285F4"}
+                    },
+                    "width": "container",
+                    "height": 400
+                }
+                
+                # Renderizar usando st.vega_lite_chart
+                st.vega_lite_chart(vega_spec, use_container_width=True)
 
 if __name__ == "__main__":
     main()
