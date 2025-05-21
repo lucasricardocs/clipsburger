@@ -17,23 +17,40 @@ st.set_page_config(
 def read_google_sheet():
     """Função para ler os dados da planilha Google Sheets"""
     try:
-        SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 
-                 'https://www.googleapis.com/auth/spreadsheets.readonly', 
-                 'https://www.googleapis.com/auth/drive.readonly']
+        # Definir escopos corretos para a API
+        SCOPES = [
+            'https://www.googleapis.com/auth/spreadsheets',
+            'https://www.googleapis.com/auth/drive'
+        ]
+        
+        # Obter credenciais dos secrets do Streamlit
         credentials_dict = st.secrets["google_credentials"]
+        
+        # Criar credenciais com os escopos corretos
         creds = Credentials.from_service_account_info(credentials_dict, scopes=SCOPES)
+        
+        # Autorizar cliente gspread com as credenciais
         gc = gspread.authorize(creds)
+        
+        # ID da planilha e nome da worksheet
         spreadsheet_id = '1NTScbiIna-iE7roQ9XBdjUOssRihTFFby4INAAQNXTg'
         worksheet_name = 'Vendas'
+        
         try:
             with st.spinner("Conectando à planilha..."):
+                # Abrir planilha e obter worksheet
                 spreadsheet = gc.open_by_key(spreadsheet_id)
                 worksheet = spreadsheet.worksheet(worksheet_name)
+                
+                # Obter todos os registros
                 rows = worksheet.get_all_records()
                 df = pd.DataFrame(rows)
                 return df, worksheet
         except SpreadsheetNotFound:
             st.error(f"Planilha com ID {spreadsheet_id} não encontrada.")
+            return pd.DataFrame(), None
+        except Exception as e:
+            st.error(f"Erro ao acessar a planilha: {e}")
             return pd.DataFrame(), None
     except Exception as e:
         st.error(f"Erro de autenticação: {e}")
@@ -46,7 +63,10 @@ def add_data_to_sheet(date, cartao, dinheiro, pix, worksheet):
         return False
     try:
         with st.spinner("Registrando venda..."):
+            # Preparar nova linha com os dados
             new_row = [date, float(cartao), float(dinheiro), float(pix)]
+            
+            # Adicionar linha à planilha
             worksheet.append_row(new_row)
             st.toast("Venda registrada com sucesso!", icon="✅")
             return True
@@ -105,167 +125,6 @@ def process_data(df_raw):
             st.warning(f"Erro ao processar datas: {e}")
     
     return df
-
-def create_accumulated_chart(df):
-    """Cria gráfico de linha para capital acumulado usando Altair"""
-    if df.empty or 'Data' not in df.columns:
-        return None
-    
-    # Ordenar por data e calcular acumulado
-    df_sorted = df.sort_values('Data').copy()
-    df_sorted['Total Acumulado'] = df_sorted['Total'].cumsum()
-    
-    # Criar gráfico de linha simples para acúmulo de capital
-    chart = alt.Chart(df_sorted).mark_line(
-        color="#4285F4",
-        strokeWidth=3
-    ).encode(
-        x=alt.X('Data:T', 
-               title='Data',
-               axis=alt.Axis(format='%d/%m/%Y', labelAngle=-45)),
-        y=alt.Y('Total Acumulado:Q', 
-               title='Capital Acumulado (R$)'),
-        tooltip=[
-            alt.Tooltip('DataFormatada:N', title='Data'),
-            alt.Tooltip('Total Acumulado:Q', title='Acumulado', format='R$ ,.2f'),
-            alt.Tooltip('Total:Q', title='Venda do Dia', format='R$ ,.2f')
-        ]
-    ).properties(
-        height=400
-    )
-    
-    # Adicionar pontos para destacar os valores individuais
-    points = alt.Chart(df_sorted).mark_circle(
-        size=60,
-        color="#1A73E8"
-    ).encode(
-        x='Data:T',
-        y='Total Acumulado:Q'
-    )
-    
-    return chart + points
-
-def create_weekday_chart(df):
-    """Cria gráfico de barras por dia da semana usando Altair"""
-    if df.empty or 'DiaSemana' not in df.columns:
-        return None
-    
-    # Dias da semana em ordem correta
-    dias_ordem = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
-    
-    # Agrupar por dia da semana
-    vendas_por_dia = df.groupby('DiaSemana')['Total'].sum().reset_index()
-    
-    # Garantir que todos os dias da semana estejam presentes
-    for dia in dias_ordem:
-        if dia not in vendas_por_dia['DiaSemana'].values:
-            vendas_por_dia = pd.concat([vendas_por_dia, pd.DataFrame({'DiaSemana': [dia], 'Total': [0]})], ignore_index=True)
-    
-    # Criar gráfico de barras simples
-    chart = alt.Chart(vendas_por_dia).mark_bar(
-        color="#4285F4"
-    ).encode(
-        x=alt.X('DiaSemana:N', 
-               title='Dia da Semana',
-               sort=dias_ordem),
-        y=alt.Y('Total:Q', 
-               title='Faturamento Total (R$)'),
-        tooltip=[
-            alt.Tooltip('DiaSemana:N', title='Dia'),
-            alt.Tooltip('Total:Q', title='Total', format='R$ ,.2f')
-        ]
-    ).properties(
-        height=350
-    )
-    
-    return chart
-
-def create_payment_methods_chart(df):
-    """Cria gráfico de pizza para métodos de pagamento usando Altair"""
-    if df.empty:
-        return None
-    
-    # Calcular total por método de pagamento
-    cartao_total = df['Cartão'].sum()
-    dinheiro_total = df['Dinheiro'].sum()
-    pix_total = df['Pix'].sum()
-    
-    # Criar DataFrame simplificado
-    data = {
-        'metodo': ['Cartão', 'Dinheiro', 'PIX'],
-        'valor': [cartao_total, dinheiro_total, pix_total]
-    }
-    metodo_pagamento = pd.DataFrame(data)
-    
-    # Calcular porcentagens
-    total = metodo_pagamento['valor'].sum()
-    if total > 0:
-        metodo_pagamento['porcentagem'] = (metodo_pagamento['valor'] / total * 100).round(1)
-    else:
-        metodo_pagamento['porcentagem'] = 0
-    
-    # Definir cores para os métodos
-    domain = ['Cartão', 'Dinheiro', 'PIX']
-    range_ = ['#4285F4', '#34A853', '#FBBC05']
-    
-    # Criar gráfico de pizza simplificado
-    pie = alt.Chart(metodo_pagamento).mark_arc(outerRadius=120).encode(
-        theta=alt.Theta(field="valor", type="quantitative"),
-        color=alt.Color('metodo:N', scale=alt.Scale(domain=domain, range=range_))
-    )
-    
-    return pie
-
-def create_histogram(df):
-    """Cria histograma dos valores de venda usando Altair"""
-    if df.empty or 'Total' not in df.columns:
-        return None
-    
-    # Calcular estatísticas para destacar no tooltip
-    mean = df['Total'].mean()
-    median = df['Total'].median()
-    
-    # Criar histograma simplificado
-    chart = alt.Chart(df).mark_bar(
-        color='#FBBC05'
-    ).encode(
-        x=alt.X('Total:Q', 
-               bin=alt.Bin(maxbins=20), 
-               title='Valor da Venda (R$)'),
-        y=alt.Y('count()', 
-               title='Frequência')
-    ).properties(
-        height=350
-    )
-    
-    return chart
-
-def create_monthly_chart(df):
-    """Cria gráfico de evolução mensal usando Altair"""
-    if df.empty or 'AnoMês' not in df.columns:
-        return None
-    
-    # Agrupar por mês
-    df_monthly = df.groupby('AnoMês').agg({
-        'Total': 'sum',
-        'Data': 'count'
-    }).reset_index()
-    
-    df_monthly.rename(columns={'Data': 'Quantidade'}, inplace=True)
-    
-    # Cria linha de tendência simplificada
-    chart = alt.Chart(df_monthly).mark_line(
-        point=True,
-        color='#4285F4',
-        strokeWidth=3
-    ).encode(
-        x=alt.X('AnoMês:N', title='Mês', sort=None),
-        y=alt.Y('Total:Q', title='Faturamento Total (R$)')
-    ).properties(
-        height=400
-    )
-    
-    return chart
 
 def main():
     st.title("📊 Sistema de Registro de Vendas")
