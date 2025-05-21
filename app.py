@@ -17,26 +17,27 @@ st.set_page_config(
 def read_google_sheet():
     """Função para ler os dados da planilha Google Sheets"""
     try:
-        # Definir escopos corretos para a API
-        SCOPES = [
-            'https://www.googleapis.com/auth/spreadsheets',
-            'https://www.googleapis.com/auth/drive'
-        ]
-        
-        # Obter credenciais dos secrets do Streamlit
+        # Usar método service_account diretamente do gspread
         credentials_dict = st.secrets["google_credentials"]
         
-        # Criar credenciais com os escopos corretos
-        creds = Credentials.from_service_account_info(credentials_dict, scopes=SCOPES)
+        # Criar arquivo temporário com as credenciais
+        import json
+        import tempfile
+        import os
         
-        # Autorizar cliente gspread com as credenciais
-        gc = gspread.authorize(creds)
-        
-        # ID da planilha e nome da worksheet
-        spreadsheet_id = '1NTScbiIna-iE7roQ9XBdjUOssRihTFFby4INAAQNXTg'
-        worksheet_name = 'Vendas'
+        # Criar arquivo temporário para as credenciais
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as temp:
+            json.dump(credentials_dict, temp)
+            temp_filename = temp.name
         
         try:
+            # Usar service_account diretamente
+            gc = gspread.service_account(filename=temp_filename)
+            
+            # ID da planilha e nome da worksheet
+            spreadsheet_id = '1NTScbiIna-iE7roQ9XBdjUOssRihTFFby4INAAQNXTg'
+            worksheet_name = 'Vendas'
+            
             with st.spinner("Conectando à planilha..."):
                 # Abrir planilha e obter worksheet
                 spreadsheet = gc.open_by_key(spreadsheet_id)
@@ -52,6 +53,10 @@ def read_google_sheet():
         except Exception as e:
             st.error(f"Erro ao acessar a planilha: {e}")
             return pd.DataFrame(), None
+        finally:
+            # Remover o arquivo temporário
+            if os.path.exists(temp_filename):
+                os.unlink(temp_filename)
     except Exception as e:
         st.error(f"Erro de autenticação: {e}")
         return pd.DataFrame(), None
