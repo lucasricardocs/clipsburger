@@ -1,37 +1,55 @@
 import streamlit as st
+import gspread
 import pandas as pd
 import altair as alt
-import gspread
 from datetime import datetime
 from google.oauth2.service_account import Credentials
 from gspread.exceptions import SpreadsheetNotFound
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle, PageBreak
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
+from reportlab.lib.units import inch
+import os
+import io
+import tempfile
+from PIL import Image as PILImage, ImageDraw, ImageFont
+import base64
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib as mpl
 
 # Configuração da página
-st.set_page_config(
-    page_title="Sistema de Registro de Vendas", 
-    layout="centered",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(page_title="Sistema de Registro de Vendas", layout="centered")
 
-@st.cache_data(ttl=300)
+# Configurando estilo dos gráficos matplotlib para serem mais atraentes
+plt.style.use('ggplot')
+mpl.rcParams['font.size'] = 14
+mpl.rcParams['figure.figsize'] = (12, 9)  # Gráficos maiores
+mpl.rcParams['figure.facecolor'] = 'white'
+mpl.rcParams['axes.facecolor'] = '#f0f0f0'
+mpl.rcParams['axes.grid'] = True
+mpl.rcParams['grid.alpha'] = 0.3
+mpl.rcParams['axes.labelsize'] = 16
+mpl.rcParams['axes.titlesize'] = 20
+mpl.rcParams['xtick.labelsize'] = 14
+mpl.rcParams['ytick.labelsize'] = 14
+
 def read_google_sheet():
     """Função para ler os dados da planilha Google Sheets"""
     try:
-        SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 
-                 'https://www.googleapis.com/auth/spreadsheets.readonly', 
-                 'https://www.googleapis.com/auth/drive.readonly']
+        SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/spreadsheets.readonly', 'https://www.googleapis.com/auth/drive.readonly']
         credentials_dict = st.secrets["google_credentials"]
         creds = Credentials.from_service_account_info(credentials_dict, scopes=SCOPES)
         gc = gspread.authorize(creds)
         spreadsheet_id = '1NTScbiIna-iE7roQ9XBdjUOssRihTFFby4INAAQNXTg'
         worksheet_name = 'Vendas'
         try:
-            with st.spinner("Conectando à planilha..."):
-                spreadsheet = gc.open_by_key(spreadsheet_id)
-                worksheet = spreadsheet.worksheet(worksheet_name)
-                rows = worksheet.get_all_records()
-                df = pd.DataFrame(rows)
-                return df, worksheet
+            spreadsheet = gc.open_by_key(spreadsheet_id)
+            worksheet = spreadsheet.worksheet(worksheet_name)
+            rows = worksheet.get_all_records()
+            df = pd.DataFrame(rows)
+            return df, worksheet
         except SpreadsheetNotFound:
             st.error(f"Planilha com ID {spreadsheet_id} não encontrada.")
             return pd.DataFrame(), None
@@ -43,557 +61,484 @@ def add_data_to_sheet(date, cartao, dinheiro, pix, worksheet):
     """Função para adicionar dados à planilha Google Sheets"""
     if worksheet is None:
         st.error("Não foi possível acessar a planilha.")
-        return False
+        return
     try:
-        with st.spinner("Registrando venda..."):
-            new_row = [date, float(cartao), float(dinheiro), float(pix)]
-            worksheet.append_row(new_row)
-            st.toast("Venda registrada com sucesso!", icon="✅")
-            return True
+        new_row = [date, float(cartao), float(dinheiro), float(pix)]
+        worksheet.append_row(new_row)
+        st.success("Dados registrados com sucesso!")
     except Exception as e:
         st.error(f"Erro ao adicionar dados: {e}")
-        return False
 
-@st.cache_data(ttl=300)
-def process_data(df_raw):
+def process_data(df):
     """Função para processar e preparar os dados"""
-    if df_raw.empty:
-        return pd.DataFrame()
-    
-    df = df_raw.copy()
-    
-    # Processamento dos valores monetários
-    for col in ['Cartão', 'Dinheiro', 'Pix']:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-    
-    # Cálculo do total
-    df['Total'] = df['Cartão'] + df['Dinheiro'] + df['Pix']
-    
-    # Processamento de datas
-    if 'Data' in df.columns:
-        try:
-            df['Data'] = pd.to_datetime(df['Data'], format='%d/%m/%Y', errors='coerce')
-            df = df.dropna(subset=['Data'])
-            
-            if not df.empty:
+    if not df.empty:
+        for col in ['Cartão', 'Dinheiro', 'Pix']:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+        df['Total'] = df['Cartão'].fillna(0) + df['Dinheiro'].fillna(0) + df['Pix'].fillna(0)
+        if 'Data' in df.columns:
+            try:
+                df['Data'] = pd.to_datetime(df['Data'], format='%d/%m/%Y', errors='coerce')
                 df['Ano'] = df['Data'].dt.year
                 df['Mês'] = df['Data'].dt.month
                 df['MêsNome'] = df['Data'].dt.strftime('%B')
                 df['AnoMês'] = df['Data'].dt.strftime('%Y-%m')
                 df['DataFormatada'] = df['Data'].dt.strftime('%d/%m/%Y')
-                df['DiaSemana'] = df['Data'].dt.day_name()
-                
-                dias_semana_map = {
-                    'Monday': 'Segunda',
-                    'Tuesday': 'Terça',
-                    'Wednesday': 'Quarta',
-                    'Thursday': 'Quinta',
-                    'Friday': 'Sexta',
-                    'Saturday': 'Sábado',
-                    'Sunday': 'Domingo'
-                }
-                df['DiaSemana'] = df['DiaSemana'].map(dias_semana_map)
-                
-                # Adicionar ordem dos dias da semana para garantir ordenação correta
-                ordem_dias = {'Segunda': 1, 'Terça': 2, 'Quarta': 3, 'Quinta': 4, 'Sexta': 5, 'Sábado': 6, 'Domingo': 7}
-                df['DiaSemanaOrdem'] = df['DiaSemana'].map(ordem_dias)
-                
-                # Remover domingos
-                df = df[df['DiaSemana'] != 'Domingo'].copy()
-        except Exception as e:
-            st.warning(f"Erro ao processar datas: {e}")
-    
+            except ValueError:
+                st.warning("Formato de data inconsistente na planilha.")
+            except Exception as e:
+                st.error(f"Erro ao processar a coluna 'Data': {e}")
     return df
 
-def create_accumulated_chart(df):
-    """Cria gráfico de linha para capital acumulado usando Altair"""
-    if df.empty or 'Data' not in df.columns:
-        return None
+def create_pie_chart_matplotlib(df_filtered):
+    """Cria gráfico de pizza usando matplotlib - versão melhorada"""
+    valores = [df_filtered['Cartão'].sum(), df_filtered['Dinheiro'].sum(), df_filtered['Pix'].sum()]
+    labels = ['Cartão', 'Dinheiro', 'PIX']
     
-    # Ordenar por data e calcular acumulado
-    df_sorted = df.sort_values('Data').copy()
-    df_sorted['Total Acumulado'] = df_sorted['Total'].cumsum()
+    # Cores mais vibrantes e agradáveis
+    cores = ['#3498db', '#f39c12', '#2ecc71']
     
-    # Criar gráfico de linha simples para acúmulo de capital
-    chart = alt.Chart(df_sorted).mark_line(
-        color="#4285F4",
-        strokeWidth=3
-    ).encode(
-        x=alt.X('Data:T', 
-               title='Data',
-               axis=alt.Axis(format='%d/%m/%Y', labelAngle=-45)),
-        y=alt.Y('Total Acumulado:Q', 
-               title='Capital Acumulado (R$)'),
-        tooltip=[
-            alt.Tooltip('DataFormatada:N', title='Data'),
-            alt.Tooltip('Total Acumulado:Q', title='Acumulado', format='R$ ,.2f'),
-            alt.Tooltip('Total:Q', title='Venda do Dia', format='R$ ,.2f')
+    # Criar figura com tamanho maior
+    plt.figure(figsize=(12, 9))
+    
+    # Criar o gráfico de pizza com efeito de explosão para destacar as fatias
+    explode = (0.05, 0.05, 0.05)  # Destacar todas as fatias levemente
+    wedges, texts, autotexts = plt.pie(
+        valores, 
+        labels=labels, 
+        autopct='%1.1f%%', 
+        startangle=90, 
+        colors=cores,
+        explode=explode,
+        shadow=True,
+        textprops={'fontsize': 16, 'fontweight': 'bold'},
+        wedgeprops={'edgecolor': 'white', 'linewidth': 2}
+    )
+    
+    # Personalizar os textos das porcentagens
+    for autotext in autotexts:
+        autotext.set_color('white')
+        autotext.set_fontsize(14)
+        autotext.set_fontweight('bold')
+    
+    plt.axis('equal')  # Manter o aspecto circular
+    plt.title('Distribuição por Método de Pagamento', fontsize=24, pad=20, fontweight='bold')
+    
+    # Adicionar um círculo branco no meio para efeito de donut
+    centre_circle = plt.Circle((0, 0), 0.5, fc='white')
+    plt.gca().add_artist(centre_circle)
+    
+    # Adicionar legenda com valores absolutos
+    total = sum(valores)
+    legendas = [f'{l}: R$ {v:.2f} ({v/total*100:.1f}%)' for l, v in zip(labels, valores)]
+    plt.legend(legendas, loc="center", bbox_to_anchor=(0.5, -0.1), fontsize=14)
+    
+    # Salvar em buffer
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=300, bbox_inches='tight', facecolor='white')
+    plt.close()
+    
+    return buf
+
+def create_bar_chart_matplotlib(df_filtered):
+    """Cria gráfico de barras usando matplotlib - versão melhorada"""
+    date_column = 'DataFormatada' if 'DataFormatada' in df_filtered.columns else 'Data'
+    
+    # Agrupar por data
+    daily = df_filtered.groupby(date_column)[['Cartão', 'Dinheiro', 'Pix']].sum().reset_index()
+    
+    # Cores bonitas para cada método de pagamento
+    cores = ['#3498db', '#f39c12', '#2ecc71']
+    
+    # Configuração do gráfico com estilo moderno
+    fig, ax = plt.subplots(figsize=(14, 10))
+    
+    # Posições das barras
+    x = np.arange(len(daily[date_column]))
+    width = 0.25
+    
+    # Plotar barras para cada método de pagamento
+    rects1 = ax.bar(x - width, daily['Cartão'], width, label='Cartão', color=cores[0], 
+                    edgecolor='white', linewidth=1.5, alpha=0.9)
+    rects2 = ax.bar(x, daily['Dinheiro'], width, label='Dinheiro', color=cores[1],
+                   edgecolor='white', linewidth=1.5, alpha=0.9)
+    rects3 = ax.bar(x + width, daily['Pix'], width, label='PIX', color=cores[2],
+                   edgecolor='white', linewidth=1.5, alpha=0.9)
+    
+    # Adicionar valor no topo de cada barra
+    def add_value_labels(rects):
+        for rect in rects:
+            height = rect.get_height()
+            if height > 0:  # Apenas mostrar valor se for maior que zero
+                ax.text(rect.get_x() + rect.get_width()/2., height + 5,
+                        f'R${height:.0f}', ha='center', va='bottom', 
+                        fontsize=12, fontweight='bold')
+    
+    add_value_labels(rects1)
+    add_value_labels(rects2)
+    add_value_labels(rects3)
+    
+    # Configurações adicionais
+    ax.set_ylabel('Valor (R$)', fontsize=18, fontweight='bold')
+    ax.set_title('Vendas Diárias por Método de Pagamento', fontsize=22, fontweight='bold', pad=20)
+    ax.set_xticks(x)
+    ax.set_xticklabels(daily[date_column], rotation=45, ha='right')
+    
+    # Adicionar grade apenas no eixo y para facilitar a leitura
+    ax.yaxis.grid(True, linestyle='--', alpha=0.7)
+    ax.set_axisbelow(True)
+    
+    # Remover bordas
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    
+    # Legenda melhorada
+    ax.legend(fontsize=14, frameon=True, facecolor='white', edgecolor='#dddddd')
+    
+    fig.tight_layout()
+    
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=300, bbox_inches='tight', facecolor='white')
+    plt.close()
+    
+    return buf
+
+def create_line_chart_matplotlib(df_filtered):
+    """Cria gráfico de linha usando matplotlib - versão melhorada"""
+    # Ordenar por data
+    df_acum = df_filtered.sort_values('Data').copy()
+    df_acum['Total Acumulado'] = df_acum['Total'].cumsum()
+    
+    # Configuração do gráfico
+    fig, ax = plt.subplots(figsize=(14, 10))
+    
+    # Cores e estilo moderno
+    cor_linha = '#3498db'
+    cor_area = '#3498db'
+    cor_ponto = '#2980b9'
+    
+    # Plotar linha com área sombreada abaixo e pontos destacados
+    x = np.arange(len(df_acum['DataFormatada']))
+    y = df_acum['Total Acumulado']
+    
+    # Adicionar área sombreada sob a linha
+    ax.fill_between(x, y, alpha=0.3, color=cor_area)
+    
+    # Adicionar linha principal
+    linha = ax.plot(x, y, marker='o', linestyle='-', linewidth=3, 
+             markersize=10, color=cor_linha, markerfacecolor=cor_ponto, 
+             markeredgecolor='white', markeredgewidth=2)
+    
+    # Adicionar rótulos nos pontos
+    for i, valor in enumerate(y):
+        ax.annotate(f'R${valor:.0f}', 
+                   (x[i], valor), 
+                   xytext=(0, 10),
+                   textcoords='offset points',
+                   ha='center',
+                   fontsize=12,
+                   fontweight='bold')
+    
+    # Configurações adicionais
+    ax.set_ylabel('Capital Acumulado (R$)', fontsize=18, fontweight='bold')
+    ax.set_title('Acúmulo de Capital ao Longo do Tempo', fontsize=22, fontweight='bold', pad=20)
+    
+    # Configurar eixo X com as datas formatadas
+    ax.set_xticks(x)
+    ax.set_xticklabels(df_acum['DataFormatada'], rotation=45, ha='right')
+    
+    # Adicionar grade para facilitar a leitura
+    ax.grid(True, linestyle='--', alpha=0.7)
+    ax.set_axisbelow(True)
+    
+    # Remover bordas
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    
+    fig.tight_layout()
+    
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=300, bbox_inches='tight', facecolor='white')
+    plt.close()
+    
+    return buf
+
+def generate_pdf_report(df_filtered):
+    """Função para gerar o relatório em PDF com gráficos em páginas separadas"""
+    try:
+        # Criar diretório temporário para os gráficos
+        temp_dir = tempfile.mkdtemp()
+        
+        # Gerar gráficos usando matplotlib
+        pie_chart_buf = create_pie_chart_matplotlib(df_filtered)
+        bar_chart_buf = create_bar_chart_matplotlib(df_filtered)
+        line_chart_buf = create_line_chart_matplotlib(df_filtered)
+        
+        # Salvar buffers como arquivos PNG
+        pie_chart_path = os.path.join(temp_dir, "pie_chart.png")
+        bar_chart_path = os.path.join(temp_dir, "bar_chart.png")
+        line_chart_path = os.path.join(temp_dir, "line_chart.png")
+        
+        # Salvar os buffers como arquivos PNG
+        with open(pie_chart_path, 'wb') as f:
+            f.write(pie_chart_buf.getvalue())
+        
+        with open(bar_chart_path, 'wb') as f:
+            f.write(bar_chart_buf.getvalue())
+        
+        with open(line_chart_path, 'wb') as f:
+            f.write(line_chart_buf.getvalue())
+        
+        # Criar o PDF
+        pdf_path = os.path.join(temp_dir, "analise_vendas.pdf")
+        doc = SimpleDocTemplate(pdf_path, pagesize=A4)  # Usando A4 para ter mais espaço
+        elements = []
+        
+        # Criar estilos personalizados
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=24,
+            alignment=1,  # Centralizado
+            spaceAfter=30,
+            textColor=colors.darkblue
+        )
+        
+        subtitle_style = ParagraphStyle(
+            'CustomSubtitle',
+            parent=styles['Heading2'],
+            fontSize=20,
+            alignment=1,  # Centralizado
+            spaceAfter=20,
+            textColor=colors.darkblue
+        )
+        
+        # Página de capa com título
+        elements.append(Spacer(1, 2*inch))  # Espaço no topo
+        elements.append(Paragraph("Análise Detalhada de Vendas", title_style))
+        elements.append(Spacer(1, 0.5*inch))
+        elements.append(Paragraph(f"Relatório gerado em {datetime.now().strftime('%d/%m/%Y')}", styles['Italic']))
+        elements.append(PageBreak())  # Nova página após a capa
+        
+        # Página com tabela de dados
+        elements.append(Paragraph("Resumo dos Dados", subtitle_style))
+        elements.append(Spacer(1, 0.5*inch))
+        
+        # Tabela de resumo
+        total_cartao = df_filtered['Cartão'].sum()
+        total_dinheiro = df_filtered['Dinheiro'].sum()
+        total_pix = df_filtered['Pix'].sum()
+        total_geral = total_cartao + total_dinheiro + total_pix
+        
+        data = [
+            ["Método de Pagamento", "Valor Total (R$)", "Percentual (%)"],
+            ["Cartão", f"R$ {total_cartao:.2f}", f"{(total_cartao/total_geral*100):.1f}%"],
+            ["Dinheiro", f"R$ {total_dinheiro:.2f}", f"{(total_dinheiro/total_geral*100):.1f}%"],
+            ["PIX", f"R$ {total_pix:.2f}", f"{(total_pix/total_geral*100):.1f}%"],
+            ["TOTAL", f"R$ {total_geral:.2f}", "100.0%"]
         ]
-    ).properties(
-        height=400
-    )
+        
+        table = Table(data, colWidths=[doc.width/3.0]*3)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 14),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, -1), (-1, -1), colors.lightgrey),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE')
+        ]))
+        
+        elements.append(table)
+        elements.append(Spacer(1, 1*inch))
+        
+        # Informações gerais
+        elements.append(Paragraph(f"Período da análise: {df_filtered['DataFormatada'].min()} a {df_filtered['DataFormatada'].max()}", styles['Normal']))
+        elements.append(Paragraph(f"Total de dias analisados: {len(df_filtered['DataFormatada'].unique())}", styles['Normal']))
+        elements.append(Paragraph(f"Média diária de vendas: R$ {(total_geral / len(df_filtered['DataFormatada'].unique())):.2f}", styles['Normal']))
+        
+        elements.append(PageBreak())  # Nova página antes do próximo gráfico
+        
+        # Página 1: Gráfico de Pizza
+        if os.path.exists(pie_chart_path):
+            elements.append(Paragraph("Distribuição por Método de Pagamento", subtitle_style))
+            elements.append(Spacer(1, 0.5*inch))
+            img = Image(pie_chart_path)
+            img.drawHeight = 6*inch  # Altura fixa para garantir tamanho adequado
+            img.drawWidth = 6*inch   # Largura fixa para garantir tamanho adequado
+            elements.append(img)
+            elements.append(PageBreak())  # Nova página após este gráfico
+        
+        # Página 2: Gráfico de Barras
+        if os.path.exists(bar_chart_path):
+            elements.append(Paragraph("Vendas Diárias por Método de Pagamento", subtitle_style))
+            elements.append(Spacer(1, 0.5*inch))
+            img = Image(bar_chart_path)
+            img.drawHeight = 6*inch
+            img.drawWidth = 8*inch
+            elements.append(img)
+            elements.append(PageBreak())  # Nova página após este gráfico
+        
+        # Página 3: Gráfico de Linha
+        if os.path.exists(line_chart_path):
+            elements.append(Paragraph("Acúmulo de Capital ao Longo do Tempo", subtitle_style))
+            elements.append(Spacer(1, 0.5*inch))
+            img = Image(line_chart_path)
+            img.drawHeight = 6*inch
+            img.drawWidth = 8*inch
+            elements.append(img)
+        
+        # Construir o PDF
+        doc.build(elements)
+        
+        # Ler o PDF gerado
+        with open(pdf_path, "rb") as pdf_file:
+            PDFbyte = pdf_file.read()
+        
+        # Limpar arquivos temporários
+        for file_path in [pie_chart_path, bar_chart_path, line_chart_path, pdf_path]:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        
+        # Tentar remover o diretório temporário
+        try:
+            os.rmdir(temp_dir)
+        except:
+            pass
+        
+        return PDFbyte
     
-    # Adicionar pontos para destacar os valores individuais
-    points = alt.Chart(df_sorted).mark_circle(
-        size=60,
-        color="#1A73E8"
-    ).encode(
-        x='Data:T',
-        y='Total Acumulado:Q'
-    )
-    
-    return chart + points
-
-def create_weekday_chart(df):
-    """Cria gráfico de barras por dia da semana usando Altair"""
-    if df.empty or 'DiaSemana' not in df.columns:
+    except Exception as e:
+        st.error(f"Erro ao gerar PDF: {e}")
+        import traceback
+        st.error(traceback.format_exc())
         return None
-    
-    # Dias da semana em ordem correta
-    dias_ordem = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
-    
-    # Agrupar por dia da semana
-    vendas_por_dia = df.groupby('DiaSemana')['Total'].sum().reset_index()
-    
-    # Garantir que todos os dias da semana estejam presentes
-    for dia in dias_ordem:
-        if dia not in vendas_por_dia['DiaSemana'].values:
-            vendas_por_dia = pd.concat([vendas_por_dia, pd.DataFrame({'DiaSemana': [dia], 'Total': [0]})], ignore_index=True)
-    
-    # Criar gráfico de barras simples
-    chart = alt.Chart(vendas_por_dia).mark_bar(
-        color="#4285F4"
-    ).encode(
-        x=alt.X('DiaSemana:N', 
-               title='Dia da Semana',
-               sort=dias_ordem),
-        y=alt.Y('Total:Q', 
-               title='Faturamento Total (R$)'),
-        tooltip=[
-            alt.Tooltip('DiaSemana:N', title='Dia'),
-            alt.Tooltip('Total:Q', title='Total', format='R$ ,.2f')
-        ]
-    ).properties(
-        height=350
-    )
-    
-    return chart
-
-def create_payment_methods_chart(df):
-    """Cria gráfico de pizza para métodos de pagamento usando Altair"""
-    if df.empty:
-        return None
-    
-    # Calcular total por método de pagamento
-    cartao_total = df['Cartão'].sum()
-    dinheiro_total = df['Dinheiro'].sum()
-    pix_total = df['Pix'].sum()
-    
-    # Criar DataFrame simplificado
-    data = {
-        'metodo': ['Cartão', 'Dinheiro', 'PIX'],
-        'valor': [cartao_total, dinheiro_total, pix_total]
-    }
-    metodo_pagamento = pd.DataFrame(data)
-    
-    # Calcular porcentagens
-    total = metodo_pagamento['valor'].sum()
-    if total > 0:
-        metodo_pagamento['porcentagem'] = (metodo_pagamento['valor'] / total * 100).round(1)
-    else:
-        metodo_pagamento['porcentagem'] = 0
-    
-    # Definir cores para os métodos
-    domain = ['Cartão', 'Dinheiro', 'PIX']
-    range_ = ['#4285F4', '#34A853', '#FBBC05']
-    
-    # Criar gráfico de pizza simplificado
-    pie = alt.Chart(metodo_pagamento).mark_arc(outerRadius=120).encode(
-        theta=alt.Theta(field="valor", type="quantitative"),
-        color=alt.Color('metodo:N', scale=alt.Scale(domain=domain, range=range_))
-    )
-    
-    return pie
-
-def create_histogram(df):
-    """Cria histograma dos valores de venda usando Altair"""
-    if df.empty or 'Total' not in df.columns:
-        return None
-    
-    # Calcular estatísticas para destacar no tooltip
-    mean = df['Total'].mean()
-    median = df['Total'].median()
-    
-    # Criar histograma simplificado
-    chart = alt.Chart(df).mark_bar(
-        color='#FBBC05'
-    ).encode(
-        x=alt.X('Total:Q', 
-               bin=alt.Bin(maxbins=20), 
-               title='Valor da Venda (R$)'),
-        y=alt.Y('count()', 
-               title='Frequência')
-    ).properties(
-        height=350
-    )
-    
-    return chart
-
-def create_monthly_chart(df):
-    """Cria gráfico de evolução mensal usando Altair"""
-    if df.empty or 'AnoMês' not in df.columns:
-        return None
-    
-    # Agrupar por mês
-    df_monthly = df.groupby('AnoMês').agg({
-        'Total': 'sum',
-        'Data': 'count'
-    }).reset_index()
-    
-    df_monthly.rename(columns={'Data': 'Quantidade'}, inplace=True)
-    
-    # Cria linha de tendência simplificada
-    chart = alt.Chart(df_monthly).mark_line(
-        point=True,
-        color='#4285F4',
-        strokeWidth=3
-    ).encode(
-        x=alt.X('AnoMês:N', title='Mês', sort=None),
-        y=alt.Y('Total:Q', title='Faturamento Total (R$)')
-    ).properties(
-        height=400
-    )
-    
-    return chart
 
 def main():
     st.title("📊 Sistema de Registro de Vendas")
-    
-    # Carregar dados
-    df_raw, worksheet = read_google_sheet()
-    df = process_data(df_raw)
-    
-    # Abas principais
-    tab1, tab2, tab3 = st.tabs([
-        "📝 Registrar Venda", 
-        "📈 Análise Detalhada", 
-        "📊 Estatísticas"
-    ])
-    
-    # Aba 1: Registro de Vendas
+    tab1, tab3 = st.tabs(["Registrar Venda", "Análise Detalhada"])
+
     with tab1:
         st.header("Registrar Nova Venda")
-        
         with st.form("venda_form"):
-            data = st.date_input("📅 Data da Venda", datetime.now())
-            is_sunday = data.weekday() == 6  # 6 = Domingo
-            
+            data = st.date_input("Data", datetime.now())
             col1, col2, col3 = st.columns(3)
             with col1:
-                cartao = st.number_input("💳 Cartão (R$)", min_value=0.0, format="%.2f")
+                cartao = st.number_input("Cartão (R$)", min_value=0.0, format="%.2f")
             with col2:
-                dinheiro = st.number_input("💵 Dinheiro (R$)", min_value=0.0, format="%.2f")
+                dinheiro = st.number_input("Dinheiro (R$)", min_value=0.0, format="%.2f")
             with col3:
-                pix = st.number_input("📱 PIX (R$)", min_value=0.0, format="%.2f")
-            
+                pix = st.number_input("PIX (R$)", min_value=0.0, format="%.2f")
             total = cartao + dinheiro + pix
-            st.write(f"Total da venda: R$ {total:.2f}")
-            
-            submitted = st.form_submit_button("💾 Registrar Venda", use_container_width=True)
-            
+            st.markdown(f"**Total da venda: R$ {total:.2f}**")
+            submitted = st.form_submit_button("Registrar Venda")
             if submitted:
-                if is_sunday:
-                    st.error("⚠️ Não é possível registrar vendas aos domingos!")
-                elif total > 0:
-                    if add_data_to_sheet(data.strftime('%d/%m/%Y'), cartao, dinheiro, pix, worksheet):
-                        # Limpar cache e recarregar a página
-                        st.cache_data.clear()
-                        st.experimental_rerun()
+                if cartao > 0 or dinheiro > 0 or pix > 0:
+                    formatted_date = data.strftime('%d/%m/%Y')
+                    _, worksheet = read_google_sheet()
+                    if worksheet:
+                        add_data_to_sheet(formatted_date, cartao, dinheiro, pix, worksheet)
                 else:
-                    st.warning("⚠️ O valor total deve ser maior que zero.")
-    
-    # Filtros na sidebar
-    with st.sidebar:
-        st.header("🔍 Filtros")
-        
-        if not df.empty and 'Data' in df.columns:
-            # Obter mês e ano atual
-            current_month = datetime.now().month
-            current_year = datetime.now().year
-            
-            # Filtro de Ano
-            anos = sorted(df['Ano'].unique(), reverse=True)
-            default_anos = [current_year] if current_year in anos else anos[:1] if anos else []
-            selected_anos = st.multiselect(
-                "Selecione o(s) Ano(s):",
-                options=anos,
-                default=default_anos,
-                key="filter_years"
-            )
-            
-            # Filtro de Mês
-            meses_disponiveis = sorted(df[df['Ano'].isin(selected_anos)]['Mês'].unique()) if selected_anos else []
-            meses_nomes = {m: datetime(2020, m, 1).strftime('%B') for m in meses_disponiveis}
-            meses_opcoes = [f"{m:02d} - {meses_nomes[m]}" for m in meses_disponiveis]
-            
-            # Default para o mês atual ou todos
-            default_mes_opcao = [f"{current_month:02d} - {datetime(2020, current_month, 1).strftime('%B')}"]
-            default_meses = [m for m in meses_opcoes if m.startswith(f"{current_month:02d} -")]
-            
-            selected_meses_str = st.multiselect(
-                "Selecione o(s) Mês(es):",
-                options=meses_opcoes,
-                default=default_meses if default_meses else meses_opcoes,
-                key="filter_months"
-            )
-            selected_meses = [int(m.split(" - ")[0]) for m in selected_meses_str]
-            
-            # Aplicar filtros
-            df_filtered = df.copy()
-            
-            if selected_anos:
-                df_filtered = df_filtered[df_filtered['Ano'].isin(selected_anos)]
-            
-            if selected_meses:
-                df_filtered = df_filtered[df_filtered['Mês'].isin(selected_meses)]
-            
-        else:
-            st.info("Não há dados disponíveis para filtrar.")
-            df_filtered = pd.DataFrame()
-    
-    # Aba 2: Análise Detalhada
-    with tab2:
-        st.header("Análise Detalhada de Vendas")
-        
-        if df_filtered.empty:
-            st.info("Não há dados para exibir com os filtros selecionados.")
-        else:
-            # Mostrar dados filtrados em uma tabela
-            st.subheader("🧾 Dados Filtrados")
-            
-            # Tabela usando componente nativo do Streamlit
-            st.dataframe(
-                df_filtered[['DataFormatada', 'DiaSemana', 'Cartão', 'Dinheiro', 'Pix', 'Total']], 
-                use_container_width=True,
-                column_config={
-                    "DataFormatada": st.column_config.TextColumn("Data"),
-                    "DiaSemana": st.column_config.TextColumn("Dia da Semana"),
-                    "Cartão": st.column_config.NumberColumn("Cartão (R$)", format="R$ %.2f"),
-                    "Dinheiro": st.column_config.NumberColumn("Dinheiro (R$)", format="R$ %.2f"),
-                    "Pix": st.column_config.NumberColumn("PIX (R$)", format="R$ %.2f"),
-                    "Total": st.column_config.NumberColumn("Total (R$)", format="R$ %.2f")
-                },
-                height=300
-            )
-            
-            # Resumo dos dados
-            total_vendas = len(df_filtered)
-            total_faturamento = df_filtered['Total'].sum()
-            media_por_venda = df_filtered['Total'].mean() if total_vendas > 0 else 0
-            maior_venda = df_filtered['Total'].max() if total_vendas > 0 else 0
-            
-            # Melhor dia da semana
-            melhor_dia = None
-            if 'DiaSemana' in df_filtered.columns and not df_filtered.empty:
-                vendas_por_dia = df_filtered.groupby('DiaSemana')['Total'].sum()
-                if not vendas_por_dia.empty:
-                    melhor_dia = vendas_por_dia.idxmax()
-            
-            # Exibir métricas em cards usando colunas do Streamlit em vez de CSS personalizado
-            st.subheader("📌 Resumo")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("Total de Vendas", f"{total_vendas}")
-                st.metric("Ticket Médio", f"R$ {media_por_venda:,.2f}")
-            with col2:
-                st.metric("Faturamento Total", f"R$ {total_faturamento:,.2f}")
-                st.metric("Melhor Dia", f"{melhor_dia if melhor_dia else 'N/A'}")
-            
-            # Acúmulo de Capital
-            st.subheader("💰 Acúmulo de Capital ao Longo do Tempo")
-            
-            # Usar vega-lite diretamente para garantir renderização
-            if not df_filtered.empty:
-                # Criar dados para o gráfico
-                df_acumulado = df_filtered.sort_values('Data').copy()
-                df_acumulado['Total Acumulado'] = df_acumulado['Total'].cumsum()
-                df_acumulado['DataFormatada'] = df_acumulado['Data'].dt.strftime('%d/%m/%Y')
-                
-                # Converter para formato JSON para Vega-Lite
-                data_json = df_acumulado[['DataFormatada', 'Total', 'Total Acumulado']].to_dict(orient='records')
-                
-                # Definir especificação Vega-Lite
-                vega_spec = {
-                    "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-                    "data": {"values": data_json},
-                    "mark": {"type": "line", "point": True},
-                    "encoding": {
-                        "x": {"field": "DataFormatada", "type": "nominal", "title": "Data"},
-                        "y": {"field": "Total Acumulado", "type": "quantitative", "title": "Capital Acumulado (R$)"}
-                    },
-                    "width": "container",
-                    "height": 400
-                }
-                
-                # Renderizar usando st.vega_lite_chart
-                st.vega_lite_chart(vega_spec, use_container_width=True)
-    
-    # Aba 3: Estatísticas
+                    st.warning("Pelo menos um valor de venda deve ser maior que zero.")
+
     with tab3:
-        st.header("Estatísticas Avançadas de Vendas")
-        
-        if df_filtered.empty:
-            st.info("Não há dados para exibir com os filtros selecionados.")
-        else:
-            # Layout em duas colunas para os primeiros gráficos
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                # Análise por Dia da Semana
-                st.subheader("📅 Vendas por Dia da Semana")
-                
-                # Usar vega-lite diretamente para garantir renderização
-                if not df_filtered.empty:
-                    # Agrupar por dia da semana
-                    vendas_por_dia = df_filtered.groupby('DiaSemana')['Total'].sum().reset_index()
-                    
-                    # Converter para formato JSON para Vega-Lite
-                    data_json = vendas_por_dia.to_dict(orient='records')
-                    
-                    # Definir especificação Vega-Lite
-                    vega_spec = {
-                        "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-                        "data": {"values": data_json},
-                        "mark": "bar",
-                        "encoding": {
-                            "x": {"field": "DiaSemana", "type": "nominal", "title": "Dia da Semana", 
-                                 "sort": ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"]},
-                            "y": {"field": "Total", "type": "quantitative", "title": "Faturamento Total (R$)"},
-                            "color": {"value": "#4285F4"}
-                        },
-                        "width": "container",
-                        "height": 350
-                    }
-                    
-                    # Renderizar usando st.vega_lite_chart
-                    st.vega_lite_chart(vega_spec, use_container_width=True)
-            
-            with col2:
-                # Métodos de Pagamento
-                st.subheader("💳 Métodos de Pagamento")
-                
-                # Usar vega-lite diretamente para garantir renderização
-                if not df_filtered.empty:
-                    # Calcular total por método de pagamento
-                    cartao_total = df_filtered['Cartão'].sum()
-                    dinheiro_total = df_filtered['Dinheiro'].sum()
-                    pix_total = df_filtered['Pix'].sum()
-                    
-                    # Criar dados para o gráfico
-                    data = [
-                        {"metodo": "Cartão", "valor": cartao_total},
-                        {"metodo": "Dinheiro", "valor": dinheiro_total},
-                        {"metodo": "PIX", "valor": pix_total}
-                    ]
-                    
-                    # Definir especificação Vega-Lite
-                    vega_spec = {
-                        "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-                        "data": {"values": data},
-                        "mark": {"type": "arc", "innerRadius": 0, "outerRadius": 120},
-                        "encoding": {
-                            "theta": {"field": "valor", "type": "quantitative"},
-                            "color": {
-                                "field": "metodo", 
-                                "type": "nominal",
-                                "scale": {
-                                    "domain": ["Cartão", "Dinheiro", "PIX"],
-                                    "range": ["#4285F4", "#34A853", "#FBBC05"]
-                                }
-                            }
-                        },
-                        "width": "container",
-                        "height": 350
-                    }
-                    
-                    # Renderizar usando st.vega_lite_chart
-                    st.vega_lite_chart(vega_spec, use_container_width=True)
-            
-            # Histograma dos valores
-            st.subheader("📊 Distribuição dos Valores de Venda")
-            
-            # Usar vega-lite diretamente para garantir renderização
-            if not df_filtered.empty:
-                # Converter para formato JSON para Vega-Lite
-                data_json = df_filtered[['Total']].to_dict(orient='records')
-                
-                # Definir especificação Vega-Lite
-                vega_spec = {
-                    "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-                    "data": {"values": data_json},
-                    "mark": "bar",
-                    "encoding": {
-                        "x": {
-                            "field": "Total", 
-                            "type": "quantitative", 
-                            "bin": {"maxbins": 20},
-                            "title": "Valor da Venda (R$)"
-                        },
-                        "y": {"aggregate": "count", "title": "Frequência"},
-                        "color": {"value": "#FBBC05"}
-                    },
-                    "width": "container",
-                    "height": 350
-                }
-                
-                # Renderizar usando st.vega_lite_chart
-                st.vega_lite_chart(vega_spec, use_container_width=True)
-                
-                # Estatísticas adicionais
-                stats_cols = st.columns(4)
-                stats_cols[0].metric("Média", f"R$ {df_filtered['Total'].mean():.2f}")
-                stats_cols[1].metric("Mediana", f"R$ {df_filtered['Total'].median():.2f}")
-                stats_cols[2].metric("Desvio Padrão", f"R$ {df_filtered['Total'].std():.2f}")
-                # Correção: Adicionando verificação para evitar divisão por zero
-                coef_var = 0
-                if df_filtered['Total'].mean() > 0:
-                    coef_var = (df_filtered['Total'].std() / df_filtered['Total'].mean() * 100)
-                stats_cols[3].metric("Coef. de Variação", f"{coef_var:.1f}%")
-            
-            # Evolução mensal
-            if 'AnoMês' in df_filtered.columns and df_filtered['AnoMês'].nunique() > 1:
-                st.subheader("📈 Evolução Mensal de Vendas")
-                
-                # Usar vega-lite diretamente para garantir renderização
-                # Agrupar por mês
-                df_monthly = df_filtered.groupby('AnoMês').agg({
-                    'Total': 'sum',
-                    'Data': 'count'
-                }).reset_index()
-                
-                df_monthly.rename(columns={'Data': 'Quantidade'}, inplace=True)
-                
-                # Converter para formato JSON para Vega-Lite
-                data_json = df_monthly.to_dict(orient='records')
-                
-                # Definir especificação Vega-Lite
-                vega_spec = {
-                    "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-                    "data": {"values": data_json},
-                    "mark": {"type": "line", "point": True},
-                    "encoding": {
-                        "x": {"field": "AnoMês", "type": "nominal", "title": "Mês"},
-                        "y": {"field": "Total", "type": "quantitative", "title": "Faturamento Total (R$)"},
-                        "color": {"value": "#4285F4"}
-                    },
-                    "width": "container",
-                    "height": 400
-                }
-                
-                # Renderizar usando st.vega_lite_chart
-                st.vega_lite_chart(vega_spec, use_container_width=True)
+        st.header("Análise Detalhada de Vendas")
+        with st.spinner("Carregando dados..."):
+            df_raw, _ = read_google_sheet()
+            if not df_raw.empty:
+                df = process_data(df_raw.copy())
+                if 'Data' in df.columns and pd.api.types.is_datetime64_any_dtype(df['Data']):
+                    anos = sorted(df['Ano'].unique())
+                    selected_anos = st.multiselect("Selecione o(s) Ano(s):", options=anos, default=anos)
+                    df_filtered = df[df['Ano'].isin(selected_anos)]
+
+                    meses_disponiveis = sorted(df_filtered['Mês'].unique())
+                    meses_nomes = {m: datetime(2020, m, 1).strftime('%B') for m in meses_disponiveis}
+                    meses_opcoes = [f"{m} - {meses_nomes[m]}" for m in meses_disponiveis]
+                    selected_meses_str = st.multiselect("Selecione o(s) Mês(es):", options=meses_opcoes, default=meses_opcoes)
+                    selected_meses = [int(m.split(" - ")[0]) for m in selected_meses_str]
+                    df_filtered = df_filtered[df_filtered['Mês'].isin(selected_meses)]
+
+                    st.subheader("Dados Filtrados")
+                    st.dataframe(df_filtered[['DataFormatada', 'Cartão', 'Dinheiro', 'Pix', 'Total']]
+                                 if 'DataFormatada' in df_filtered.columns else df_filtered, use_container_width=True)
+
+                    st.subheader("Distribuição por Método de Pagamento")
+                    payment_filtered = pd.DataFrame({
+                        'Método': ['Cartão', 'Dinheiro', 'PIX'],
+                        'Valor': [df_filtered['Cartão'].sum(), df_filtered['Dinheiro'].sum(), df_filtered['Pix'].sum()]
+                    })
+                    base_pie = alt.Chart(payment_filtered).encode(
+                        theta=alt.Theta("Valor:Q", stack=True),
+                        color=alt.Color("Método:N", legend=alt.Legend(title="Método de Pagamento")),
+                        tooltip=["Método", "Valor"]
+                    ).properties(
+                        width=400,
+                        height=400,
+                    )
+                    pie_chart = base_pie.mark_arc(outerRadius=150)
+                    text_pie = base_pie.mark_text(radius=170).encode(text=alt.Text('Valor:Q', format='.1f'))
+                    final_pie = pie_chart + text_pie
+                    st.altair_chart(final_pie, use_container_width=True)
+
+                    st.subheader("Vendas Diárias por Método de Pagamento")
+                    date_column_filtered = 'DataFormatada' if 'DataFormatada' in df_filtered.columns else 'Data'
+                    daily_filtered = df_filtered.groupby(date_column_filtered)[['Cartão', 'Dinheiro', 'Pix']].sum().reset_index()
+                    daily_filtered_long = pd.melt(daily_filtered, id_vars=[date_column_filtered],
+                                                    value_vars=['Cartão', 'Dinheiro', 'Pix'],
+                                                    var_name='Método', value_name='Valor')
+                    bar_chart_filtered = alt.Chart(daily_filtered_long).mark_bar().encode(
+                        x=alt.X(f'{date_column_filtered}:N', title='Data', sort=None, axis=alt.Axis(labelAngle=-45)),
+                        y=alt.Y('sum(Valor):Q', title='Valor (R$)'),
+                        color=alt.Color('Método:N', legend=alt.Legend(title="Pagamento")),
+                        tooltip=[date_column_filtered, 'Método', 'Valor']
+                    ).properties(
+                        width=600,
+                        height=400,
+                    )
+                    st.altair_chart(bar_chart_filtered, use_container_width=True)
+
+                    st.subheader("Acúmulo de Capital ao Longo do Tempo")
+                    df_accumulated = df_filtered.sort_values('Data').copy()
+                    df_accumulated['Total Acumulado'] = df_accumulated['Total'].cumsum()
+                    acum_chart = alt.Chart(df_accumulated).mark_line(point=True).encode(
+                        x=alt.X('Data:T', title='Data'), 
+                        y=alt.Y('Total Acumulado:Q', title='Capital Acumulado (R$)'),
+                        tooltip=['DataFormatada', 'Total Acumulado']
+                    ).properties(
+                        width=600,
+                        height=400,
+                    )
+                    st.altair_chart(acum_chart, use_container_width=True)
+
+                    # Botão para gerar e baixar o PDF
+                    if st.button("Exportar Análise para PDF"):
+                        with st.spinner("Gerando PDF... Isso pode levar alguns segundos."):
+                            try:
+                                pdf_bytes = generate_pdf_report(df_filtered)
+                                if pdf_bytes:
+                                    st.success("PDF gerado com sucesso!")
+                                    st.download_button(
+                                        label="Baixar PDF",
+                                        data=pdf_bytes,
+                                        file_name="analise_vendas.pdf",
+                                        mime="application/pdf"
+                                    )
+                                else:
+                                    st.error("Não foi possível gerar o PDF. Verifique os logs para mais detalhes.")
+                            except Exception as e:
+                                st.error(f"Erro ao gerar ou baixar o PDF: {e}")
+                                import traceback
+                                st.error(traceback.format_exc())
+
+                else:
+                    st.info("Não há dados de data para análise.")
+            else:
+                st.info("Não há dados para exibir.")
 
 if __name__ == "__main__":
     main()
