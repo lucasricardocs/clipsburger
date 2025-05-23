@@ -147,12 +147,12 @@ def create_heatmap(df, title="Mapa de Calor: Total de Vendas (Dia da Semana x M�
         return None
 
     # Remove valores nulos e agrupa os dados
-    df_clean = df.dropna(subset=['DiaSemana', 'MêsNome', 'Total'])
+    df_clean = df.dropna(subset=['DiaSemana', 'Total'])
     if df_clean.empty:
         st.info("Não há dados válidos para gerar o Mapa de Calor.")
         return None
     
-    heatmap_data = df_clean.groupby(['DiaSemana', 'MêsNome'], observed=True)['Total'].sum().reset_index()
+    heatmap_data = df_clean.groupby(['DiaSemana'], observed=True)['Total'].sum().reset_index()
     
     if heatmap_data.empty:
         st.info("Não há dados agrupados para gerar o Mapa de Calor.")
