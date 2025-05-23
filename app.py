@@ -118,7 +118,6 @@ def process_data(df_input):
                 if not df.empty:
                     df['Ano'] = df['Data'].dt.year
                     df['Mês'] = df['Data'].dt.month
-                    df['MêsNome'] = df['Data'].dt.strftime('%B').str.capitalize()
                     df['AnoMês'] = df['Data'].dt.strftime('%Y-%m')
                     df['DataFormatada'] = df['Data'].dt.strftime('%d/%m/%Y')
                     # Usar dayofweek (locale-independent) e mapear para nomes em português
@@ -127,7 +126,6 @@ def process_data(df_input):
                     df['DiaDoMes'] = df['Data'].dt.day
 
                     df['DiaSemana'] = pd.Categorical(df['DiaSemana'], categories=dias_semana_ordem, ordered=True)
-                    df['MêsNome'] = pd.Categorical(df['MêsNome'], categories=meses_ordem, ordered=True)
                 else:
                     st.warning("Nenhuma data válida encontrada após conversão inicial.")
             except Exception as e:
@@ -138,45 +136,6 @@ def process_data(df_input):
         else:
              st.error("Coluna 'Data' não encontrada no DataFrame inicial.")
     return df
-
-# --- Funções de Visualização ---
-def create_heatmap(df, title="Mapa de Calor: Total de Vendas (Dia da Semana x Mês)"):
-    """Cria um mapa de calor do total de vendas por dia da semana e mês."""
-    if df.empty or 'DiaSemana' not in df.columns or 'MêsNome' not in df.columns or 'Total' not in df.columns:
-        st.info("Dados insuficientes para gerar o Mapa de Calor.")
-        return None
-
-    # Remove valores nulos e agrupa os dados
-    df_clean = df.dropna(subset=['DiaSemana', 'Total'])
-    if df_clean.empty:
-        st.info("Não há dados válidos para gerar o Mapa de Calor.")
-        return None
-    
-    heatmap_data = df_clean.groupby(['DiaSemana'], observed=True)['Total'].sum().reset_index()
-    
-    if heatmap_data.empty:
-        st.info("Não há dados agrupados para gerar o Mapa de Calor.")
-        return None
-
-    heatmap = alt.Chart(heatmap_data).mark_rect().encode(
-        x=alt.X('MêsNome:O', title='Mês', sort=meses_ordem),
-        y=alt.Y('DiaSemana:O', title='Dia da Semana', sort=dias_semana_ordem),
-        color=alt.Color('Total:Q', 
-                       legend=alt.Legend(title="Total Vendido (R$)"), 
-                       scale=alt.Scale(scheme='viridis')),
-        tooltip=[
-            alt.Tooltip('MêsNome:O', title='Mês'),
-            alt.Tooltip('DiaSemana:O', title='Dia da Semana'),
-            alt.Tooltip('Total:Q', title='Total Vendido (R$)', format=",.2f")
-        ]
-    ).properties(
-        title=title,
-        height=400,
-        width=600
-    ).resolve_scale(
-        color='independent'
-    )
-    return heatmap
 
 def create_payment_evolution_chart(df, title="Evolução da Preferência por Pagamento (Mensal)"):
     """Cria um gráfico de área empilhada mostrando a evolução dos métodos de pagamento."""
