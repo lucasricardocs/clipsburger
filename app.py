@@ -304,32 +304,31 @@ def main():
                 stats_cols_temporal[2].markdown(f"**📆 Dia com Mais Vendas:** {dia_mais_vendas}")
 
                 # Gráfico de média por dia da semana (Seg-Sex, usando locale)
-                # (Recuperando a lógica original que estava faltando)
                 try:
                     # Garante que a coluna DiaSemana existe e não está vazia
                     if 'DiaSemana' in df_filtered.columns and not df_filtered['DiaSemana'].dropna().empty:
                         # Calcula a média de vendas por dia da semana
                         vendas_por_dia = df_filtered.groupby('DiaSemana')['Total'].mean().reset_index()
                         
-                # Define a ordem desejada dos dias da semana (Segunda a Sábado)
-                # Isso garante que o Sábado seja incluído na ordem, mesmo sem dados.
-                # A ordem dependerá do locale pt_BR.UTF-8 estar ativo para os nomes corretos.
-                dias_ordem_locale = [
-                    "Segunda-feira", 
-                    "Terça-feira", 
-                    "Quarta-feira", 
-                    "Quinta-feira", 
-                    "Sexta-feira", 
-                    "Sábado"
-                ]
-                # Opcional: Adicionar Domingo se ele existir nos dados e for desejado na visualização
-                if 'Domingo' in vendas_por_dia['DiaSemana'].unique(): 
-                    dias_ordem_locale.append('Domingo')
+                        # Define a ordem desejada dos dias da semana (Segunda a Sábado)
+                        # Isso garante que o Sábado seja incluído na ordem, mesmo sem dados.
+                        # A ordem dependerá do locale pt_BR.UTF-8 estar ativo para os nomes corretos.
+                        dias_ordem_locale = [
+                            "Segunda-feira", 
+                            "Terça-feira", 
+                            "Quarta-feira", 
+                            "Quinta-feira", 
+                            "Sexta-feira", 
+                            "Sábado"
+                        ]
+                        # Opcional: Adicionar Domingo se ele existir nos dados e for desejado na visualização
+                        if 'Domingo' in vendas_por_dia['DiaSemana'].unique(): 
+                            dias_ordem_locale.append('Domingo')
                         
                         # Cria o gráfico de barras
                         weekday_chart = alt.Chart(vendas_por_dia).mark_bar().encode(
                             x=alt.X('DiaSemana', title='Dia da Semana', sort=dias_ordem_locale),
-                            y=alt.Y('Total', title='Média de Vendas (R$)'),
+                            y=alt.Y('Total', title='Média de Vendas (R$)"),
                             tooltip=['DiaSemana', alt.Tooltip('Total', title='Média (R$)', format=',.2f')]
                         )
                         weekday_chart = weekday_chart.interactive() # Adiciona interatividade
