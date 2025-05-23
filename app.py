@@ -15,13 +15,13 @@ WORKSHEET_NAME = 'Vendas'
 st.set_page_config(page_title="Sistema de Registro de Vendas", layout="centered")
 
 # Configura o locale para Português do Brasil para formatação de datas e nomes
-try:
-    locale.setlocale(locale.LC_TIME, 'pt_BR.UTF-8')
-except locale.Error:
-    st.warning("Locale pt_BR.UTF-8 não encontrado. Nomes de meses/dias podem aparecer em inglês.")
+#try:
+    #locale.setlocale(locale.LC_TIME, 'pt_BR.UTF-8')
+#except locale.Error:
+    #st.warning("Locale pt_BR.UTF-8 não encontrado. Nomes de meses/dias podem aparecer em inglês.")
 
 # Define a ordem correta dos dias da semana e meses
-dias_semana_ordem = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"]
+dias_semana_ordem = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"]
 meses_ordem = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
 
 # --- Funções de Cache para Acesso ao Google Sheets ---
@@ -91,7 +91,7 @@ def add_data_to_sheet(date, cartao, dinheiro, pix, worksheet_obj):
     try:
         new_row = [date, float(cartao), float(dinheiro), float(pix)]
         worksheet_obj.append_row(new_row)
-        st.success("Dados registrados com sucesso!")
+        st.success("Dados registrados com sucesso! ✅")
         return True
     except Exception as e:
         st.error(f"Erro ao adicionar dados na planilha: {e}")
@@ -122,7 +122,7 @@ def process_data(df_input):
                     df['AnoMês'] = df['Data'].dt.strftime('%Y-%m')
                     df['DataFormatada'] = df['Data'].dt.strftime('%d/%m/%Y')
                     # Usar dayofweek (locale-independent) e mapear para nomes em português
-                    day_map = {0: "Segunda-feira", 1: "Terça-feira", 2: "Quarta-feira", 3: "Quinta-feira", 4: "Sexta-feira", 5: "Sábado", 6: "Domingo"}
+                    day_map = {0: "Segunda-feira", 1: "Terça-feira", 2: "Quarta-feira", 3: "Quinta-feira", 4: "Sexta-feira", 5: "Sábado"}
                     df['DiaSemana'] = df['Data'].dt.dayofweek.map(day_map)
                     df['DiaDoMes'] = df['Data'].dt.day
 
