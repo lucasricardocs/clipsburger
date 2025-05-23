@@ -465,4 +465,3 @@ def main():
 # --- Ponto de Entrada da Aplicação ---
 if __name__ == "__main__":
     main()
-
