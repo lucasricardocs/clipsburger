@@ -15,8 +15,8 @@ WORKSHEET_NAME = 'Vendas'
 st.set_page_config(page_title="Sistema de Registro de Vendas", layout="centered")
 
 # Configura o locale para Português do Brasil para formatação de datas e nomes
-try:
-    locale.setlocale(locale.LC_TIME, 'pt_BR.UTF-8')
+#try:
+   # locale.setlocale(locale.LC_TIME, 'pt_BR.UTF-8')
 #except locale.Error:
     #st.warning("Locale pt_BR.UTF-8 não encontrado. Nomes de meses/dias podem aparecer em inglês.")
 
