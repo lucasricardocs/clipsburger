@@ -121,7 +121,9 @@ def process_data(df_input):
                     df['MêsNome'] = df['Data'].dt.strftime('%B').str.capitalize()
                     df['AnoMês'] = df['Data'].dt.strftime('%Y-%m')
                     df['DataFormatada'] = df['Data'].dt.strftime('%d/%m/%Y')
-                    df['DiaSemana'] = df['Data'].dt.strftime('%A').str.capitalize()
+                    # Usar dayofweek (locale-independent) e mapear para nomes em português
+                    day_map = {0: "Segunda-feira", 1: "Terça-feira", 2: "Quarta-feira", 3: "Quinta-feira", 4: "Sexta-feira", 5: "Sábado", 6: "Domingo"}
+                    df['DiaSemana'] = df['Data'].dt.dayofweek.map(day_map)
                     df['DiaDoMes'] = df['Data'].dt.day
 
                     df['DiaSemana'] = pd.Categorical(df['DiaSemana'], categories=dias_semana_ordem, ordered=True)
@@ -229,14 +231,32 @@ def analyze_sales_by_weekday(df):
     if df.empty or 'DiaSemana' not in df.columns or 'Total' not in df.columns:
         return None, None
 
-    # Calcula a média de vendas por dia da semana
-    # observed=False garante que todos os dias da categoria sejam incluídos, mesmo sem vendas
-    avg_sales_weekday = df.groupby('DiaSemana', observed=False)['Total'].mean().reindex(dias_semana_ordem)
-    
-    # Encontra o dia da semana com a maior média de vendas
-    best_day = avg_sales_weekday.idxmax()
-    
-    return best_day, avg_sales_weekday
+    try:
+        # Calcula a média de vendas por dia da semana, tratando valores não numéricos
+        df_copy = df.copy()
+        df_copy['Total'] = pd.to_numeric(df_copy['Total'], errors='coerce')
+        df_copy.dropna(subset=['Total'], inplace=True)
+        
+        if df_copy.empty:
+             return None, None
+             
+        avg_sales_weekday = df_copy.groupby('DiaSemana', observed=False)['Total'].mean().reindex(dias_semana_ordem)
+
+        # Verifica se há valores não nulos para calcular o máximo
+        if avg_sales_weekday.notna().any():
+            best_day = avg_sales_weekday.idxmax()
+            # Verifica se o melhor dia realmente tem um valor (não é NaN)
+            if pd.notna(avg_sales_weekday[best_day]):
+                 return best_day, avg_sales_weekday
+            else:
+                 return None, avg_sales_weekday # Retorna médias, mas sem melhor dia definido
+        else:
+            # Retorna None para best_day se todas as médias forem NaN
+            return None, avg_sales_weekday
+            
+    except Exception as e:
+        st.error(f"Erro ao analisar vendas por dia da semana: {e}")
+        return None, None
 
 # --- Interface Principal da Aplicação ---
 def main():
@@ -432,16 +452,27 @@ def main():
             # Análise textual por dia da semana
             best_weekday, avg_sales_weekday = analyze_sales_by_weekday(df_filtered)
             
-            if best_weekday and avg_sales_weekday is not None:
-                st.markdown(f"**🗓️ Dia da Semana com Maior Média de Vendas:** {best_weekday} (Média: R$ {avg_sales_weekday[best_day]:,.2f}) ")
+            if avg_sales_weekday is not None: # Verifica se a análise foi possível
+                if best_weekday and pd.notna(avg_sales_weekday[best_weekday]): # Verifica se um melhor dia válido foi encontrado
+                    st.markdown(f"**🗓️ Dia da Semana com Maior Média de Vendas:** {best_weekday} (Média: R$ {avg_sales_weekday[best_weekday]:,.2f})")
+                else:
+                    st.markdown("**🗓️ Dia da Semana com Maior Média de Vendas:** Não foi possível determinar (dados insuficientes ou inválidos).")
+
                 st.markdown("**📊 Média de Vendas por Dia da Semana:**")
                 avg_sales_text = ""
+                has_valid_avg = False
                 for day, avg_sale in avg_sales_weekday.items():
-                    avg_sales_text += f"   - **{day}:** R$ {avg_sale:,.2f}\n"
-                st.markdown(avg_sales_text)
+                    if pd.notna(avg_sale):
+                        avg_sales_text += f"   - **{day}:** R$ {avg_sale:,.2f}\\n"
+                        has_valid_avg = True
+                    else:
+                        avg_sales_text += f"   - **{day}:** R$ N/A\\n" # Mostra N/A para dias sem dados/média
+                if has_valid_avg:
+                    st.markdown(avg_sales_text)
+                else:
+                    st.info("Não há dados de média de vendas por dia da semana para exibir.")
             else:
                 st.info("Dados insuficientes para calcular a média de vendas por dia da semana.")
-
             # Gráficos movidos para cá
             st.divider()
             st.subheader("🔥 Mapa de Calor: Total de Vendas (Dia da Semana x Mês)")
