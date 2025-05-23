@@ -11,8 +11,8 @@ import locale
 SPREADSHEET_ID = '1NTScbiIna-iE7roQ9XBdjUOssRihTFFby4INAAQNXTg'
 WORKSHEET_NAME = 'Vendas'
 
-# Configuração da página Streamlit
-st.set_page_config(page_title="Sistema de Registro de Vendas", layout="wide")
+# Configuração da página Streamlit - Alterado para centered
+st.set_page_config(page_title="Sistema de Registro de Vendas", layout="centered")
 
 # Configura o locale para Português do Brasil para formatação de datas e nomes
 try:
@@ -34,7 +34,7 @@ def get_google_auth():
     try:
         credentials_dict = st.secrets.get("google_credentials")
         if not credentials_dict:
-            st.error("Credenciais do Google não encontradas em st.secrets.")
+            st.error("Credenciais do Google não encontradas em st.secrets. Configure o arquivo .streamlit/secrets.toml")
             return None
         else:
             creds = Credentials.from_service_account_info(credentials_dict, scopes=SCOPES)
@@ -119,7 +119,7 @@ def process_data(df_input):
                     df['Ano'] = df['Data'].dt.year
                     df['Mês'] = df['Data'].dt.month
                     df['MêsNome'] = df['Data'].dt.strftime('%B').str.capitalize()
-                    df['AnoMês'] = df['Data'].dt.strftime('%Y-%m') # Usado para agregação temporal
+                    df['AnoMês'] = df['Data'].dt.strftime('%Y-%m')
                     df['DataFormatada'] = df['Data'].dt.strftime('%d/%m/%Y')
                     df['DiaSemana'] = df['Data'].dt.strftime('%A').str.capitalize()
                     df['DiaDoMes'] = df['Data'].dt.day
@@ -156,7 +156,10 @@ def create_heatmap(df, title="Mapa de Calor: Total de Vendas (Dia da Semana x M�
             alt.Tooltip('Total', title='Total Vendido (R$)', format=",.2f")
         ]
     ).properties(
-        title=title
+        title=title,
+        # Ajuste de tamanho pode ser feito aqui se necessário, mas use_container_width é geralmente preferível
+        # width=600, 
+        # height=400
     ).interactive()
     return heatmap
 
@@ -199,7 +202,6 @@ def create_sales_histogram(df, title="Distribuição dos Valores de Venda Diári
         st.info("Dados insuficientes para gerar o Histograma de Vendas.")
         return None
     
-    # Filtra vendas com valor zero, pois geralmente não são relevantes para a distribuição
     df_filtered_hist = df[df['Total'] > 0]
 
     if df_filtered_hist.empty:
@@ -207,8 +209,8 @@ def create_sales_histogram(df, title="Distribuição dos Valores de Venda Diári
         return None
 
     histogram = alt.Chart(df_filtered_hist).mark_bar().encode(
-        alt.X("Total:Q", bin=alt.Bin(maxbins=20), title="Faixa de Valor da Venda Diária (R$)"), # Agrupa em bins
-        alt.Y('count()', title='Número de Dias (Frequência)'), # Conta a frequência em cada bin
+        alt.X("Total:Q", bin=alt.Bin(maxbins=20), title="Faixa de Valor da Venda Diária (R$)"),
+        alt.Y('count()', title='Número de Dias (Frequência)'),
         tooltip=[
             alt.Tooltip("Total:Q", bin=True, title="Faixa de Valor (R$)"),
             alt.Tooltip('count()', title='Número de Dias')
@@ -216,17 +218,33 @@ def create_sales_histogram(df, title="Distribuição dos Valores de Venda Diári
     ).properties(
         title=title
     ).interactive()
-
     return histogram
+
+# --- Funções de Análise Textual ---
+def analyze_sales_by_weekday(df):
+    """Calcula a média de vendas por dia da semana e encontra o dia com maior média."""
+    if df.empty or 'DiaSemana' not in df.columns or 'Total' not in df.columns:
+        return None, None
+
+    # Calcula a média de vendas por dia da semana
+    # observed=False garante que todos os dias da categoria sejam incluídos, mesmo sem vendas
+    avg_sales_weekday = df.groupby('DiaSemana', observed=False)['Total'].mean().reindex(dias_semana_ordem)
+    
+    # Encontra o dia da semana com a maior média de vendas
+    best_day = avg_sales_weekday.idxmax()
+    
+    return best_day, avg_sales_weekday
 
 # --- Interface Principal da Aplicação ---
 def main():
     st.title("📊 Sistema de Registro de Vendas")
 
     df_raw = read_sales_data()
-    df_processed = process_data(df_raw) if not df_raw.empty else pd.DataFrame()
+    # Só processa se df_raw não for None e não estiver vazio
+    df_processed = process_data(df_raw) if df_raw is not None and not df_raw.empty else pd.DataFrame()
 
-    tab1, tab2, tab3, tab4 = st.tabs(["Registrar Venda", "Análise Detalhada", "Estatísticas", "Novas Análises"])
+    # Define as abas - Removida a aba "Novas Análises"
+    tab1, tab2, tab3 = st.tabs(["Registrar Venda", "Análise Detalhada", "Estatísticas"])
 
     with tab1:
         st.header("Registrar Nova Venda")
@@ -262,7 +280,8 @@ def main():
 
     with st.sidebar:
         st.header("🔍 Filtros")
-        if not df_processed.empty and 'Ano' in df_processed.columns and not df_processed['Ano'].dropna().empty:
+        # Verifica se df_processed existe e não está vazio antes de acessar colunas
+        if df_processed is not None and not df_processed.empty and 'Ano' in df_processed.columns and not df_processed['Ano'].dropna().empty:
             current_month = datetime.now().month
             current_year = datetime.now().year
             anos_disponiveis = sorted(df_processed['Ano'].dropna().unique().astype(int))
@@ -283,14 +302,16 @@ def main():
             st.sidebar.info("Não há dados processados ou coluna 'Ano' para aplicar filtros.")
 
     # Aplicar filtros
-    df_filtered = df_processed.copy()
+    df_filtered = df_processed.copy() if df_processed is not None else pd.DataFrame()
     if not df_filtered.empty:
         if selected_anos_filter and 'Ano' in df_filtered.columns:
             df_filtered = df_filtered[df_filtered['Ano'].isin(selected_anos_filter)]
         if selected_meses_filter and 'Mês' in df_filtered.columns:
             df_filtered = df_filtered[df_filtered['Mês'].isin(selected_meses_filter)]
     else:
-        st.warning("Não há dados processados para filtrar.")
+        # Não mostra warning se df_processed for None (erro de credenciais)
+        if df_processed is not None:
+             st.warning("Não há dados processados para filtrar.")
 
     # --- Aba de Análise Detalhada ---
     with tab2:
@@ -348,9 +369,11 @@ def main():
         else:
             st.info("Não há dados para exibir na Análise Detalhada com os filtros selecionados ou o DataFrame está vazio.")
 
-    # --- Aba de Estatísticas ---
+    # --- Aba de Estatísticas (Agora inclui as novas análises) ---
     with tab3:
-        st.header("📊 Estatísticas de Vendas (Filtrado)")
+        st.header("📊 Estatísticas e Análises de Vendas (Filtrado)")
+        
+        # Verifica se há dados filtrados para exibir estatísticas
         if not df_filtered.empty and 'Total' in df_filtered.columns:
             st.subheader("💰 Resumo Financeiro")
             total_vendas = len(df_filtered)
@@ -393,6 +416,7 @@ def main():
                         color=alt.Color("Método:N", legend=alt.Legend(title="Método")),
                         tooltip=["Método", alt.Tooltip("Valor", format=",.2f")]
                     ).interactive()
+                    # Usar use_container_width=True para gráficos maiores no layout centered
                     st.altair_chart(pie_chart_stats, use_container_width=True)
                 else:
                     st.info("Sem dados de pagamento para o gráfico de pizza nesta seção.")
@@ -400,58 +424,45 @@ def main():
                 st.info("Sem dados de pagamento para exibir nesta seção.")
 
             st.divider()
-            st.subheader("📅 Análise Temporal Básica")
-            if total_vendas > 0 and 'Data' in df_filtered.columns and 'DiaSemana' in df_filtered.columns:
-                metodo_preferido = "N/A"
-                if total_pagamentos > 0:
-                     metodo_preferido = "Cartão" if cartao_total >= max(dinheiro_total, pix_total) else \
-                                       "Dinheiro" if dinheiro_total >= max(cartao_total, pix_total) else "PIX"
-                emoji_metodo = "💳" if metodo_preferido == "Cartão" else "💵" if metodo_preferido == "Dinheiro" else "📱" if metodo_preferido == "PIX" else "❓"
-
-                stats_cols_temporal = st.columns(3)
-                stats_cols_temporal[0].markdown(f"**{emoji_metodo} Método Preferido:** {metodo_preferido}")
-
-                dias_distintos = df_filtered['Data'].nunique()
-                media_diaria = total_faturamento / dias_distintos if dias_distintos > 0 else 0
-                stats_cols_temporal[1].markdown(f"**📊 Média Diária (dias c/ venda):** R$ {media_diaria:.2f}")
-
-                vendas_por_dia_sem = df_filtered.groupby('DiaSemana', observed=False)['Total'].sum()
-                dia_mais_vendas = vendas_por_dia_sem.idxmax() if not vendas_por_dia_sem.empty else "N/A"
-                valor_dia_mais_vendas = vendas_por_dia_sem.max() if not vendas_por_dia_sem.empty else 0
-                stats_cols_temporal[2].markdown(f"**🗓️ Dia Mais Forte:** {dia_mais_vendas} (R$ {valor_dia_mais_vendas:,.2f})")
+            st.subheader("📅 Análise Temporal e Desempenho Semanal")
+            
+            # Análise textual por dia da semana
+            best_weekday, avg_sales_weekday = analyze_sales_by_weekday(df_filtered)
+            
+            if best_weekday and avg_sales_weekday is not None:
+                st.markdown(f"**🗓️ Dia da Semana com Maior Média de Vendas:** {best_weekday} (Média: R$ {avg_sales_weekday[best_day]:,.2f}) ")
+                st.markdown("**📊 Média de Vendas por Dia da Semana:**")
+                avg_sales_text = ""
+                for day, avg_sale in avg_sales_weekday.items():
+                    avg_sales_text += f"   - **{day}:** R$ {avg_sale:,.2f}\n"
+                st.markdown(avg_sales_text)
             else:
-                st.info("Dados insuficientes para a análise temporal básica.")
-        else:
-            st.info("Não há dados para exibir nas Estatísticas com os filtros selecionados ou o DataFrame está vazio.")
+                st.info("Dados insuficientes para calcular a média de vendas por dia da semana.")
 
-    # --- Nova Aba para Visualizações Adicionais ---
-    with tab4:
-        st.header("💡 Novas Análises Visuais")
-
-        if not df_filtered.empty:
+            # Gráficos movidos para cá
+            st.divider()
             st.subheader("🔥 Mapa de Calor: Total de Vendas (Dia da Semana x Mês)")
             heatmap_chart = create_heatmap(df_filtered)
             if heatmap_chart:
                 st.altair_chart(heatmap_chart, use_container_width=True)
-            # Mensagem de 'dados insuficientes' já tratada dentro da função
-
+            
             st.divider()
             st.subheader("📈 Evolução da Preferência por Pagamento (Mensal)")
             payment_evolution_chart = create_payment_evolution_chart(df_filtered)
             if payment_evolution_chart:
                 st.altair_chart(payment_evolution_chart, use_container_width=True)
-            # Mensagem de 'dados insuficientes' já tratada dentro da função
 
             st.divider()
             st.subheader("📊 Distribuição dos Valores de Venda Diários (Histograma)")
             sales_histogram_chart = create_sales_histogram(df_filtered)
             if sales_histogram_chart:
                 st.altair_chart(sales_histogram_chart, use_container_width=True)
-            # Mensagem de 'dados insuficientes' já tratada dentro da função
 
         else:
-            st.info("Selecione filtros ou registre mais dados para visualizar as novas análises.")
+            # Mensagem se não houver dados filtrados ou processados
+            st.info("Não há dados para exibir nas Estatísticas com os filtros selecionados ou o DataFrame inicial está vazio/inválido.")
 
 # --- Ponto de Entrada da Aplicação ---
 if __name__ == "__main__":
     main()
+
