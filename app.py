@@ -152,7 +152,7 @@ def main():
                     if add_data_to_sheet(formatted_date, cartao_input, dinheiro_input, pix_input, worksheet_obj):
                         read_sales_data.clear() # Limpa o cache dos dados de vendas
                         process_data.clear() # Limpa o cache dos dados processados
-                        st.experimental_rerun() # Força o recarregamento da app para refletir novos dados
+                        st.rerun() # Força o recarregamento da app para refletir novos dados
                 else:
                     st.warning("Pelo menos um valor de venda deve ser maior que zero.")
 
