@@ -341,7 +341,7 @@ def main():
         st.header("Análise Detalhada de Vendas")
         if not df_filtered.empty and 'DataFormatada' in df_filtered.columns:
             st.subheader("Dados Filtrados")
-            st.dataframe(df_filtered[['DataFormatada', 'DiaSemana', 'MêsNome', 'Cartão', 'Dinheiro', 'Pix', 'Total']], use_container_width=True, height=300)
+            st.dataframe(df_filtered[['DataFormatada', 'DiaSemana', 'Cartão', 'Dinheiro', 'Pix', 'Total']], use_container_width=True, height=500)
 
             st.subheader("Distribuição por Método de Pagamento (Filtrado)")
             payment_filtered_data = pd.DataFrame({
