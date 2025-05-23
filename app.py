@@ -311,12 +311,20 @@ def main():
                         # Calcula a média de vendas por dia da semana
                         vendas_por_dia = df_filtered.groupby('DiaSemana')['Total'].mean().reset_index()
                         
-                        # Define a ordem correta dos dias da semana baseado no locale (se pt_BR.UTF-8 estiver ativo)
-                        # Se o locale não estiver ativo, a ordem pode ser alfabética
-                        dias_ordem_locale = [datetime(2000, 1, i).strftime('%A').capitalize() for i in range(3, 8)] # Seg a Sex
-                        # Adiciona Sábado e Domingo se existirem nos dados
-                        if 'Sábado' in vendas_por_dia['DiaSemana'].unique(): dias_ordem_locale.append('Sábado')
-                        if 'Domingo' in vendas_por_dia['DiaSemana'].unique(): dias_ordem_locale.append('Domingo')
+                # Define a ordem desejada dos dias da semana (Segunda a Sábado)
+                # Isso garante que o Sábado seja incluído na ordem, mesmo sem dados.
+                # A ordem dependerá do locale pt_BR.UTF-8 estar ativo para os nomes corretos.
+                dias_ordem_locale = [
+                    "Segunda-feira", 
+                    "Terça-feira", 
+                    "Quarta-feira", 
+                    "Quinta-feira", 
+                    "Sexta-feira", 
+                    "Sábado"
+                ]
+                # Opcional: Adicionar Domingo se ele existir nos dados e for desejado na visualização
+                if 'Domingo' in vendas_por_dia['DiaSemana'].unique(): 
+                    dias_ordem_locale.append('Domingo')
                         
                         # Cria o gráfico de barras
                         weekday_chart = alt.Chart(vendas_por_dia).mark_bar().encode(
