@@ -15,10 +15,10 @@ WORKSHEET_NAME = 'Vendas'
 st.set_page_config(page_title="Sistema de Registro de Vendas", layout="centered")
 
 # Configura o locale para Português do Brasil para formatação de datas e nomes
-#try:
-   # locale.setlocale(locale.LC_TIME, 'pt_BR.UTF-8')
-#except locale.Error:
-    #st.warning("Locale pt_BR.UTF-8 não encontrado. Nomes de meses/dias podem aparecer em inglês.")
+try:
+    locale.setlocale(locale.LC_TIME, 'pt_BR.UTF-8')
+except locale.Error:
+    st.warning("Locale pt_BR.UTF-8 não encontrado. Nomes de meses/dias podem aparecer em inglês.")
 
 # --- Funções de Cache para Acesso ao Google Sheets ---
 @st.cache_resource
@@ -210,8 +210,9 @@ def main():
                 theta=alt.Theta("Valor:Q", stack=True),
                 color=alt.Color("Método:N", legend=alt.Legend(title="Método")),
                 tooltip=["Método", "Valor"]
-            ).properties(width=700, height=500)
+            )
             text = pie_chart.mark_text(radius=120, size=16).encode(text="Valor:Q")
+            pie_chart = pie_chart.interactive() # Adiciona interatividade
             st.altair_chart(pie_chart + text, use_container_width=True)
 
             st.subheader("Vendas Diárias por Método de Pagamento")
@@ -221,7 +222,8 @@ def main():
                 y=alt.Y('Valor:Q', title='Valor (R$)'),
                 color=alt.Color('Método:N', legend=alt.Legend(title="Método")),
                 tooltip=['DataFormatada', 'Método', 'Valor']
-            ).properties(width=700, height=500)
+            )
+            bar_chart = bar_chart.interactive() # Adiciona interatividade
             st.altair_chart(bar_chart, use_container_width=True)
 
             st.subheader("Acúmulo de Capital ao Longo do Tempo")
@@ -232,7 +234,8 @@ def main():
                     x=alt.X('Data:T', title='Data'),
                     y=alt.Y('Total Acumulado:Q', title='Capital Acumulado (R$)'),
                     tooltip=['DataFormatada', 'Total Acumulado']
-                ).properties(width=700, height=500)
+                )
+                line_chart = line_chart.interactive() # Adiciona interatividade
                 st.altair_chart(line_chart, use_container_width=True)
             else:
                 st.info("Coluna 'Data' não encontrada para gráfico de acúmulo.")
@@ -258,7 +261,7 @@ def main():
             cols3 = st.columns(1)
             cols3[0].metric("⬇️ Menor Venda", f"R$ {menor_venda:,.2f}")
 
-            st.markdown("---")
+            st.divider() # Substitui st.markdown("---")
             st.subheader("💳 Métodos de Pagamento")
             cartao_total = df_filtered['Cartão'].sum()
             dinheiro_total = df_filtered['Dinheiro'].sum()
@@ -278,11 +281,12 @@ def main():
                 pie_chart_stats = alt.Chart(payment_data_stats).mark_arc(innerRadius=50).encode(
                     theta=alt.Theta("Valor:Q", stack=True), color=alt.Color("Método:N", legend=alt.Legend(title="Método")),
                     tooltip=["Método", "Valor"]
-                ).properties(height=500)
+                )
                 text_stats = pie_chart_stats.mark_text(radius=120, size=16).encode(text="Valor:Q")
+                pie_chart_stats = pie_chart_stats.interactive() # Adiciona interatividade
                 st.altair_chart(pie_chart_stats + text_stats, use_container_width=True)
             
-            st.markdown("---")
+            st.divider() # Substitui st.markdown("---")
             st.subheader("📅 Análise Temporal")
             if total_vendas > 1 and 'Data' in df_filtered.columns and 'DiaSemana' in df_filtered.columns:
                 metodo_preferido = "Cartão" if cartao_total >= max(dinheiro_total, pix_total) else \
@@ -300,70 +304,37 @@ def main():
                 stats_cols_temporal[2].markdown(f"**📆 Dia com Mais Vendas:** {dia_mais_vendas}")
 
                 # Gráfico de média por dia da semana (Seg-Sex, usando locale)
-                dias_uteis_nomes_locale = [datetime(2000, 1, i).strftime('%A').capitalize() for i in range(3, 3+5)] # Seg a Sex
-                df_dias_uteis = df_filtered[df_filtered['DiaSemana'].isin(dias_uteis_nomes_locale)]
-                if not df_dias_uteis.empty:
-                    vendas_por_dia_uteis = df_dias_uteis.groupby('DiaSemana')['Total'].mean().reset_index()
-                    # Garantir a ordem correta dos dias da semana no gráfico
-                    vendas_por_dia_uteis['DiaSemana'] = pd.Categorical(vendas_por_dia_uteis['DiaSemana'], categories=dias_uteis_nomes_locale, ordered=True)
-                    vendas_por_dia_uteis = vendas_por_dia_uteis.sort_values('DiaSemana')
+                # (Recuperando a lógica original que estava faltando)
+                try:
+                    # Garante que a coluna DiaSemana existe e não está vazia
+                    if 'DiaSemana' in df_filtered.columns and not df_filtered['DiaSemana'].dropna().empty:
+                        # Calcula a média de vendas por dia da semana
+                        vendas_por_dia = df_filtered.groupby('DiaSemana')['Total'].mean().reset_index()
+                        
+                        # Define a ordem correta dos dias da semana baseado no locale (se pt_BR.UTF-8 estiver ativo)
+                        # Se o locale não estiver ativo, a ordem pode ser alfabética
+                        dias_ordem_locale = [datetime(2000, 1, i).strftime('%A').capitalize() for i in range(3, 8)] # Seg a Sex
+                        # Adiciona Sábado e Domingo se existirem nos dados
+                        if 'Sábado' in vendas_por_dia['DiaSemana'].unique(): dias_ordem_locale.append('Sábado')
+                        if 'Domingo' in vendas_por_dia['DiaSemana'].unique(): dias_ordem_locale.append('Domingo')
+                        
+                        # Cria o gráfico de barras
+                        weekday_chart = alt.Chart(vendas_por_dia).mark_bar().encode(
+                            x=alt.X('DiaSemana', title='Dia da Semana', sort=dias_ordem_locale),
+                            y=alt.Y('Total', title='Média de Vendas (R$)'),
+                            tooltip=['DiaSemana', alt.Tooltip('Total', title='Média (R$)', format=',.2f')]
+                        )
+                        weekday_chart = weekday_chart.interactive() # Adiciona interatividade
+                        st.altair_chart(weekday_chart, use_container_width=True)
+                    else:
+                        st.info("Não há dados suficientes de dias da semana para gerar o gráfico.")
+                except Exception as e:
+                    st.error(f"Erro ao gerar gráfico de média por dia da semana: {e}")
 
-                    chart_dias_uteis = alt.Chart(vendas_por_dia_uteis).mark_bar().encode(
-                        x=alt.X('DiaSemana:N', title='Dia da Semana', sort=dias_uteis_nomes_locale),
-                        y=alt.Y('Total:Q', title='Média de Vendas (R$)'),
-                        tooltip=['DiaSemana', 'Total']
-                    ).properties(title='Média de Vendas por Dia da Semana (Seg-Sex)', height=500)
-                    st.altair_chart(chart_dias_uteis, use_container_width=True)
-            
-            if 'AnoMês' in df_filtered.columns and df_filtered['AnoMês'].nunique() > 1:
-                st.subheader("📈 Tendência Mensal")
-                vendas_mensais = df_filtered.groupby('AnoMês')['Total'].sum().reset_index()
-                if len(vendas_mensais) >= 2:
-                    ultimo_mes_val = vendas_mensais.iloc[-1]['Total']
-                    penultimo_mes_val = vendas_mensais.iloc[-2]['Total']
-                    variacao = ((ultimo_mes_val - penultimo_mes_val) / penultimo_mes_val * 100) if penultimo_mes_val > 0 else 0
-                    emoji_tendencia = "🚀" if variacao > 10 else "📈" if variacao > 0 else "📉" if variacao < 0 else "➡️"
-                    st.markdown(f"**{emoji_tendencia} Variação Mensal:** {variacao:.1f}%")
-                    
-                    trend_chart = alt.Chart(vendas_mensais).mark_line(point=True).encode(
-                        x=alt.X('AnoMês:N', title='Mês', sort=alt.EncodingSortField(field="AnoMês", op="min", order='ascending')),
-                        y=alt.Y('Total:Q', title='Total de Vendas (R$)'),
-                        tooltip=['AnoMês', 'Total']
-                    ).properties(title='Tendência Mensal de Vendas', height=500)
-                    st.altair_chart(trend_chart, use_container_width=True)
-
-            # Mais estatísticas (Avançadas, Projeções, Frequência, Sazonalidade, Evolução Métodos)
-            # ... (O restante do código da Tab3 pode ser adaptado de forma similar, 
-            #      garantindo que 'df_filtered' e as colunas derivadas de data estejam corretas)
-            # Por exemplo, para Sazonalidade Semanal:
-            st.markdown("---")
-            st.subheader("📅 Sazonalidade Semanal (Todos os Dias)")
-            if 'DiaSemana' in df_filtered.columns and len(df_filtered) > 6:
-                todos_dias_semana_locale = [datetime(2000, 1, i).strftime('%A').capitalize() for i in range(3, 3+7)] # Seg a Dom
-                vendas_dia_semana_total = df_filtered.groupby('DiaSemana')['Total'].sum().reset_index()
-                if not vendas_dia_semana_total.empty:
-                    total_semanal_abs = vendas_dia_semana_total['Total'].sum()
-                    if total_semanal_abs > 0:
-                        vendas_dia_semana_total['Porcentagem'] = (vendas_dia_semana_total['Total'] / total_semanal_abs * 100)
-                        vendas_dia_semana_total['DiaSemana'] = pd.Categorical(vendas_dia_semana_total['DiaSemana'], categories=todos_dias_semana_locale, ordered=True)
-                        vendas_dia_semana_total = vendas_dia_semana_total.sort_values('DiaSemana')
-
-                        chart_sazonalidade = alt.Chart(vendas_dia_semana_total).mark_bar().encode(
-                            x=alt.X('DiaSemana:N', title='Dia da Semana', sort=todos_dias_semana_locale),
-                            y=alt.Y('Porcentagem:Q', title='% do Volume Semanal'),
-                            tooltip=['DiaSemana', 'Total', 'Porcentagem']
-                        ).properties(title='Distribuição Semanal de Vendas (Volume Total %)', height=500)
-                        st.altair_chart(chart_sazonalidade, use_container_width=True)
-
-                        melhor_dia_df = vendas_dia_semana_total.loc[vendas_dia_semana_total['Total'].idxmax()]
-                        pior_dia_df = vendas_dia_semana_total.loc[vendas_dia_semana_total['Total'].idxmin()]
-                        best_worst_cols = st.columns(2)
-                        best_worst_cols[0].markdown(f"**🔝 Melhor dia:** {melhor_dia_df['DiaSemana']} ({melhor_dia_df['Porcentagem']:.1f}% do total)")
-                        best_worst_cols[1].markdown(f"**🔻 Pior dia:** {pior_dia_df['DiaSemana']} ({pior_dia_df['Porcentagem']:.1f}% do total)")
-
+            else:
+                 st.info("Não há dados suficientes para análise temporal detalhada (requer mais de uma venda e colunas 'Data' e 'DiaSemana').")
         else:
-            st.info("Não há dados para exibir na aba Estatísticas ou os dados filtrados estão vazios.")
+            st.info("Não há dados suficientes para exibir Estatísticas ou os dados filtrados estão vazios.")
 
 if __name__ == "__main__":
     main()
-
