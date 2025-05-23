@@ -396,12 +396,24 @@ def main():
             if 'Data' in df_filtered.columns and not df_filtered.empty:
                 df_accumulated = df_filtered.sort_values('Data').copy()
                 df_accumulated['Total Acumulado'] = df_accumulated['Total'].cumsum()
-                line_chart = alt.Chart(df_accumulated).mark_line(point=True, strokeWidth=3).encode(
+
+                # Cria o gráfico de barras para os valores diários
+                bar_chart = alt.Chart(df_accumulated).mark_bar().encode(
                     x=alt.X('Data:T', title='Data', axis=alt.Axis(format="%d/%m/%Y")),
-                    y=alt.Y('Total Acumulado:Q', title='Capital Acumulado (R$)', axis=alt.Axis(format=",.2f")),
+                    y=alt.Y('Total:Q', title='Valor Diário (R$)'),
+                    tooltip=["DataFormatada", alt.Tooltip("Total", format=",.2f")]
+                ).properties(height=700)
+
+                # Cria o gráfico de linha para o total acumulado
+                line_chart = alt.Chart(df_accumulated).mark_line(point=True, strokeWidth=3, color='red').encode(
+                    x=alt.X('Data:T', title='Data', axis=alt.Axis(format="%d/%m/%Y")),
+                    y=alt.Y('Total Acumulado:Q', title='Capital Acumulado (R$)'),
                     tooltip=["DataFormatada", alt.Tooltip("Total Acumulado", format=",.2f")]
-                ).properties(height=700).interactive()
-                st.altair_chart(line_chart, use_container_width=True)
+                ).properties(height=700)
+
+                # Sobrepõe os gráficos de barras e linha
+                combined_chart = alt.layer(bar_chart, line_chart).resolve_scale(y='independent')
+                st.altair_chart(combined_chart, use_container_width=True)
             else:
                 st.info("Coluna 'Data' não encontrada ou dados insuficientes para gráfico de acúmulo.")
         else:
