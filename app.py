@@ -146,24 +146,36 @@ def create_heatmap(df, title="Mapa de Calor: Total de Vendas (Dia da Semana x M�
         st.info("Dados insuficientes para gerar o Mapa de Calor.")
         return None
 
-    heatmap_data = df.groupby(['DiaSemana', 'MêsNome'], observed=False)['Total'].sum().reset_index()
+    # Remove valores nulos e agrupa os dados
+    df_clean = df.dropna(subset=['DiaSemana', 'MêsNome', 'Total'])
+    if df_clean.empty:
+        st.info("Não há dados válidos para gerar o Mapa de Calor.")
+        return None
+    
+    heatmap_data = df_clean.groupby(['DiaSemana', 'MêsNome'], observed=True)['Total'].sum().reset_index()
+    
+    if heatmap_data.empty:
+        st.info("Não há dados agrupados para gerar o Mapa de Calor.")
+        return None
 
     heatmap = alt.Chart(heatmap_data).mark_rect().encode(
-        x=alt.X('MêsNome', title='Mês', sort=meses_ordem),
-        y=alt.Y('DiaSemana', title='Dia da Semana', sort=dias_semana_ordem),
-        color=alt.Color('Total:Q', legend=alt.Legend(title="Total Vendido (R$)"), scale=alt.Scale(scheme='viridis')),
+        x=alt.X('MêsNome:O', title='Mês', sort=meses_ordem),
+        y=alt.Y('DiaSemana:O', title='Dia da Semana', sort=dias_semana_ordem),
+        color=alt.Color('Total:Q', 
+                       legend=alt.Legend(title="Total Vendido (R$)"), 
+                       scale=alt.Scale(scheme='viridis')),
         tooltip=[
-            alt.Tooltip('MêsNome', title='Mês'),
-            alt.Tooltip('DiaSemana', title='Dia da Semana'),
-            alt.Tooltip('Total', title='Total Vendido (R$)', format=",.2f")
+            alt.Tooltip('MêsNome:O', title='Mês'),
+            alt.Tooltip('DiaSemana:O', title='Dia da Semana'),
+            alt.Tooltip('Total:Q', title='Total Vendido (R$)', format=",.2f")
         ]
     ).properties(
         title=title,
-        height=700
-        # Ajuste de tamanho pode ser feito aqui se necessário, mas use_container_width é geralmente preferível
-        # width=600, 
-        # height=400
-    ).interactive()
+        height=400,
+        width=600
+    ).resolve_scale(
+        color='independent'
+    )
     return heatmap
 
 def create_payment_evolution_chart(df, title="Evolução da Preferência por Pagamento (Mensal)"):
@@ -180,7 +192,7 @@ def create_payment_evolution_chart(df, title="Evolução da Preferência por Pag
         value_name='Valor'
     )
     monthly_payments_long = monthly_payments_long[monthly_payments_long['Valor'] > 0]
-
+    
     if monthly_payments_long.empty:
         st.info("Nenhum dado de pagamento encontrado no período para gerar o gráfico.")
         return None
@@ -342,7 +354,7 @@ def main():
         if not df_filtered.empty and 'DataFormatada' in df_filtered.columns:
             st.subheader("Dados Filtrados")
             st.dataframe(df_filtered[['DataFormatada', 'DiaSemana', 'MêsNome', 'Cartão', 'Dinheiro', 'Pix', 'Total']], use_container_width=True, height=300)
-
+            
             st.subheader("Distribuição por Método de Pagamento (Filtrado)")
             payment_filtered_data = pd.DataFrame({
                 'Método': ['Cartão', 'Dinheiro', 'PIX'],
@@ -452,27 +464,36 @@ def main():
             # Análise textual por dia da semana
             best_weekday, avg_sales_weekday = analyze_sales_by_weekday(df_filtered)
             
-            if avg_sales_weekday is not None: # Verifica se a análise foi possível
-                if best_weekday and pd.notna(avg_sales_weekday[best_weekday]): # Verifica se um melhor dia válido foi encontrado
-                    st.markdown(f"**🗓️ Dia da Semana com Maior Média de Vendas:** {best_weekday} (Média: R$ {avg_sales_weekday[best_weekday]:,.2f})")
+            if avg_sales_weekday is not None:
+                if best_weekday and pd.notna(avg_sales_weekday[best_weekday]):
+                    st.success(f"🏆 **Melhor Dia da Semana:** {best_weekday} - Média: R$ {avg_sales_weekday[best_weekday]:,.2f}")
                 else:
-                    st.markdown("**🗓️ Dia da Semana com Maior Média de Vendas:** Não foi possível determinar (dados insuficientes ou inválidos).")
-
-                st.markdown("**📊 Média de Vendas por Dia da Semana:**")
-                avg_sales_text = ""
-                has_valid_avg = False
+                    st.warning("⚠️ Não foi possível determinar o melhor dia da semana (dados insuficientes)")
+                
+                st.markdown("### 📊 Média de Vendas por Dia da Semana")
+                
+                # Criar colunas para exibir as médias de forma organizada
+                cols = st.columns(2)
+                col_idx = 0
+                
                 for day, avg_sale in avg_sales_weekday.items():
-                    if pd.notna(avg_sale):
-                        avg_sales_text += f"   - **{day}:** R$ {avg_sale:,.2f}\\n"
-                        has_valid_avg = True
-                    else:
-                        avg_sales_text += f"   - **{day}:** R$ N/A\\n" # Mostra N/A para dias sem dados/média
-                if has_valid_avg:
-                    st.markdown(avg_sales_text)
-                else:
-                    st.info("Não há dados de média de vendas por dia da semana para exibir.")
+                    with cols[col_idx % 2]:
+                        if pd.notna(avg_sale):
+                            st.metric(
+                                label=f"📅 {day}",
+                                value=f"R$ {avg_sale:,.2f}",
+                                delta=None
+                            )
+                        else:
+                            st.metric(
+                                label=f"📅 {day}",
+                                value="Sem dados",
+                                delta=None
+                            )
+                    col_idx += 1
             else:
-                st.info("Dados insuficientes para calcular a média de vendas por dia da semana.")
+                st.info("📊 Dados insuficientes para calcular a média de vendas por dia da semana.")
+            
             # Gráficos movidos para cá
             st.divider()
             st.subheader("🔥 Mapa de Calor: Total de Vendas (Dia da Semana x Mês)")
