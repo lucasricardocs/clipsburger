@@ -12,7 +12,7 @@ SPREADSHEET_ID = '1NTScbiIna-iE7roQ9XBdjUOssRihTFFby4INAAQNXTg'
 WORKSHEET_NAME = 'Vendas'
 
 # Configuração da página Streamlit - Alterado para centered
-st.set_page_config(page_title="Sistema de Registro de Vendas", layout="wide")
+st.set_page_config(page_title="Sistema de Registro de Vendas", layout="centered")
 
 # Configura o locale para Português do Brasil para formatação de datas e nomes
 try:
@@ -157,6 +157,7 @@ def create_heatmap(df, title="Mapa de Calor: Total de Vendas (Dia da Semana x M�
         ]
     ).properties(
         title=title,
+        height=500
         # Ajuste de tamanho pode ser feito aqui se necessário, mas use_container_width é geralmente preferível
         # width=600, 
         # height=400
@@ -192,7 +193,8 @@ def create_payment_evolution_chart(df, title="Evolução da Preferência por Pag
             alt.Tooltip('Valor', title='Valor (R$)', format=",.2f")
         ]
     ).properties(
-        title=title
+        title=title,
+        height=500
     ).interactive()
     return area_chart
 
@@ -213,10 +215,11 @@ def create_sales_histogram(df, title="Distribuição dos Valores de Venda Diári
         alt.Y('count()', title='Número de Dias (Frequência)'),
         tooltip=[
             alt.Tooltip("Total:Q", bin=True, title="Faixa de Valor (R$)"),
-            alt.Tooltip('count()', title='Número de Dias')
+            alt.Tooltip("count()", title="Número de Dias")
         ]
     ).properties(
-        title=title
+        title=title,
+        height=500
     ).interactive()
     return histogram
 
