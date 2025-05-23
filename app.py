@@ -159,7 +159,7 @@ def create_heatmap(df, title="Mapa de Calor: Total de Vendas (Dia da Semana x M�
         ]
     ).properties(
         title=title,
-        height=500
+        height=700
         # Ajuste de tamanho pode ser feito aqui se necessário, mas use_container_width é geralmente preferível
         # width=600, 
         # height=400
@@ -190,13 +190,13 @@ def create_payment_evolution_chart(df, title="Evolução da Preferência por Pag
         y=alt.Y('Valor:Q', title='Valor Total (R$)', stack='zero', axis=alt.Axis(format=",.2f")),
         color=alt.Color('Método:N', legend=alt.Legend(title="Método de Pagamento")),
         tooltip=[
-            alt.Tooltip('AnoMês', title='Mês/Ano'),
-            alt.Tooltip('Método', title='Método'),
-            alt.Tooltip('Valor', title='Valor (R$)', format=",.2f")
+            alt.Tooltip("AnoMês", title="Mês/Ano"),
+            alt.Tooltip("Método", title="Método"),
+            alt.Tooltip("Valor", title="Valor (R$)", format=",.2f")
         ]
     ).properties(
         title=title,
-        height=500
+        height=700
     ).interactive()
     return area_chart
 
@@ -221,7 +221,7 @@ def create_sales_histogram(df, title="Distribuição dos Valores de Venda Diári
         ]
     ).properties(
         title=title,
-        height=500
+        height=700
     ).interactive()
     return histogram
 
@@ -341,7 +341,7 @@ def main():
         st.header("Análise Detalhada de Vendas")
         if not df_filtered.empty and 'DataFormatada' in df_filtered.columns:
             st.subheader("Dados Filtrados")
-            st.dataframe(df_filtered[['DataFormatada', 'DiaSemana', 'Cartão', 'Dinheiro', 'Pix', 'Total']], use_container_width=True, height=500)
+            st.dataframe(df_filtered[['DataFormatada', 'DiaSemana', 'MêsNome', 'Cartão', 'Dinheiro', 'Pix', 'Total']], use_container_width=True, height=300)
 
             st.subheader("Distribuição por Método de Pagamento (Filtrado)")
             payment_filtered_data = pd.DataFrame({
@@ -354,7 +354,7 @@ def main():
                     theta=alt.Theta("Valor:Q", stack=True),
                     color=alt.Color("Método:N", legend=alt.Legend(title="Método")),
                     tooltip=["Método", alt.Tooltip("Valor", format=",.2f")]
-                ).interactive()
+                ).properties(height=700).interactive()
                 st.altair_chart(pie_chart, use_container_width=True)
             else:
                  st.info("Sem dados de pagamento para exibir o gráfico de pizza nos filtros selecionados.")
@@ -369,8 +369,8 @@ def main():
                         x=alt.X('Data:T', title='Data', axis=alt.Axis(format="%d/%m/%Y", labelAngle=-45)),
                         y=alt.Y('Valor:Q', title='Valor (R$)', axis=alt.Axis(format=",.2f")),
                         color=alt.Color('Método:N', legend=alt.Legend(title="Método")),
-                        tooltip=['DataFormatada', 'Método', alt.Tooltip('Valor', format=",.2f")]
-                    ).interactive()
+                        tooltip=["DataFormatada", "Método", alt.Tooltip("Valor", format=",.2f")]
+                    ).properties(height=700).interactive()
                     st.altair_chart(bar_chart, use_container_width=True)
                 else:
                     st.info("Sem dados de vendas diárias para exibir o gráfico de barras nos filtros selecionados.")
@@ -384,8 +384,8 @@ def main():
                 line_chart = alt.Chart(df_accumulated).mark_line(point=True, strokeWidth=3).encode(
                     x=alt.X('Data:T', title='Data', axis=alt.Axis(format="%d/%m/%Y")),
                     y=alt.Y('Total Acumulado:Q', title='Capital Acumulado (R$)', axis=alt.Axis(format=",.2f")),
-                    tooltip=['DataFormatada', alt.Tooltip('Total Acumulado', format=",.2f")]
-                ).interactive()
+                    tooltip=["DataFormatada", alt.Tooltip("Total Acumulado", format=",.2f")]
+                ).properties(height=700).interactive()
                 st.altair_chart(line_chart, use_container_width=True)
             else:
                 st.info("Coluna 'Data' não encontrada ou dados insuficientes para gráfico de acúmulo.")
@@ -438,7 +438,7 @@ def main():
                         theta=alt.Theta("Valor:Q", stack=True),
                         color=alt.Color("Método:N", legend=alt.Legend(title="Método")),
                         tooltip=["Método", alt.Tooltip("Valor", format=",.2f")]
-                    ).interactive()
+                    ).properties(height=700).interactive()
                     # Usar use_container_width=True para gráficos maiores no layout centered
                     st.altair_chart(pie_chart_stats, use_container_width=True)
                 else:
