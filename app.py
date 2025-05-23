@@ -208,7 +208,7 @@ def create_payment_evolution_chart(df, title="Evolução da Preferência por Pag
         ]
     ).properties(
         title=title,
-        height=700
+        height=600
     ).interactive()
     return area_chart
 
@@ -233,7 +233,7 @@ def create_sales_histogram(df, title="Distribuição dos Valores de Venda Diári
         ]
     ).properties(
         title=title,
-        height=700
+        height=600
     ).interactive()
     return histogram
 
@@ -405,7 +405,7 @@ def main():
                 ).properties(height=700)
 
                 # Cria o gráfico de linha para o total acumulado
-                line_chart = alt.Chart(df_accumulated).mark_line(point=True, strokeWidth=3, color='red').encode(
+                line_chart = alt.Chart(df_accumulated).mark_line(point=True, strokeWidth=2, color='red').encode(
                     x=alt.X('Data:T', title='Data', axis=alt.Axis(format="%d/%m/%Y")),
                     y=alt.Y('Total Acumulado:Q', title='Capital Acumulado (R$)'),
                     tooltip=["DataFormatada", alt.Tooltip("Total Acumulado", format=",.2f")]
