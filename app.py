@@ -14,12 +14,6 @@ WORKSHEET_NAME = 'Vendas'
 # Configuração da página Streamlit - Alterado para centered
 st.set_page_config(page_title="Sistema de Registro de Vendas", layout="centered")
 
-# Configura o locale para Português do Brasil para formatação de datas e nomes
-#try:
-    #locale.setlocale(locale.LC_TIME, 'pt_BR.UTF-8')
-#except locale.Error:
-    #st.warning("Locale pt_BR.UTF-8 não encontrado. Nomes de meses/dias podem aparecer em inglês.")
-
 # Define a ordem correta dos dias da semana e meses
 dias_semana_ordem = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"]
 meses_ordem = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
@@ -70,6 +64,11 @@ def read_sales_data():
         try:
             rows = worksheet.get_all_records()
             df = pd.DataFrame(rows)
+            
+            # Verifica se o DataFrame está vazio antes de continuar
+            if df.empty:
+                return df
+            
             for col in ['Cartão', 'Dinheiro', 'Pix']:
                 if col in df.columns:
                     df[col] = pd.to_numeric(df[col], errors='coerce')
@@ -112,7 +111,8 @@ def process_data(df_input):
 
         if 'Data' in df.columns:
             try:
-                df['Data'] = pd.to_datetime(df['Data'], format='%d/%m/%Y', errors='coerce')
+                # Tenta inferir o formato da data ou usa um formato padrão
+                df['Data'] = pd.to_datetime(df['Data'], errors='coerce')
                 df.dropna(subset=['Data'], inplace=True)
 
                 if not df.empty:
@@ -293,7 +293,7 @@ def main():
                     selected_meses_str = st.multiselect("Selecione o(s) Mês(es):", options=meses_opcoes, default=default_meses_selecionados)
                     selected_meses_filter = [int(m.split(" - ")[0]) for m in selected_meses_str]
         else:
-            st.sidebar.info("Não há dados processados ou coluna 'Ano' para aplicar filtros.")
+            st.info("Não há dados processados ou coluna 'Ano' para aplicar filtros.")
 
     # Aplicar filtros
     df_filtered = df_processed.copy() if df_processed is not None else pd.DataFrame()
