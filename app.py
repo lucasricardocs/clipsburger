@@ -362,11 +362,14 @@ def main():
             })
             payment_filtered_data = payment_filtered_data[payment_filtered_data['Valor'] > 0]
             if not payment_filtered_data.empty:
-                pie_chart = alt.Chart(payment_filtered_data).mark_arc(innerRadius=50, outerRadius=100).encode(
+                pie_chart = alt.Chart(payment_filtered_data).mark_arc().encode(
                     theta=alt.Theta("Valor:Q", stack=True),
                     color=alt.Color("Método:N", legend=alt.Legend(title="Método")),
                     tooltip=["Método", alt.Tooltip("Valor", format=",.2f")]
-                ).properties(height=700).interactive()
+                ).properties(
+                    height=500,
+                    width=500
+                ).interactive()
                 st.altair_chart(pie_chart, use_container_width=True)
             else:
                  st.info("Sem dados de pagamento para exibir o gráfico de pizza nos filtros selecionados.")
@@ -446,12 +449,14 @@ def main():
                 payment_data_stats = pd.DataFrame({'Método': ['Cartão', 'Dinheiro', 'PIX'], 'Valor': [cartao_total, dinheiro_total, pix_total]})
                 payment_data_stats = payment_data_stats[payment_data_stats['Valor'] > 0]
                 if not payment_data_stats.empty:
-                    pie_chart_stats = alt.Chart(payment_data_stats).mark_arc(innerRadius=50, outerRadius=100).encode(
+                    pie_chart_stats = alt.Chart(payment_data_stats).mark_arc().encode(
                         theta=alt.Theta("Valor:Q", stack=True),
                         color=alt.Color("Método:N", legend=alt.Legend(title="Método")),
                         tooltip=["Método", alt.Tooltip("Valor", format=",.2f")]
-                    ).properties(height=700).interactive()
-                    # Usar use_container_width=True para gráficos maiores no layout centered
+                    ).properties(
+                        height=500,
+                        width=500
+                    ).interactive()
                     st.altair_chart(pie_chart_stats, use_container_width=True)
                 else:
                     st.info("Sem dados de pagamento para o gráfico de pizza nesta seção.")
