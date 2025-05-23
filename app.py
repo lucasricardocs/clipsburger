@@ -405,7 +405,7 @@ def main():
                 ).properties(height=700)
 
                 # Cria o gráfico de linha para o total acumulado
-                line_chart = alt.Chart(df_accumulated).mark_line(point=True, strokeWidth=2, color='red').encode(
+                line_chart = alt.Chart(df_accumulated).mark_line(point=True, strokeWidth=5, color='green').encode(
                     x=alt.X('Data:T', title='Data', axis=alt.Axis(format="%d/%m/%Y")),
                     y=alt.Y('Total Acumulado:Q', title='Capital Acumulado (R$)'),
                     tooltip=["DataFormatada", alt.Tooltip("Total Acumulado", format=",.2f")]
