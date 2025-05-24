@@ -489,7 +489,8 @@ def main():
             custo_fornecedores_percentual_input = st.number_input(
                 "Custo com Fornecedores (% do Faturamento Bruto)", 
                 min_value=0.0, max_value=100.0, value=30.0, format="%.1f",
-                help="Percentual estimado do faturamento bruto destinado a cobrir custos de insumos (bebidas, frios, pães, etc.)."
+                help="Percentual estimado do faturamento bruto destinado a cobrir custos de insumos (bebidas, frios, pães, etc.).",
+                key="custo_fornecedores_tab4" # Chave única para o widget
             )
         st.markdown("---")
 
@@ -573,7 +574,6 @@ def main():
                 lucro_liq_op = resultados_financeiros['lucro_liquido_operacional']
                 perc_lucro_liq_op = (lucro_liq_op / receita_bruta * 100) if receita_bruta > 0 else 0
                 
-                # Métrica "Resultado Bruto Antes de Fornecedores" pode ser interessante
                 lucro_bruto_antes_fornec = resultados_financeiros['lucro_bruto_antes_fornecedores']
                 perc_lucro_bruto_antes_fornec = (lucro_bruto_antes_fornec / receita_bruta * 100) if receita_bruta > 0 else 0
 
@@ -597,7 +597,6 @@ def main():
                     st.caption(f"(Lucro Bruto Antes de Fornecedores - Custo Fornecedores de {custo_fornecedores_percentual_input}%)")
                 
                 st.markdown("---")
-                # Métrica específica: Faturamento Bruto - Faturamento Tributável
                 res_bruto_menos_trib = resultados_financeiros['resultado_bruto_menos_tributavel']
                 st.metric(
                     "💡 Receita Não Tributada (Dinheiro)",
