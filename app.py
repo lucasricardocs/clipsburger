@@ -263,7 +263,7 @@ def create_sales_histogram(df, title="Distribuição dos Valores de Venda Diári
         ]
     ).properties(
         title=title,
-        height=500 # Ajustado
+        height=600 # Ajustado
     ).interactive()
     return histogram
 
@@ -438,7 +438,7 @@ def main():
             # Verifica se todas as colunas a serem exibidas existem no df_filtered
             cols_existentes_tab2 = [col for col in cols_to_display_tab2 if col in df_filtered.columns]
             if cols_existentes_tab2:
-                 st.dataframe(df_filtered[cols_existentes_tab2], use_container_width=True, height=300, hide_index=True)
+                 st.dataframe(df_filtered[cols_existentes_tab2], use_container_width=True, height=600, hide_index=True)
             else:
                  st.info("Colunas necessárias para a tabela de dados filtrados não estão disponíveis.")
 
@@ -474,7 +474,7 @@ def main():
                         y=alt.Y('Valor:Q', title='Valor (R$)', axis=alt.Axis(format=",.2f")),
                         color=alt.Color('Método:N', legend=alt.Legend(title="Método")),
                         tooltip=["DataFormatada", "Método", alt.Tooltip("Valor", format=",.2f", title="Valor (R$)")]
-                    ).properties(height=500).interactive() # Ajustado altura
+                    ).properties(height=600).interactive() # Ajustado altura
                     st.altair_chart(bar_chart_daily, use_container_width=True)
                 else:
                     st.info("Sem dados de vendas diárias para exibir o gráfico de barras nos filtros selecionados.")
@@ -490,19 +490,14 @@ def main():
                     x=alt.X('Data:T', title='Data', axis=alt.Axis(format="%d/%m/%y", labelAngle=-45)) # Formato de data mais curto
                 )
                 
-                bar_chart_accum = base.mark_bar().encode(
-                    y=alt.Y('Total:Q', title='Valor Diário (R$)', axis=alt.Axis(format=",.2f")),
-                    tooltip=[alt.Tooltip("DataFormatada", title="Data"), alt.Tooltip("Total", format=",.2f", title="Venda Diária (R$)")]
-                )
-
                 line_chart_accum = base.mark_line(point=True, strokeWidth=3, color='green').encode( # StrokeWidth ajustado
                     y=alt.Y('Total Acumulado:Q', title='Capital Acumulado (R$)', axis=alt.Axis(format=",.2f")),
                     tooltip=[alt.Tooltip("DataFormatada", title="Data"), alt.Tooltip("Total Acumulado", format=",.2f", title="Acumulado (R$)")]
                 )
                 
-                combined_chart = alt.layer(bar_chart_accum, line_chart_accum).resolve_scale(
+                combined_chart = alt.layer(line_chart_accum).resolve_scale(
                     y='independent' # Escalas Y independentes
-                ).properties(height=500).interactive() # Ajustado altura
+                ).properties(height=600).interactive() # Ajustado altura
                 st.altair_chart(combined_chart, use_container_width=True)
             else:
                 st.info("Dados insuficientes (Data ou Total) para o gráfico de acúmulo.")
@@ -582,7 +577,7 @@ def main():
                     x=alt.X('Dia da Semana:O', sort=dias_semana_ordem, title=None), # Ordena os dias da semana
                     y=alt.Y('Média de Venda (R$):Q', axis=alt.Axis(format=",.2f")),
                     tooltip=[alt.Tooltip('Dia da Semana:N'), alt.Tooltip('Média de Venda (R$):Q', format=",.2f")]
-                ).properties(height=300) # Ajustado altura
+                ).properties(height=600) # Ajustado altura
                 st.altair_chart(chart_avg_weekday, use_container_width=True)
             else:
                 st.info("📊 Dados insuficientes para calcular a média de vendas por dia da semana.")
