@@ -7,11 +7,11 @@ from google.oauth2.service_account import Credentials
 from gspread.exceptions import SpreadsheetNotFound
 
 # --- Configurações Globais e Constantes ---
-SPREADSHEET_ID = '1NTScbiIna-iE7roQ9XBdjUOssRihTFFby4INAAQNXTg' # Substitua pelo seu ID
+SPREADSHEET_ID = '1NTScbiIna-iE7roQ9XBdjUOssRihTFFby4INAAQNXTg'
 WORKSHEET_NAME = 'Vendas'
 
 # Configuração da página Streamlit
-st.set_page_config(page_title="Sistema de Registro de Vendas", layout="wide")
+st.set_page_config(page_title="Sistema de Vendas e Análise Financeira", layout="wide", page_icon="📊")
 
 # Define a ordem correta dos dias da semana e meses
 dias_semana_ordem = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"]
@@ -148,12 +148,13 @@ def process_data(df_input):
             if not df.empty:
                 df['Ano'] = df['Data'].dt.year
                 df['Mês'] = df['Data'].dt.month
+
                 try:
                     df['MêsNome'] = df['Data'].dt.strftime('%B').str.capitalize()
                     if not df['MêsNome'].dtype == 'object' or df['MêsNome'].str.isnumeric().any():
-                         df['MêsNome'] = df['Mês'].map(lambda x: meses_ordem[int(x)-1] if 1 <= int(x) <= 12 else "Inválido")
-                except Exception: # Fallback em caso de erro com strftime ou locale
-                    df['MêsNome'] = df['Mês'].map(lambda x: meses_ordem[int(x)-1] if 1 <= int(x) <= 12 else "Inválido")
+                         df['MêsNome'] = df['Mês'].map(lambda x: meses_ordem[int(x)-1] if pd.notna(x) and 1 <= int(x) <= 12 else "Inválido")
+                except Exception:
+                    df['MêsNome'] = df['Mês'].map(lambda x: meses_ordem[int(x)-1] if pd.notna(x) and 1 <= int(x) <= 12 else "Inválido")
 
                 df['AnoMês'] = df['Data'].dt.strftime('%Y-%m')
                 df['DataFormatada'] = df['Data'].dt.strftime('%d/%m/%Y')
@@ -223,113 +224,104 @@ def analyze_sales_by_weekday(df):
         st.error(f"Erro ao analisar vendas por dia da semana: {e}")
         return None, None
 
-def create_heatmap(df):
-    if df.empty or not all(col in df.columns for col in ['DiaSemana', 'MêsNome', 'Total']) or df[['DiaSemana', 'MêsNome', 'Total']].isnull().all().any(): return None
-    df_heatmap = df.copy()
-    df_heatmap = df_heatmap.dropna(subset=['DiaSemana', 'MêsNome', 'Total'])
-    df_heatmap = df_heatmap[df_heatmap['Total'] > 0]
-    if df_heatmap.empty: return None
-    df_heatmap['MêsNome'] = pd.Categorical(df_heatmap['MêsNome'], categories=meses_ordem, ordered=True)
-    df_heatmap['DiaSemana'] = pd.Categorical(df_heatmap['DiaSemana'], categories=dias_semana_ordem, ordered=True)
-    heatmap_data = df_heatmap.groupby(['DiaSemana', 'MêsNome'], observed=False)['Total'].sum().reset_index()
-    heatmap_data = heatmap_data[heatmap_data['Total'] > 0]
-    if heatmap_data.empty: return None
-    all_days = [day for day in dias_semana_ordem if day in df_heatmap['DiaSemana'].unique()]
-    all_months = [month for month in meses_ordem if month in df_heatmap['MêsNome'].unique()]
-    from itertools import product
-    full_grid = pd.DataFrame(list(product(all_days, all_months)), columns=['DiaSemana', 'MêsNome'])
-    heatmap_complete = full_grid.merge(heatmap_data, on=['DiaSemana', 'MêsNome'], how='left').fillna(0)
-    heatmap_chart = alt.Chart(heatmap_complete).mark_rect().encode(
-        x=alt.X('MêsNome:O', title='Mês', sort=all_months),
-        y=alt.Y('DiaSemana:O', title='Dia da Semana', sort=all_days),
-        color=alt.Color('Total:Q', title='Total de Vendas (R$)', scale=alt.Scale(scheme='blues', domain=[0, heatmap_complete['Total'].max()]), legend=alt.Legend(format=",.0f")),
-        tooltip=[alt.Tooltip('MêsNome:N', title='Mês'), alt.Tooltip('DiaSemana:N', title='Dia da Semana'), alt.Tooltip('Total:Q', title='Total Vendas (R$)', format=",.2f")]
-    ).properties(title="Mapa de Calor: Total de Vendas (Dia da Semana x Mês)", width=600, height=600).interactive()
-    return heatmap_chart
-
 # --- Funções de Cálculos Financeiros ---
 def calculate_financial_results(df, salario_minimo, custo_contadora, custo_fornecedores_percentual):
-    """
-    Calcula os resultados financeiros.
-    O custo com fornecedores é um percentual sobre o faturamento bruto.
-    """
+    """Calcula os resultados financeiros com base nos dados de vendas."""
     results = {
-        'faturamento_bruto': 0, 'faturamento_tributavel': 0, 'imposto_simples': 0,
-        'custo_funcionario': 0, 'custo_contadora': custo_contadora,
-        'custo_fornecedores_valor': 0, 'total_custos_fixos_operacionais': 0,
-        'lucro_bruto_antes_fornecedores': 0, 'lucro_liquido_operacional': 0,
-        'resultado_bruto_menos_tributavel': 0 # Métrica específica
+        'faturamento_bruto': 0, 'faturamento_tributavel': 0, 'faturamento_nao_tributavel': 0,
+        'imposto_simples': 0, 'custo_funcionario': 0, 'custo_contadora': custo_contadora,
+        'custo_fornecedores_valor': 0, 'total_custos': 0,
+        'lucro_bruto': 0, 'margem_lucro_bruto': 0, 'lucro_liquido': 0, 'margem_lucro_liquido': 0
     }
-    if df.empty: return results
     
-    # Receitas
+    if df.empty: 
+        return results
+    
+    # RECEITAS
     results['faturamento_bruto'] = df['Total'].sum()
-    results['faturamento_tributavel'] = df['Cartão'].sum() + df['Pix'].sum()
+    results['faturamento_tributavel'] = df['Cartão'].sum() + df['Pix'].sum()  # Apenas cartão e PIX são tributáveis
+    results['faturamento_nao_tributavel'] = df['Dinheiro'].sum()  # Dinheiro não é tributável
     
-    # Custos Fixos e Impostos diretos sobre receita
-    results['imposto_simples'] = results['faturamento_tributavel'] * 0.06 # 6% sobre o tributável
-    results['custo_funcionario'] = salario_minimo * 1.55 # Estimativa de 55% de encargos sobre o salário
-    
-    # Total de Custos Fixos e Operacionais (sem fornecedores ainda)
-    results['total_custos_fixos_operacionais'] = results['imposto_simples'] + results['custo_funcionario'] + results['custo_contadora']
-    
-    # Lucro Bruto antes de considerar o custo variável dos fornecedores
-    results['lucro_bruto_antes_fornecedores'] = results['faturamento_bruto'] - results['total_custos_fixos_operacionais']
-    
-    # Custo com Fornecedores (variável, percentual sobre faturamento bruto)
+    # CUSTOS E DESPESAS
+    results['imposto_simples'] = results['faturamento_tributavel'] * 0.06  # 6% sobre receita tributável
+    results['custo_funcionario'] = salario_minimo * 1.55  # Salário + 55% de encargos
     results['custo_fornecedores_valor'] = results['faturamento_bruto'] * (custo_fornecedores_percentual / 100)
+    results['total_custos'] = results['imposto_simples'] + results['custo_funcionario'] + results['custo_contadora'] + results['custo_fornecedores_valor']
     
-    # Lucro Líquido Operacional Final (após todos os custos, incluindo fornecedores)
-    results['lucro_liquido_operacional'] = results['lucro_bruto_antes_fornecedores'] - results['custo_fornecedores_valor']
+    # RESULTADOS
+    results['lucro_bruto'] = results['faturamento_bruto'] - results['total_custos']
+    results['lucro_liquido'] = results['faturamento_bruto'] - results['faturamento_tributavel']  # Bruto - Tributável
     
-    # Métrica específica solicitada: (Faturamento Bruto - Faturamento Tributável)
-    results['resultado_bruto_menos_tributavel'] = results['faturamento_bruto'] - results['faturamento_tributavel']
+    # MARGENS
+    if results['faturamento_bruto'] > 0:
+        results['margem_lucro_bruto'] = (results['lucro_bruto'] / results['faturamento_bruto']) * 100
+        results['margem_lucro_liquido'] = (results['lucro_liquido'] / results['faturamento_bruto']) * 100
     
     return results
 
-# Função para formatar valores em moeda brasileira (sem locale)
+# Função para formatar valores em moeda brasileira
 def format_brl(value):
     return f"R$ {value:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
 
 # --- Interface Principal da Aplicação ---
 def main():
-    st.title("📊 Sistema de Registro de Vendas e Análise Financeira")
+    # Título melhorado com logo
+    try:
+        col_logo, col_title = st.columns([1, 8])
+        with col_logo:
+            st.image('logo.png', width=80)
+        with col_title:
+            st.title("🏪 Sistema Completo de Vendas & Análise Financeira")
+            st.caption("Gestão inteligente de vendas com análise financeira em tempo real")
+    except FileNotFoundError:
+        st.title("🏪 Sistema Completo de Vendas & Análise Financeira")
+        st.caption("Gestão inteligente de vendas com análise financeira em tempo real")
+    except Exception as e:
+        st.title("🏪 Sistema Completo de Vendas & Análise Financeira")
+        st.caption("Gestão inteligente de vendas com análise financeira em tempo real")
 
     df_raw = read_sales_data()
     df_processed = process_data(df_raw)
 
-    tab1, tab2, tab3, tab4 = st.tabs(["📝 Registrar Venda", "📈 Análise Detalhada", "💡 Estatísticas", "💰 Análise Financeira"])
+    tab1, tab2, tab3, tab4 = st.tabs(["📝 Registrar Venda", "📈 Análise Detalhada", "💡 Estatísticas", "💰 Análise Contábil"])
 
     with tab1:
-        st.header("Registrar Nova Venda")
+        st.header("📝 Registrar Nova Venda")
         with st.form("venda_form"):
-            data_input = st.date_input("Data da Venda", value=datetime.now(), format="DD/MM/YYYY")
+            data_input = st.date_input("📅 Data da Venda", value=datetime.now(), format="DD/MM/YYYY")
             col1, col2, col3 = st.columns(3)
-            with col1: cartao_input = st.number_input("Cartão (R$)", min_value=0.0, value=0.0, format="%.2f", key="cartao_venda")
-            with col2: dinheiro_input = st.number_input("Dinheiro (R$)", min_value=0.0, value=0.0, format="%.2f", key="dinheiro_venda")
-            with col3: pix_input = st.number_input("PIX (R$)", min_value=0.0, value=0.0, format="%.2f", key="pix_venda")
+            with col1: cartao_input = st.number_input("💳 Cartão (R$)", min_value=0.0, value=0.0, format="%.2f", key="cartao_venda")
+            with col2: dinheiro_input = st.number_input("💵 Dinheiro (R$)", min_value=0.0, value=0.0, format="%.2f", key="dinheiro_venda")
+            with col3: pix_input = st.number_input("📱 PIX (R$)", min_value=0.0, value=0.0, format="%.2f", key="pix_venda")
             total_venda_form = (cartao_input or 0.0) + (dinheiro_input or 0.0) + (pix_input or 0.0)
-            st.markdown(f"**Total da venda: R$ {total_venda_form:.2f}**")
-            submitted = st.form_submit_button("Registrar Venda")
+            st.markdown(f"### **💰 Total da venda: {format_brl(total_venda_form)}**")
+            submitted = st.form_submit_button("✅ Registrar Venda", type="primary")
             if submitted:
                 if total_venda_form > 0:
                     formatted_date = data_input.strftime('%d/%m/%Y')
                     worksheet_obj = get_worksheet()
                     if worksheet_obj and add_data_to_sheet(formatted_date, cartao_input, dinheiro_input, pix_input, worksheet_obj):
                         read_sales_data.clear(); process_data.clear()
-                        st.success("Venda registrada e dados recarregados!")
+                        st.success("✅ Venda registrada e dados recarregados!")
                         st.rerun()
-                    elif not worksheet_obj: st.error("Falha ao conectar à planilha. Venda não registrada.")
-                else: st.warning("O valor total da venda deve ser maior que zero.")
+                    elif not worksheet_obj: st.error("❌ Falha ao conectar à planilha. Venda não registrada.")
+                else: st.warning("⚠️ O valor total da venda deve ser maior que zero.")
 
-    selected_anos_filter, selected_meses_filter = [], []
+    # --- SIDEBAR COM FILTROS ESPECÍFICOS ---
+    selected_anos_filter, selected_meses_filter, selected_dias_filter = [], [], []
+    
     with st.sidebar:
-        st.header("🔍 Filtros de Análise")
+        st.header("🔍 Filtros de Período")
+        st.markdown("---")
+        
+        # Filtro de Anos
         if not df_processed.empty and 'Ano' in df_processed.columns and not df_processed['Ano'].isnull().all():
             anos_disponiveis = sorted(df_processed['Ano'].dropna().unique().astype(int), reverse=True)
             if anos_disponiveis:
-                default_ano = [datetime.now().year] if datetime.now().year in anos_disponiveis else ([anos_disponiveis[0]] if anos_disponiveis else [])
-                selected_anos_filter = st.multiselect("Ano(s):", options=anos_disponiveis, default=default_ano)
+                default_ano = [datetime.now().year] if datetime.now().year in anos_disponiveis else [anos_disponiveis[0]] if anos_disponiveis else []
+                selected_anos_filter = st.multiselect("📅 Ano(s):", options=anos_disponiveis, default=default_ano)
+                
+                # Filtro de Meses
                 if selected_anos_filter:
                     df_para_filtro_mes = df_processed[df_processed['Ano'].isin(selected_anos_filter)]
                     if not df_para_filtro_mes.empty and 'Mês' in df_para_filtro_mes.columns and not df_para_filtro_mes['Mês'].isnull().all():
@@ -339,29 +331,60 @@ def main():
                         default_mes_num = datetime.now().month
                         default_mes_str = f"{default_mes_num} - {meses_ordem[default_mes_num-1]}" if 1 <= default_mes_num <= 12 and meses_opcoes_dict else None
                         default_meses_selecionados = [default_mes_str] if default_mes_str and default_mes_str in meses_opcoes_display else meses_opcoes_display
-                        selected_meses_str = st.multiselect("Mês(es):", options=meses_opcoes_display, default=default_meses_selecionados)
+                        selected_meses_str = st.multiselect("📆 Mês(es):", options=meses_opcoes_display, default=default_meses_selecionados)
                         selected_meses_filter = [int(m.split(" - ")[0]) for m in selected_meses_str]
-            else: st.sidebar.info("Nenhum ano disponível para filtro.")
-        else: st.sidebar.info("Não há dados processados ou coluna 'Ano' para aplicar filtros.")
-        
-        st.sidebar.subheader("⚙️ Parâmetros Fixos (Simulação)")
-        salario_minimo_input = st.sidebar.number_input("Salário Mínimo Base (R$)", min_value=0.0, value=1412.0, format="%.2f", help="Usado para calcular custo estimado de funcionário (Salário + 55% encargos).")
-        custo_contadora_input = st.sidebar.number_input("Custo Mensal Contadora (R$)", min_value=0.0, value=316.0, format="%.2f")
+                        
+                        # Filtro de Dias Específicos (1, 2, 3, 5, 7)
+                        if selected_meses_filter:
+                            df_para_filtro_dia = df_para_filtro_mes[df_para_filtro_mes['Mês'].isin(selected_meses_filter)]
+                            if not df_para_filtro_dia.empty and 'DiaDoMes' in df_para_filtro_dia.columns:
+                                dias_especificos = [1, 2, 3, 5, 7]
+                                dias_disponiveis = [dia for dia in dias_especificos if dia in df_para_filtro_dia['DiaDoMes'].values]
+                                if dias_disponiveis:
+                                    selected_dias_filter = st.multiselect(
+                                        "📊 Dia(s) do Mês:",
+                                        options=dias_disponiveis,
+                                        default=dias_disponiveis,
+                                        format_func=lambda x: f"Dia {x}"
+                                    )
+            else: 
+                st.info("📊 Nenhum ano disponível para filtro.")
+        else: 
+            st.info("📊 Não há dados processados para aplicar filtros.")
 
-
+    # Aplicar filtros
     df_filtered = df_processed.copy()
     if not df_filtered.empty:
-        if selected_anos_filter and 'Ano' in df_filtered.columns: df_filtered = df_filtered[df_filtered['Ano'].isin(selected_anos_filter)]
-        if selected_meses_filter and 'Mês' in df_filtered.columns: df_filtered = df_filtered[df_filtered['Mês'].isin(selected_meses_filter)]
+        if selected_anos_filter and 'Ano' in df_filtered.columns: 
+            df_filtered = df_filtered[df_filtered['Ano'].isin(selected_anos_filter)]
+        if selected_meses_filter and 'Mês' in df_filtered.columns: 
+            df_filtered = df_filtered[df_filtered['Mês'].isin(selected_meses_filter)]
+        if selected_dias_filter and 'DiaDoMes' in df_filtered.columns:
+            df_filtered = df_filtered[df_filtered['DiaDoMes'].isin(selected_dias_filter)]
+
+    # Mostrar informações dos filtros aplicados na sidebar
+    if not df_filtered.empty:
+        total_registros_filtrados = len(df_filtered)
+        total_faturamento_filtrado = df_filtered['Total'].sum()
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("### 📈 Resumo dos Filtros Aplicados")
+        st.sidebar.metric("Registros Filtrados", total_registros_filtrados)
+        st.sidebar.metric("Faturamento Filtrado", format_brl(total_faturamento_filtrado))
+    elif not df_processed.empty:
+        st.sidebar.markdown("---")
+        st.sidebar.info("Nenhum registro corresponde aos filtros selecionados.")
     
     with tab2:
-        st.header("🔎 Análise Detalhada de Vendas (Conforme Filtros)")
+        st.header("🔎 Análise Detalhada de Vendas")
         if not df_filtered.empty and 'DataFormatada' in df_filtered.columns:
             st.subheader("🧾 Tabela de Vendas Filtradas")
-            cols_to_display_tab2 = ['DataFormatada', 'DiaSemana', 'Cartão', 'Dinheiro', 'Pix', 'Total']
+            cols_to_display_tab2 = ['DataFormatada', 'DiaSemana', 'DiaDoMes', 'Cartão', 'Dinheiro', 'Pix', 'Total']
             cols_existentes_tab2 = [col for col in cols_to_display_tab2 if col in df_filtered.columns]
-            if cols_existentes_tab2: st.dataframe(df_filtered[cols_existentes_tab2], use_container_width=True, height=600, hide_index=True)
-            else: st.info("Colunas necessárias para a tabela de dados filtrados não estão disponíveis.")
+            
+            if cols_existentes_tab2: 
+                st.dataframe(df_filtered[cols_existentes_tab2], use_container_width=True, height=600, hide_index=True)
+            else: 
+                st.info("Colunas necessárias para a tabela de dados filtrados não estão disponíveis.")
             
             st.subheader("🥧 Distribuição por Método de Pagamento")
             if any(col in df_filtered.columns for col in ['Cartão', 'Dinheiro', 'Pix']):
@@ -408,7 +431,7 @@ def main():
              else: st.info("Não há dados para exibir na Análise Detalhada. Pode ser um problema no processamento.")
 
     with tab3:
-        st.header("💡 Estatísticas e Tendências de Vendas (Conforme Filtros)")
+        st.header("💡 Estatísticas e Tendências de Vendas")
         if not df_filtered.empty and 'Total' in df_filtered.columns and not df_filtered['Total'].isnull().all():
             st.subheader("💰 Resumo Financeiro Agregado")
             total_registros = len(df_filtered); total_faturamento = df_filtered['Total'].sum()
@@ -454,18 +477,10 @@ def main():
             else: st.info("📊 Dados insuficientes para calcular a média de vendas por dia da semana.")
             st.divider()
             
-            charts_col1, charts_col2 = st.columns(2)
-            with charts_col1:
-                st.subheader("🔥 Mapa de Calor (Dia x Mês)")
-                heatmap_chart = create_heatmap(df_filtered)
-                if heatmap_chart: st.altair_chart(heatmap_chart, use_container_width=True)
-                else: st.info("Dados insuficientes para o Mapa de Calor.")
-            
-            with charts_col2:
-                st.subheader("📈 Evolução Pagamentos (Mensal)")
-                payment_evolution_chart = create_payment_evolution_chart(df_filtered)
-                if payment_evolution_chart: st.altair_chart(payment_evolution_chart, use_container_width=True)
-                else: st.info("Dados insuficientes para Evolução de Pagamento.")
+            st.subheader("📈 Evolução dos Métodos de Pagamento")
+            payment_evolution_chart = create_payment_evolution_chart(df_filtered)
+            if payment_evolution_chart: st.altair_chart(payment_evolution_chart, use_container_width=True)
+            else: st.info("Dados insuficientes para Evolução de Pagamento.")
             st.divider()
 
             st.subheader("📊 Distribuição de Valores de Venda Diários")
@@ -478,142 +493,359 @@ def main():
             elif df_filtered.empty: st.info("Nenhum dado corresponde aos filtros para exibir estatísticas.")
             else: st.info("Não há dados de 'Total' para exibir nas Estatísticas.")
 
-    # --- Aba de Análise Financeira REORGANIZADA ---
+    # --- TAB4: ANÁLISE CONTÁBIL COMPLETA ---
     with tab4:
-        st.header("🔬 Raio-X Financeiro (Baseado nos Filtros)")
-        st.caption("Esta análise considera os dados filtrados no painel à esquerda e os parâmetros fixos (Salário, Contadora) da Sidebar.")
+        st.header("📊 Análise Contábil e Financeira Detalhada")
         
-        # Parâmetro de Custo com Fornecedores agora DENTRO da tab4
+        st.markdown("""
+        ### 📋 **Sobre esta Análise**
+        
+        Esta seção apresenta uma **análise contábil completa** do seu negócio, baseada nos dados de vendas filtrados. 
+        Os cálculos seguem as **normas contábeis brasileiras** e consideram:
+        
+        - **Regime Tributário:** Simples Nacional (6% sobre receita tributável)
+        - **Receita Tributável:** Apenas vendas via Cartão e PIX
+        - **Receita Não Tributável:** Vendas em dinheiro (não declaradas)
+        - **Custos Operacionais:** Funcionários, contadora e fornecedores
+        """)
+        
+        # Parâmetros Financeiros
         with st.container(border=True):
-            st.subheader("📦 Parâmetro de Custo Variável")
-            custo_fornecedores_percentual_input = st.number_input(
-                "Custo com Fornecedores (% do Faturamento Bruto)", 
-                min_value=0.0, max_value=100.0, value=30.0, format="%.1f",
-                help="Percentual estimado do faturamento bruto destinado a cobrir custos de insumos (bebidas, frios, pães, etc.).",
-                key="custo_fornecedores_tab4" # Chave única para o widget
-            )
+            st.subheader("⚙️ Parâmetros para Simulação Contábil")
+            st.markdown("Configure os valores abaixo para simular diferentes cenários financeiros:")
+            
+            col_param1, col_param2, col_param3 = st.columns(3)
+            with col_param1:
+                salario_minimo_input = st.number_input(
+                    "💼 Salário Base Funcionário (R$)",
+                    min_value=0.0, value=1412.0, format="%.2f",
+                    help="Salário base do funcionário. Os encargos (55%) serão calculados automaticamente.",
+                    key="salario_tab4"
+                )
+            with col_param2:
+                custo_contadora_input = st.number_input(
+                    "📋 Honorários Contábeis Mensais (R$)",
+                    min_value=0.0, value=316.0, format="%.2f",
+                    help="Valor mensal pago pelos serviços contábeis.",
+                    key="contadora_tab4"
+                )
+            with col_param3:
+                custo_fornecedores_percentual = st.number_input(
+                    "📦 Custo dos Produtos Vendidos (%)",
+                    min_value=0.0, max_value=100.0, value=30.0, format="%.1f",
+                    help="Percentual do faturamento destinado à compra de produtos (bebidas, frios, pães, etc.).",
+                    key="fornecedores_tab4"
+                )
+
         st.markdown("---")
 
         if df_filtered.empty or 'Total' not in df_filtered.columns:
-            st.info("Não há dados de vendas filtrados para realizar a análise financeira. Por favor, ajuste os filtros ou registre vendas.")
+            st.warning("📊 **Não há dados suficientes para análise contábil.** Ajuste os filtros ou registre vendas.")
         else:
-            # salario_minimo_input e custo_contadora_input vêm da sidebar
-            resultados_financeiros = calculate_financial_results(
-                df_filtered, 
-                salario_minimo_input, 
-                custo_contadora_input, 
-                custo_fornecedores_percentual_input # Agora da tab4
+            # Calcular resultados financeiros
+            resultados = calculate_financial_results(
+                df_filtered, salario_minimo_input, custo_contadora_input, custo_fornecedores_percentual
             )
 
-            # === BLOCO DE RECEITAS ===
+            # === SEÇÃO 1: DEMONSTRATIVO DE RECEITAS ===
             with st.container(border=True):
-                st.subheader("📈 Receitas do Período")
-                receita_bruta = resultados_financeiros['faturamento_bruto']
-                receita_tributavel = resultados_financeiros['faturamento_tributavel']
-                receita_nao_tributavel = receita_bruta - receita_tributavel
-
+                st.subheader("💰 Demonstrativo de Receitas")
+                st.markdown("""
+                **Explicação:** As receitas são classificadas entre tributáveis e não tributáveis conforme a legislação brasileira.
+                No Simples Nacional, apenas as receitas declaradas (cartão e PIX) são tributadas.
+                """)
+                
                 col_rec1, col_rec2, col_rec3 = st.columns(3)
-                col_rec1.metric("💰 Faturamento Bruto Total", format_brl(receita_bruta))
-                col_rec2.metric("💳 Receita Tributável (Cartão+PIX)", format_brl(receita_tributavel), 
-                                f"{((receita_tributavel / receita_bruta * 100) if receita_bruta > 0 else 0):.1f}% do total")
-                col_rec3.metric("💵 Receita Não Tributável (Dinheiro)", format_brl(receita_nao_tributavel),
-                                f"{((receita_nao_tributavel / receita_bruta * 100) if receita_bruta > 0 else 0):.1f}% do total")
-            st.markdown("---")
-
-            # === BLOCO DE CUSTOS TOTAIS (FIXOS + VARIÁVEIS) ===
-            with st.container(border=True):
-                st.subheader("💸 Despesas e Custos Operacionais Totais")
                 
-                custos_fixos_operacionais_df = pd.DataFrame({
-                    'Componente de Custo': ['Imposto Simples (6% s/ Trib.)', 'Custo Estimado Funcionário', 'Custo Contadora'],
-                    'Valor (R$)': [
-                        resultados_financeiros['imposto_simples'],
-                        resultados_financeiros['custo_funcionario'],
-                        resultados_financeiros['custo_contadora']
-                    ]
-                })
-                # Adiciona o custo com fornecedores ao DataFrame para o gráfico
-                custo_fornecedores_df = pd.DataFrame({
-                    'Componente de Custo': [f'Custo Fornecedores ({custo_fornecedores_percentual_input}%)'],
-                    'Valor (R$)': [resultados_financeiros['custo_fornecedores_valor']]
-                })
+                with col_rec1:
+                    st.metric(
+                        "📈 Faturamento Bruto Total",
+                        format_brl(resultados['faturamento_bruto']),
+                        help="Soma de todas as vendas (cartão + PIX + dinheiro)"
+                    )
                 
-                todos_custos_df = pd.concat([custos_fixos_operacionais_df, custo_fornecedores_df], ignore_index=True)
-                todos_custos_df = todos_custos_df[todos_custos_df['Valor (R$)'] > 0]
+                with col_rec2:
+                    st.metric(
+                        "🏦 Receita Tributável",
+                        format_brl(resultados['faturamento_tributavel']),
+                        f"{((resultados['faturamento_tributavel'] / resultados['faturamento_bruto'] * 100) if resultados['faturamento_bruto'] > 0 else 0):.1f}% do total",
+                        help="Vendas via cartão e PIX (sujeitas à tributação)"
+                    )
+                
+                with col_rec3:
+                    st.metric(
+                        "💵 Receita Não Tributável",
+                        format_brl(resultados['faturamento_nao_tributavel']),
+                        f"{((resultados['faturamento_nao_tributavel'] / resultados['faturamento_bruto'] * 100) if resultados['faturamento_bruto'] > 0 else 0):.1f}% do total",
+                        help="Vendas em dinheiro (não declaradas)"
+                    )
 
-                if not todos_custos_df.empty:
-                    todos_custos_df['Percentual sobre Faturamento Bruto (%)'] = (todos_custos_df['Valor (R$)'] / receita_bruta * 100) if receita_bruta > 0 else 0
+                # Gráfico de Receitas
+                if resultados['faturamento_bruto'] > 0:
+                    receitas_data = pd.DataFrame({
+                        'Tipo de Receita': ['Receita Tributável\n(Cartão + PIX)', 'Receita Não Tributável\n(Dinheiro)'],
+                        'Valor': [resultados['faturamento_tributavel'], resultados['faturamento_nao_tributavel']]
+                    })
+                    receitas_data = receitas_data[receitas_data['Valor'] > 0]
                     
-                    bar_chart_todos_custos = alt.Chart(todos_custos_df).mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3).encode(
-                        x=alt.X('Componente de Custo:N', sort=None, title=None, axis=alt.Axis(labelAngle=-25)), # Ajustado angulo
-                        y=alt.Y('Valor (R$):Q', title="Valor (R$)"),
-                        tooltip=[
-                            alt.Tooltip('Componente de Custo:N', title="Custo"),
-                            alt.Tooltip('Valor (R$):Q', title="Valor", format=",.2f"),
-                            alt.Tooltip('Percentual sobre Faturamento Bruto (%):Q', title="% do Fat. Bruto", format=".2f")
-                        ],
-                        color=alt.Color('Componente de Custo:N', legend=None)
-                    ).properties(
-                        title=alt.TitleParams(text="Composição dos Custos Totais (Fixos + Fornecedores)", anchor='middle'),
-                        height=400 # Ajustado altura
-                    )
-                    st.altair_chart(bar_chart_todos_custos, use_container_width=True)
+                    if not receitas_data.empty:
+                        chart_receitas = alt.Chart(receitas_data).mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3, color='#1f77b4').encode(
+                            x=alt.X('Tipo de Receita:N', title=None),
+                            y=alt.Y('Valor:Q', title='Valor (R$)', axis=alt.Axis(format=",.0f")),
+                            tooltip=[
+                                alt.Tooltip('Tipo de Receita:N', title='Tipo'),
+                                alt.Tooltip('Valor:Q', title='Valor (R$)', format=",.2f")
+                            ]
+                        ).properties(
+                            title="Composição das Receitas",
+                            height=400
+                        )
+                        st.altair_chart(chart_receitas, use_container_width=True)
 
-                    st.markdown("**Detalhamento dos Custos:**")
-                    for _, row in todos_custos_df.iterrows():
-                        st.markdown(f"- **{row['Componente de Custo']}:** {format_brl(row['Valor (R$)'])} ({row['Percentual sobre Faturamento Bruto (%)']:.2f}%)")
-                
-                total_custos_geral_val = resultados_financeiros['total_custos_fixos_operacionais'] + resultados_financeiros['custo_fornecedores_valor']
-                percentual_total_custos_geral = (total_custos_geral_val / receita_bruta * 100) if receita_bruta > 0 else 0
-                st.markdown(f"--- \n- **📉 Total Geral de Custos:** **{format_brl(total_custos_geral_val)}** ({percentual_total_custos_geral:.2f}% do Faturamento Bruto)")
             st.markdown("---")
 
-            # === BLOCO DE RESULTADOS FINANCEIROS (LUCRO) ===
+            # === SEÇÃO 2: DEMONSTRATIVO DE CUSTOS E DESPESAS ===
             with st.container(border=True):
-                st.subheader("🎯 Resultados e Lucratividade")
-                lucro_liq_op = resultados_financeiros['lucro_liquido_operacional']
-                perc_lucro_liq_op = (lucro_liq_op / receita_bruta * 100) if receita_bruta > 0 else 0
+                st.subheader("💸 Demonstrativo de Custos e Despesas")
+                st.markdown("""
+                **Explicação:** Os custos são classificados conforme sua natureza contábil:
+                - **Tributos:** Impostos obrigatórios sobre a receita declarada
+                - **Pessoal:** Salários e encargos trabalhistas
+                - **Serviços:** Honorários profissionais
+                - **Produtos:** Custo das mercadorias vendidas
+                """)
                 
-                lucro_bruto_antes_fornec = resultados_financeiros['lucro_bruto_antes_fornecedores']
-                perc_lucro_bruto_antes_fornec = (lucro_bruto_antes_fornec / receita_bruta * 100) if receita_bruta > 0 else 0
+                # Criar DataFrame dos custos
+                custos_data = pd.DataFrame({
+                    'Tipo de Custo': [
+                        'Simples Nacional\n(6% s/ Tributável)',
+                        'Folha de Pagamento\n(Salário + Encargos)',
+                        'Serviços Contábeis\n(Honorários)',
+                        f'Custo dos Produtos\n({custo_fornecedores_percentual}% s/ Faturamento)'
+                    ],
+                    'Valor': [
+                        resultados['imposto_simples'],
+                        resultados['custo_funcionario'],
+                        resultados['custo_contadora'],
+                        resultados['custo_fornecedores_valor']
+                    ],
+                    'Categoria': ['Tributos', 'Pessoal', 'Serviços', 'Produtos']
+                })
+                custos_data = custos_data[custos_data['Valor'] > 0]
+                
+                if not custos_data.empty:
+                    custos_data['Percentual do Faturamento'] = (custos_data['Valor'] / resultados['faturamento_bruto'] * 100) if resultados['faturamento_bruto'] > 0 else 0
+                    
+                    # Gráfico de custos por categoria
+                    chart_custos = alt.Chart(custos_data).mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3).encode(
+                        x=alt.X('Tipo de Custo:N', title=None, axis=alt.Axis(labelAngle=-20)),
+                        y=alt.Y('Valor:Q', title='Valor (R$)', axis=alt.Axis(format=",.0f")),
+                        color=alt.Color('Categoria:N', 
+                                      scale=alt.Scale(range=['#d62728', '#ff7f0e', '#2ca02c', '#9467bd']),
+                                      legend=alt.Legend(title="Categoria")),
+                        tooltip=[
+                            alt.Tooltip('Tipo de Custo:N', title='Custo'),
+                            alt.Tooltip('Categoria:N', title='Categoria'),
+                            alt.Tooltip('Valor:Q', title='Valor (R$)', format=",.2f"),
+                            alt.Tooltip('Percentual do Faturamento:Q', title='% do Faturamento', format=".2f")
+                        ]
+                    ).properties(
+                        title="Composição dos Custos e Despesas por Categoria",
+                        height=500
+                    )
+                    st.altair_chart(chart_custos, use_container_width=True)
+                    
+                    # Detalhamento textual dos custos
+                    st.markdown("**📋 Detalhamento dos Custos:**")
+                    for _, row in custos_data.iterrows():
+                        st.markdown(f"- **{row['Tipo de Custo'].replace(chr(10), ' ')}:** {format_brl(row['Valor'])} ({row['Percentual do Faturamento']:.2f}% do faturamento)")
+                    
+                    st.markdown(f"""
+                    **📊 Total Geral de Custos:** **{format_brl(resultados['total_custos'])}** 
+                    ({(resultados['total_custos'] / resultados['faturamento_bruto'] * 100) if resultados['faturamento_bruto'] > 0 else 0:.2f}% do Faturamento Bruto)
+                    """)
 
-                col_lucro1, col_lucro2 = st.columns(2)
-                with col_lucro1:
-                    st.metric(
-                        "📊 Lucro Bruto (Antes de Fornecedores)",
-                        format_brl(lucro_bruto_antes_fornec),
-                        f"{perc_lucro_bruto_antes_fornec:.2f}% do Fat. Bruto",
-                        delta_color="normal" if lucro_bruto_antes_fornec >=0 else "inverse"
-                    )
-                    st.caption("(Fat. Bruto - Impostos - Funcionário - Contadora)")
+            st.markdown("---")
+
+            # === SEÇÃO 3: DEMONSTRATIVO DE RESULTADOS ===
+            with st.container(border=True):
+                st.subheader("🎯 Demonstrativo de Resultados (DRE Simplificado)")
+                st.markdown("""
+                **Explicação:** O DRE mostra a formação do resultado financeiro do período, seguindo a estrutura contábil padrão.
+                """)
                 
-                with col_lucro2:
-                    st.metric(
-                        "🏆 Lucro Líquido Operacional Final",
-                        format_brl(lucro_liq_op),
-                        f"{perc_lucro_liq_op:.2f}% do Fat. Bruto",
-                        delta_color="normal" if lucro_liq_op >= 0 else "inverse"
-                    )
-                    st.caption(f"(Lucro Bruto Antes de Fornecedores - Custo Fornecedores de {custo_fornecedores_percentual_input}%)")
+                # Criar DRE estruturado
+                dre_data = {
+                    'Item': [
+                        '(+) Receita Bruta Total',
+                        '(-) Impostos sobre Vendas',
+                        '(=) Receita Líquida',
+                        '(-) Custo dos Produtos Vendidos',
+                        '(=) Lucro Bruto',
+                        '(-) Despesas Operacionais',
+                        '    • Folha de Pagamento',
+                        '    • Serviços Contábeis',
+                        '(=) Lucro Operacional Final'
+                    ],
+                    'Valor': [
+                        resultados['faturamento_bruto'],
+                        -resultados['imposto_simples'],
+                        resultados['faturamento_bruto'] - resultados['imposto_simples'],
+                        -resultados['custo_fornecedores_valor'],
+                        resultados['faturamento_bruto'] - resultados['imposto_simples'] - resultados['custo_fornecedores_valor'],
+                        -(resultados['custo_funcionario'] + resultados['custo_contadora']),
+                        -resultados['custo_funcionario'],
+                        -resultados['custo_contadora'],
+                        resultados['lucro_bruto']
+                    ]
+                }
+                
+                dre_df = pd.DataFrame(dre_data)
+                
+                # Exibir DRE em formato de tabela
+                st.markdown("**📊 Demonstração do Resultado do Exercício (DRE):**")
+                for i, row in dre_df.iterrows():
+                    if row['Item'].startswith('(=)'):
+                        st.markdown(f"**{row['Item']}** | **{format_brl(row['Valor'])}**")
+                    elif row['Item'].startswith('    •'):
+                        st.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;{row['Item']} | {format_brl(row['Valor'])}")
+                    else:
+                        st.markdown(f"{row['Item']} | {format_brl(row['Valor'])}")
                 
                 st.markdown("---")
-                res_bruto_menos_trib = resultados_financeiros['resultado_bruto_menos_tributavel']
-                st.metric(
-                    "💡 Receita Não Tributada (Dinheiro)",
-                    format_brl(res_bruto_menos_trib)
-                )
-                st.caption("(Faturamento Bruto Total - Faturamento Tributável. Representa o valor recebido em dinheiro.)")
+                
+                # Métricas de resultado
+                col_result1, col_result2 = st.columns(2)
+                
+                with col_result1:
+                    st.metric(
+                        "💰 Lucro Operacional",
+                        format_brl(resultados['lucro_bruto']),
+                        f"{resultados['margem_lucro_bruto']:.2f}% do Faturamento",
+                        delta_color="normal" if resultados['lucro_bruto'] >= 0 else "inverse"
+                    )
+                    st.caption("Resultado após todos os custos e despesas operacionais")
+                
+                with col_result2:
+                    st.metric(
+                        "🏦 Diferença (Bruto - Tributável)",
+                        format_brl(resultados['lucro_liquido']),
+                        f"{resultados['margem_lucro_liquido']:.2f}% do Faturamento",
+                        delta_color="off"
+                    )
+                    st.caption("Diferença entre faturamento total e receita declarada")
+
+            st.markdown("---")
+
+            # === SEÇÃO 4: ANÁLISE DE INDICADORES ===
+            with st.container(border=True):
+                st.subheader("📈 Análise de Indicadores Financeiros")
+                st.markdown("""
+                **Explicação:** Os indicadores financeiros ajudam a avaliar a saúde econômica do negócio e comparar com benchmarks do setor.
+                """)
+                
+                # Calcular indicadores
+                if resultados['faturamento_bruto'] > 0:
+                    indicadores = {
+                        'Margem Bruta': (resultados['faturamento_bruto'] - resultados['custo_fornecedores_valor']) / resultados['faturamento_bruto'] * 100,
+                        'Margem Operacional': resultados['margem_lucro_bruto'],
+                        'Carga Tributária': resultados['imposto_simples'] / resultados['faturamento_bruto'] * 100,
+                        'Custo de Pessoal': resultados['custo_funcionario'] / resultados['faturamento_bruto'] * 100,
+                        'Custo dos Produtos': resultados['custo_fornecedores_valor'] / resultados['faturamento_bruto'] * 100
+                    }
+                    
+                    # Exibir indicadores
+                    col_ind1, col_ind2, col_ind3 = st.columns(3)
+                    
+                    with col_ind1:
+                        st.metric("📊 Margem Bruta", f"{indicadores['Margem Bruta']:.1f}%")
+                        st.metric("🏛️ Carga Tributária", f"{indicadores['Carga Tributária']:.1f}%")
+                    
+                    with col_ind2:
+                        st.metric("💼 Margem Operacional", f"{indicadores['Margem Operacional']:.1f}%")
+                        st.metric("👥 Custo de Pessoal", f"{indicadores['Custo de Pessoal']:.1f}%")
+                    
+                    with col_ind3:
+                        st.metric("📦 Custo dos Produtos", f"{indicadores['Custo dos Produtos']:.1f}%")
+                    
+                    # Gráfico de indicadores
+                    indicadores_df = pd.DataFrame({
+                        'Indicador': list(indicadores.keys()),
+                        'Percentual': list(indicadores.values())
+                    })
+                    
+                    chart_indicadores = alt.Chart(indicadores_df).mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3, color='#17becf').encode(
+                        x=alt.X('Indicador:N', title=None, axis=alt.Axis(labelAngle=-30)),
+                        y=alt.Y('Percentual:Q', title='Percentual (%)', axis=alt.Axis(format=".1f")),
+                        tooltip=[
+                            alt.Tooltip('Indicador:N', title='Indicador'),
+                            alt.Tooltip('Percentual:Q', title='Percentual (%)', format=".2f")
+                        ]
+                    ).properties(
+                        title="Indicadores Financeiros (%)",
+                        height=400
+                    )
+                    st.altair_chart(chart_indicadores, use_container_width=True)
+
+            st.markdown("---")
+
+            # === SEÇÃO 5: ALERTAS E RECOMENDAÇÕES ===
+            with st.container(border=True):
+                st.subheader("🚨 Alertas e Recomendações Contábeis")
+                
+                # Análise automática dos resultados
+                if resultados['faturamento_bruto'] > 0:
+                    margem_op = resultados['margem_lucro_bruto']
+                    
+                    if margem_op < 5:
+                        st.error(f"""
+                        🚨 **ALERTA CRÍTICO:** Margem operacional muito baixa ({margem_op:.1f}%)
+                        
+                        **Recomendações urgentes:**
+                        - Revisar preços de venda
+                        - Negociar melhores condições com fornecedores
+                        - Analisar custos operacionais excessivos
+                        - Considerar otimização de processos
+                        """)
+                    
+                    elif margem_op < 15:
+                        st.warning(f"""
+                        ⚠️ **ATENÇÃO:** Margem operacional moderada ({margem_op:.1f}%)
+                        
+                        **Recomendações:**
+                        - Monitorar custos de perto
+                        - Buscar oportunidades de otimização
+                        - Avaliar estratégias de aumento de receita
+                        """)
+                    
+                    else:
+                        st.success(f"""
+                        ✅ **EXCELENTE:** Margem operacional saudável ({margem_op:.1f}%)
+                        
+                        **Recomendações:**
+                        - Manter o controle atual
+                        - Considerar investimentos em crescimento
+                        - Criar reservas para contingências
+                        """)
+                    
+                    # Alertas específicos
+                    if resultados['faturamento_nao_tributavel'] / resultados['faturamento_bruto'] > 0.5:
+                        st.info(f"""
+                        💡 **OBSERVAÇÃO FISCAL:** Alto percentual de vendas em dinheiro ({(resultados['faturamento_nao_tributavel'] / resultados['faturamento_bruto'] * 100):.1f}%)
+                        
+                        Considere os aspectos legais e fiscais desta situação.
+                        """)
+
             st.markdown("---")
             
-            if receita_bruta > 0:
-                if perc_lucro_liq_op < 5:
-                    st.error(f"🚨 Atenção! O Lucro Líquido Operacional de {perc_lucro_liq_op:.2f}% está baixo. Considere rever o percentual de Custo com Fornecedores ou outras despesas.")
-                elif perc_lucro_liq_op < 15:
-                    st.warning(f"⚠️ O Lucro Líquido Operacional de {perc_lucro_liq_op:.2f}% é moderado. Avalie a otimização de custos.")
-                else:
-                    st.success(f"✅ Ótimo! O Lucro Líquido Operacional de {perc_lucro_liq_op:.2f}% parece saudável.")
+            # Nota final
+            st.info("""
+            💡 **Nota Importante:** Esta análise é uma simulação baseada nos dados informados e parâmetros configurados. 
+            Para decisões financeiras importantes, consulte sempre um contador ou consultor financeiro qualificado.
             
-            st.info("Lembre-se: Esta é uma simulação simplificada. Outros custos (aluguel, marketing, taxas de cartão, etc.) e impostos sobre o lucro (ex: IRPJ, CSLL para regimes não-Simples) não estão incluídos.")
+            **Limitações:** Não inclui outros custos como aluguel, energia, marketing, depreciação, provisões, 
+            nem impostos sobre o lucro (IRPJ, CSLL) que podem ser aplicáveis dependendo do regime tributário.
+            """)
 
 # --- Ponto de Entrada da Aplicação ---
 if __name__ == "__main__":
