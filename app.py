@@ -2,7 +2,7 @@ import streamlit as st
 import gspread
 import pandas as pd
 import altair as alt
-from datetime import datetime
+from datetime import datetime, timedelta
 from google.oauth2.service_account import Credentials
 from gspread.exceptions import SpreadsheetNotFound
 
@@ -11,7 +11,7 @@ SPREADSHEET_ID = '1NTScbiIna-iE7roQ9XBdjUOssRihTFFby4INAAQNXTg'
 WORKSHEET_NAME = 'Vendas'
 
 # Configuração da página Streamlit
-st.set_page_config(page_title="Sistema de Vendas e Análise Financeira", layout="centered", page_icon="📊")
+st.set_page_config(page_title="Sistema de Vendas e Análise Financeira", layout="wide", page_icon="📊")
 
 # Define a ordem correta dos dias da semana e meses
 dias_semana_ordem = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"]
@@ -180,6 +180,24 @@ def process_data(df_input):
             
     return df
 
+# --- Função para filtrar por somatório de últimos N dias ---
+def filter_by_rolling_days(df, dias_selecionados):
+    """Filtra o DataFrame para incluir apenas registros dos últimos N dias selecionados."""
+    if df.empty or not dias_selecionados or 'Data' not in df.columns:
+        return df
+    
+    # Pega a data mais recente dos dados
+    data_mais_recente = df['Data'].max()
+    
+    # Calcula o maior período selecionado
+    max_dias = max(dias_selecionados)
+    
+    # Filtra para incluir apenas os últimos N dias
+    data_inicio = data_mais_recente - timedelta(days=max_dias - 1)
+    df_filtrado = df[df['Data'] >= data_inicio].copy()
+    
+    return df_filtrado
+
 def create_payment_evolution_chart(df, title="Evolução da Preferência por Pagamento (Mensal)"):
     if df.empty or 'AnoMês' not in df.columns or not any(col in df.columns for col in ['Cartão', 'Dinheiro', 'Pix']):
         return None
@@ -224,6 +242,100 @@ def analyze_sales_by_weekday(df):
         st.error(f"Erro ao analisar vendas por dia da semana: {e}")
         return None, None
 
+# --- Função melhorada para gráfico de acumulação ---
+def create_improved_accumulation_chart(df):
+    """Cria um gráfico de acumulação melhorado com melhor espaçamento e estética."""
+    if df.empty or 'Data' not in df.columns or 'Total' not in df.columns:
+        return None
+    
+    df_accumulated = df.sort_values('Data').copy()
+    df_accumulated['Total Acumulado'] = df_accumulated['Total'].cumsum()
+    
+    # Adicionar padding nas datas para melhor visualização
+    data_min = df_accumulated['Data'].min()
+    data_max = df_accumulated['Data'].max()
+    
+    # Calcular padding (5% do range total)
+    range_total = (data_max - data_min).total_seconds()
+    padding_seconds = range_total * 0.05
+    
+    data_min_padded = data_min - timedelta(seconds=padding_seconds)
+    data_max_padded = data_max + timedelta(seconds=padding_seconds)
+    
+    # Criar gráfico com melhor estética
+    base_chart = alt.Chart(df_accumulated).add_selection(
+        alt.selection_interval(bind='scales')
+    )
+    
+    # Linha principal
+    line_chart = base_chart.mark_line(
+        point=alt.OverlayMarkDef(
+            filled=True,
+            size=80,
+            color='white',
+            stroke='#2E86AB',
+            strokeWidth=2
+        ),
+        strokeWidth=4,
+        color='#2E86AB',
+        interpolate='monotone'
+    ).encode(
+        x=alt.X('Data:T', 
+                title='Período',
+                scale=alt.Scale(domain=[data_min_padded, data_max_padded]),
+                axis=alt.Axis(
+                    format="%d/%m/%y",
+                    labelAngle=-45,
+                    labelFontSize=11,
+                    titleFontSize=13,
+                    grid=True,
+                    gridOpacity=0.3
+                )),
+        y=alt.Y('Total Acumulado:Q', 
+                title='Capital Acumulado (R$)',
+                scale=alt.Scale(nice=True, padding=0.1),
+                axis=alt.Axis(
+                    format=",.0f",
+                    labelFontSize=11,
+                    titleFontSize=13,
+                    grid=True,
+                    gridOpacity=0.3
+                )),
+        tooltip=[
+            alt.Tooltip("DataFormatada:N", title="Data"),
+            alt.Tooltip("Total:Q", title="Venda do Dia (R$)", format=",.2f"),
+            alt.Tooltip("Total Acumulado:Q", title="Acumulado (R$)", format=",.2f")
+        ]
+    )
+    
+    # Área sombreada abaixo da linha
+    area_chart = base_chart.mark_area(
+        opacity=0.2,
+        color='#2E86AB',
+        interpolate='monotone'
+    ).encode(
+        x=alt.X('Data:T', scale=alt.Scale(domain=[data_min_padded, data_max_padded])),
+        y=alt.Y('Total Acumulado:Q', scale=alt.Scale(nice=True, padding=0.1))
+    )
+    
+    # Combinar área e linha
+    combined_chart = (area_chart + line_chart).resolve_scale(
+        y='shared'
+    ).properties(
+        title=alt.TitleParams(
+            text="Evolução do Capital Acumulado",
+            fontSize=16,
+            fontWeight='bold',
+            anchor='start',
+            offset=20
+        ),
+        width='container',
+        height=500,
+        background='white'
+    )
+    
+    return combined_chart
+
 # --- Funções de Cálculos Financeiros ---
 def calculate_financial_results(df, salario_minimo, custo_contadora, custo_fornecedores_percentual):
     """Calcula os resultados financeiros com base nos dados de vendas."""
@@ -239,18 +351,18 @@ def calculate_financial_results(df, salario_minimo, custo_contadora, custo_forne
     
     # RECEITAS
     results['faturamento_bruto'] = df['Total'].sum()
-    results['faturamento_tributavel'] = df['Cartão'].sum() + df['Pix'].sum()  # Apenas cartão e PIX são tributáveis
-    results['faturamento_nao_tributavel'] = df['Dinheiro'].sum()  # Dinheiro não é tributável
+    results['faturamento_tributavel'] = df['Cartão'].sum() + df['Pix'].sum()
+    results['faturamento_nao_tributavel'] = df['Dinheiro'].sum()
     
     # CUSTOS E DESPESAS
-    results['imposto_simples'] = results['faturamento_tributavel'] * 0.06  # 6% sobre receita tributável
-    results['custo_funcionario'] = salario_minimo * 1.55  # Salário + 55% de encargos
+    results['imposto_simples'] = results['faturamento_tributavel'] * 0.06
+    results['custo_funcionario'] = salario_minimo * 1.55
     results['custo_fornecedores_valor'] = results['faturamento_bruto'] * (custo_fornecedores_percentual / 100)
     results['total_custos'] = results['imposto_simples'] + results['custo_funcionario'] + results['custo_contadora'] + results['custo_fornecedores_valor']
     
     # RESULTADOS
     results['lucro_bruto'] = results['faturamento_bruto'] - results['total_custos']
-    results['lucro_liquido'] = results['faturamento_bruto'] - results['faturamento_tributavel']  # Bruto - Tributável
+    results['lucro_liquido'] = results['faturamento_bruto'] - results['faturamento_tributavel']
     
     # MARGENS
     if results['faturamento_bruto'] > 0:
@@ -307,8 +419,8 @@ def main():
                     elif not worksheet_obj: st.error("❌ Falha ao conectar à planilha. Venda não registrada.")
                 else: st.warning("⚠️ O valor total da venda deve ser maior que zero.")
 
-    # --- SIDEBAR COM FILTROS ESPECÍFICOS ---
-    selected_anos_filter, selected_meses_filter, selected_dias_filter = [], [], []
+    # --- SIDEBAR COM FILTROS MELHORADOS ---
+    selected_anos_filter, selected_meses_filter, selected_dias_rolling = [], [], []
     
     with st.sidebar:
         st.header("🔍 Filtros de Período")
@@ -334,19 +446,15 @@ def main():
                         selected_meses_str = st.multiselect("📆 Mês(es):", options=meses_opcoes_display, default=default_meses_selecionados)
                         selected_meses_filter = [int(m.split(" - ")[0]) for m in selected_meses_str]
                         
-                        # Filtro de Dias Específicos (1, 2, 3, 5, 7)
-                        if selected_meses_filter:
-                            df_para_filtro_dia = df_para_filtro_mes[df_para_filtro_mes['Mês'].isin(selected_meses_filter)]
-                            if not df_para_filtro_dia.empty and 'DiaDoMes' in df_para_filtro_dia.columns:
-                                dias_especificos = [1, 2, 3, 5, 7]
-                                dias_disponiveis = [dia for dia in dias_especificos if dia in df_para_filtro_dia['DiaDoMes'].values]
-                                if dias_disponiveis:
-                                    selected_dias_filter = st.multiselect(
-                                        "📊 Dia(s) do Mês:",
-                                        options=dias_disponiveis,
-                                        default=dias_disponiveis,
-                                        format_func=lambda x: f"Dia {x}"
-                                    )
+                        # NOVO: Filtro de Somatório dos Últimos N Dias
+                        st.markdown("### 📊 Análise de Últimos Dias")
+                        dias_opcoes = [1, 2, 3, 5, 7]
+                        selected_dias_rolling = st.multiselect(
+                            "🔄 Somatório dos últimos:",
+                            options=dias_opcoes,
+                            default=[7],
+                            format_func=lambda x: f"Últimos {x} dia{'s' if x > 1 else ''}"
+                        )
             else: 
                 st.info("📊 Nenhum ano disponível para filtro.")
         else: 
@@ -359,8 +467,10 @@ def main():
             df_filtered = df_filtered[df_filtered['Ano'].isin(selected_anos_filter)]
         if selected_meses_filter and 'Mês' in df_filtered.columns: 
             df_filtered = df_filtered[df_filtered['Mês'].isin(selected_meses_filter)]
-        if selected_dias_filter and 'DiaDoMes' in df_filtered.columns:
-            df_filtered = df_filtered[df_filtered['DiaDoMes'].isin(selected_dias_filter)]
+        
+        # Aplicar filtro de rolling days se selecionado
+        if selected_dias_rolling:
+            df_filtered = filter_by_rolling_days(df_filtered, selected_dias_rolling)
 
     # Mostrar informações dos filtros aplicados na sidebar
     if not df_filtered.empty:
@@ -370,6 +480,11 @@ def main():
         st.sidebar.markdown("### 📈 Resumo dos Filtros Aplicados")
         st.sidebar.metric("Registros Filtrados", total_registros_filtrados)
         st.sidebar.metric("Faturamento Filtrado", format_brl(total_faturamento_filtrado))
+        
+        # Mostrar informação sobre filtro de dias se aplicado
+        if selected_dias_rolling:
+            max_dias = max(selected_dias_rolling)
+            st.sidebar.info(f"📅 Exibindo dados dos últimos {max_dias} dias")
     elif not df_processed.empty:
         st.sidebar.markdown("---")
         st.sidebar.info("Nenhum registro corresponde aos filtros selecionados.")
@@ -413,17 +528,15 @@ def main():
                 else: st.info("Sem dados de vendas diárias para exibir o gráfico de barras nos filtros selecionados.")
             else: st.info("Coluna 'Data' não encontrada ou vazia para o gráfico de vendas diárias.")
 
-            st.subheader("📈 Acúmulo de Capital ao Longo do Tempo")
+            st.subheader("📈 Evolução do Capital Acumulado")
             if 'Data' in df_filtered.columns and not df_filtered.empty and not df_filtered['Data'].isnull().all() and 'Total' in df_filtered.columns:
-                df_accumulated = df_filtered.sort_values('Data').copy()
-                df_accumulated['Total Acumulado'] = df_accumulated['Total'].cumsum()
-                line_chart_accum = alt.Chart(df_accumulated).mark_line(point=True, strokeWidth=3, color='green').encode(
-                    x=alt.X('Data:T', title='Data', axis=alt.Axis(format="%d/%m/%y", labelAngle=-45)),
-                    y=alt.Y('Total Acumulado:Q', title='Capital Acumulado (R$)', axis=alt.Axis(format=",.2f")),
-                    tooltip=[alt.Tooltip("DataFormatada", title="Data"), alt.Tooltip("Total Acumulado", format=",.2f", title="Acumulado (R$)")]
-                ).properties(height=600).interactive()
-                st.altair_chart(line_chart_accum, use_container_width=True)
-            else: st.info("Dados insuficientes (Data ou Total) para o gráfico de acúmulo.")
+                improved_chart = create_improved_accumulation_chart(df_filtered)
+                if improved_chart:
+                    st.altair_chart(improved_chart, use_container_width=True)
+                else:
+                    st.info("Não foi possível gerar o gráfico de acumulação.")
+            else: 
+                st.info("Dados insuficientes (Data ou Total) para o gráfico de acúmulo.")
         else:
              if df_processed.empty and df_raw.empty and get_worksheet() is None: st.warning("Não foi possível carregar os dados. Verifique configurações e credenciais.")
              elif df_processed.empty: st.info("Não há dados processados para exibir. Verifique a planilha de origem.")
@@ -839,14 +952,3 @@ def main():
             st.markdown("---")
             
             # Nota final
-            st.info("""
-            💡 **Nota Importante:** Esta análise é uma simulação baseada nos dados informados e parâmetros configurados. 
-            Para decisões financeiras importantes, consulte sempre um contador ou consultor financeiro qualificado.
-            
-            **Limitações:** Não inclui outros custos como aluguel, energia, marketing, depreciação, provisões, 
-            nem impostos sobre o lucro (IRPJ, CSLL) que podem ser aplicáveis dependendo do regime tributário.
-            """)
-
-# --- Ponto de Entrada da Aplicação ---
-if __name__ == "__main__":
-    main()
