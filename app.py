@@ -11,7 +11,7 @@ SPREADSHEET_ID = '1NTScbiIna-iE7roQ9XBdjUOssRihTFFby4INAAQNXTg' # Substitua pelo
 WORKSHEET_NAME = 'Vendas'
 
 # Configuração da página Streamlit
-st.set_page_config(page_title="Sistema de Vendas e Análise Financeira", layout="wide", page_icon="📊")
+st.set_page_config(page_title="Sistema de Registro de Vendas", layout="wide")
 
 # Define a ordem correta dos dias da semana e meses
 dias_semana_ordem = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"]
@@ -114,8 +114,7 @@ def process_data(df_input):
     df = df_input.copy()
     
     cols_to_ensure_numeric = ['Cartão', 'Dinheiro', 'Pix', 'Total']
-    # Adicionada 'SemanaAno'
-    cols_to_ensure_date_derived = ['Ano', 'Mês', 'MêsNome', 'AnoMês', 'DataFormatada', 'DiaSemana', 'DiaDoMes', 'SemanaAno']
+    cols_to_ensure_date_derived = ['Ano', 'Mês', 'MêsNome', 'AnoMês', 'DataFormatada', 'DiaSemana', 'DiaDoMes']
     
     if df.empty:
         all_expected_cols = ['Data'] + cols_to_ensure_numeric + cols_to_ensure_date_derived
@@ -123,7 +122,7 @@ def process_data(df_input):
         for col in cols_to_ensure_numeric:
             empty_df[col] = pd.Series(dtype='float')
         for col in cols_to_ensure_date_derived:
-            empty_df[col] = pd.Series(dtype='object' if col in ['MêsNome', 'AnoMês', 'DataFormatada', 'DiaSemana'] else ('Int64' if col == 'SemanaAno' else 'float'))
+            empty_df[col] = pd.Series(dtype='object' if col in ['MêsNome', 'AnoMês', 'DataFormatada', 'DiaSemana'] else 'float')
         empty_df['Data'] = pd.Series(dtype='datetime64[ns]')
         return empty_df
 
@@ -139,8 +138,8 @@ def process_data(df_input):
         try:
             if pd.api.types.is_string_dtype(df['Data']):
                 df['Data'] = pd.to_datetime(df['Data'], dayfirst=True, errors='coerce')
-                if df['Data'].isnull().all(): # Se falhar, tenta o formato americano
-                    df['Data'] = pd.to_datetime(df_input['Data'], errors='coerce') # Reverte para a coluna original se a primeira tentativa falhar
+                if df['Data'].isnull().all():
+                    df['Data'] = pd.to_datetime(df_input['Data'], errors='coerce')
             elif not pd.api.types.is_datetime64_any_dtype(df['Data']):
                 df['Data'] = pd.to_datetime(df['Data'], errors='coerce')
             
@@ -149,15 +148,12 @@ def process_data(df_input):
             if not df.empty:
                 df['Ano'] = df['Data'].dt.year
                 df['Mês'] = df['Data'].dt.month
-                # Adiciona a coluna SemanaAno (ISO week)
-                df['SemanaAno'] = df['Data'].dt.isocalendar().week.astype('Int64') # Usar Int64 para permitir NaNs se houver
-
                 try:
                     df['MêsNome'] = df['Data'].dt.strftime('%B').str.capitalize()
                     if not df['MêsNome'].dtype == 'object' or df['MêsNome'].str.isnumeric().any():
-                         df['MêsNome'] = df['Mês'].map(lambda x: meses_ordem[int(x)-1] if pd.notna(x) and 1 <= int(x) <= 12 else "Inválido")
-                except Exception: 
-                    df['MêsNome'] = df['Mês'].map(lambda x: meses_ordem[int(x)-1] if pd.notna(x) and 1 <= int(x) <= 12 else "Inválido")
+                         df['MêsNome'] = df['Mês'].map(lambda x: meses_ordem[int(x)-1] if 1 <= int(x) <= 12 else "Inválido")
+                except Exception: # Fallback em caso de erro com strftime ou locale
+                    df['MêsNome'] = df['Mês'].map(lambda x: meses_ordem[int(x)-1] if 1 <= int(x) <= 12 else "Inválido")
 
                 df['AnoMês'] = df['Data'].dt.strftime('%Y-%m')
                 df['DataFormatada'] = df['Data'].dt.strftime('%d/%m/%Y')
@@ -167,19 +163,19 @@ def process_data(df_input):
                 df['DiaDoMes'] = df['Data'].dt.day
 
                 df['DiaSemana'] = pd.Categorical(df['DiaSemana'], categories=[d for d in dias_semana_ordem if d in df['DiaSemana'].unique()], ordered=True)
-            else: # df ficou vazio após processamento de data
+            else:
                 for col in cols_to_ensure_date_derived:
-                    df[col] = pd.Series(dtype='object' if col in ['MêsNome', 'AnoMês', 'DataFormatada', 'DiaSemana'] else ('Int64' if col == 'SemanaAno' else 'float'))
+                    df[col] = pd.Series(dtype='object' if col in ['MêsNome', 'AnoMês', 'DataFormatada', 'DiaSemana'] else 'float')
         except Exception as e:
             st.error(f"Erro crítico ao processar a coluna 'Data': {e}. Verifique o formato das datas na planilha.")
             for col in cols_to_ensure_date_derived:
-                df[col] = pd.Series(dtype='object' if col in ['MêsNome', 'AnoMês', 'DataFormatada', 'DiaSemana'] else ('Int64' if col == 'SemanaAno' else 'float'))
+                df[col] = pd.Series(dtype='object' if col in ['MêsNome', 'AnoMês', 'DataFormatada', 'DiaSemana'] else 'float')
     else:
         if 'Data' not in df.columns:
             st.warning("Coluna 'Data' não encontrada no DataFrame. Algumas análises temporais não estarão disponíveis.")
-            df['Data'] = pd.NaT 
+            df['Data'] = pd.NaT
         for col in cols_to_ensure_date_derived:
-            df[col] = pd.Series(dtype='object' if col in ['MêsNome', 'AnoMês', 'DataFormatada', 'DiaSemana'] else ('Int64' if col == 'SemanaAno' else 'float'))
+            df[col] = pd.Series(dtype='object' if col in ['MêsNome', 'AnoMês', 'DataFormatada', 'DiaSemana'] else 'float')
             
     return df
 
@@ -262,19 +258,31 @@ def calculate_financial_results(df, salario_minimo, custo_contadora, custo_forne
         'custo_funcionario': 0, 'custo_contadora': custo_contadora,
         'custo_fornecedores_valor': 0, 'total_custos_fixos_operacionais': 0,
         'lucro_bruto_antes_fornecedores': 0, 'lucro_liquido_operacional': 0,
-        'resultado_bruto_menos_tributavel': 0
+        'resultado_bruto_menos_tributavel': 0 # Métrica específica
     }
     if df.empty: return results
     
+    # Receitas
     results['faturamento_bruto'] = df['Total'].sum()
     results['faturamento_tributavel'] = df['Cartão'].sum() + df['Pix'].sum()
-    results['imposto_simples'] = results['faturamento_tributavel'] * 0.06
-    results['custo_funcionario'] = salario_minimo * 1.55
     
+    # Custos Fixos e Impostos diretos sobre receita
+    results['imposto_simples'] = results['faturamento_tributavel'] * 0.06 # 6% sobre o tributável
+    results['custo_funcionario'] = salario_minimo * 1.55 # Estimativa de 55% de encargos sobre o salário
+    
+    # Total de Custos Fixos e Operacionais (sem fornecedores ainda)
     results['total_custos_fixos_operacionais'] = results['imposto_simples'] + results['custo_funcionario'] + results['custo_contadora']
+    
+    # Lucro Bruto antes de considerar o custo variável dos fornecedores
     results['lucro_bruto_antes_fornecedores'] = results['faturamento_bruto'] - results['total_custos_fixos_operacionais']
+    
+    # Custo com Fornecedores (variável, percentual sobre faturamento bruto)
     results['custo_fornecedores_valor'] = results['faturamento_bruto'] * (custo_fornecedores_percentual / 100)
+    
+    # Lucro Líquido Operacional Final (após todos os custos, incluindo fornecedores)
     results['lucro_liquido_operacional'] = results['lucro_bruto_antes_fornecedores'] - results['custo_fornecedores_valor']
+    
+    # Métrica específica solicitada: (Faturamento Bruto - Faturamento Tributável)
     results['resultado_bruto_menos_tributavel'] = results['faturamento_bruto'] - results['faturamento_tributavel']
     
     return results
@@ -285,23 +293,7 @@ def format_brl(value):
 
 # --- Interface Principal da Aplicação ---
 def main():
-    # Título melhorado com logo
-    try:
-        # Substitua 'logo.png' pelo caminho correto da sua imagem de logo, se necessário.
-        # Certifique-se de que o arquivo logo.png está na mesma pasta do script ou forneça o caminho completo.
-        col_logo, col_title = st.columns([1, 8]) # Ajuste a proporção se necessário
-        with col_logo:
-            st.image('logo.png', width=80) # Ajuste a largura conforme necessário
-        with col_title:
-            st.title("🏪 Sistema Completo de Vendas & Análise Financeira")
-            st.caption("Gestão inteligente de vendas com análise financeira em tempo real")
-    except FileNotFoundError:
-        st.title("🏪 Sistema Completo de Vendas & Análise Financeira")
-        st.caption("Gestão inteligente de vendas com análise financeira em tempo real (logo não encontrado)")
-    except Exception as e: # Captura outras exceções de imagem, se houver
-        st.title("🏪 Sistema Completo de Vendas & Análise Financeira")
-        st.caption(f"Gestão inteligente de vendas com análise financeira em tempo real (erro ao carregar logo: {e})")
-
+    st.title("📊 Sistema de Registro de Vendas e Análise Financeira")
 
     df_raw = read_sales_data()
     df_processed = process_data(df_raw)
@@ -309,42 +301,35 @@ def main():
     tab1, tab2, tab3, tab4 = st.tabs(["📝 Registrar Venda", "📈 Análise Detalhada", "💡 Estatísticas", "💰 Análise Financeira"])
 
     with tab1:
-        st.header("📝 Registrar Nova Venda")
+        st.header("Registrar Nova Venda")
         with st.form("venda_form"):
-            data_input = st.date_input("📅 Data da Venda", value=datetime.now(), format="DD/MM/YYYY")
+            data_input = st.date_input("Data da Venda", value=datetime.now(), format="DD/MM/YYYY")
             col1, col2, col3 = st.columns(3)
-            with col1: cartao_input = st.number_input("💳 Cartão (R$)", min_value=0.0, value=0.0, format="%.2f", key="cartao_venda")
-            with col2: dinheiro_input = st.number_input("💵 Dinheiro (R$)", min_value=0.0, value=0.0, format="%.2f", key="dinheiro_venda")
-            with col3: pix_input = st.number_input("📱 PIX (R$)", min_value=0.0, value=0.0, format="%.2f", key="pix_venda")
+            with col1: cartao_input = st.number_input("Cartão (R$)", min_value=0.0, value=0.0, format="%.2f", key="cartao_venda")
+            with col2: dinheiro_input = st.number_input("Dinheiro (R$)", min_value=0.0, value=0.0, format="%.2f", key="dinheiro_venda")
+            with col3: pix_input = st.number_input("PIX (R$)", min_value=0.0, value=0.0, format="%.2f", key="pix_venda")
             total_venda_form = (cartao_input or 0.0) + (dinheiro_input or 0.0) + (pix_input or 0.0)
-            st.markdown(f"### **💰 Total da venda: {format_brl(total_venda_form)}**")
-            submitted = st.form_submit_button("✅ Registrar Venda", type="primary")
+            st.markdown(f"**Total da venda: R$ {total_venda_form:.2f}**")
+            submitted = st.form_submit_button("Registrar Venda")
             if submitted:
                 if total_venda_form > 0:
                     formatted_date = data_input.strftime('%d/%m/%Y')
                     worksheet_obj = get_worksheet()
                     if worksheet_obj and add_data_to_sheet(formatted_date, cartao_input, dinheiro_input, pix_input, worksheet_obj):
                         read_sales_data.clear(); process_data.clear()
-                        st.success("✅ Venda registrada e dados recarregados!")
+                        st.success("Venda registrada e dados recarregados!")
                         st.rerun()
-                    elif not worksheet_obj: st.error("❌ Falha ao conectar à planilha. Venda não registrada.")
-                else: st.warning("⚠️ O valor total da venda deve ser maior que zero.")
+                    elif not worksheet_obj: st.error("Falha ao conectar à planilha. Venda não registrada.")
+                else: st.warning("O valor total da venda deve ser maior que zero.")
 
-    # --- SIDEBAR APENAS COM FILTROS DE PERÍODO ---
-    selected_anos_filter, selected_meses_filter, selected_semanas_filter = [], [], []
-    
+    selected_anos_filter, selected_meses_filter = [], []
     with st.sidebar:
-        st.header("🔍 Filtros de Período")
-        st.markdown("---")
-        
-        # Filtro de Anos
+        st.header("🔍 Filtros de Análise")
         if not df_processed.empty and 'Ano' in df_processed.columns and not df_processed['Ano'].isnull().all():
             anos_disponiveis = sorted(df_processed['Ano'].dropna().unique().astype(int), reverse=True)
             if anos_disponiveis:
                 default_ano = [datetime.now().year] if datetime.now().year in anos_disponiveis else ([anos_disponiveis[0]] if anos_disponiveis else [])
-                selected_anos_filter = st.multiselect("📅 Ano(s):", options=anos_disponiveis, default=default_ano)
-                
-                # Filtro de Meses (dependente do ano selecionado)
+                selected_anos_filter = st.multiselect("Ano(s):", options=anos_disponiveis, default=default_ano)
                 if selected_anos_filter:
                     df_para_filtro_mes = df_processed[df_processed['Ano'].isin(selected_anos_filter)]
                     if not df_para_filtro_mes.empty and 'Mês' in df_para_filtro_mes.columns and not df_para_filtro_mes['Mês'].isnull().all():
@@ -354,84 +339,29 @@ def main():
                         default_mes_num = datetime.now().month
                         default_mes_str = f"{default_mes_num} - {meses_ordem[default_mes_num-1]}" if 1 <= default_mes_num <= 12 and meses_opcoes_dict else None
                         default_meses_selecionados = [default_mes_str] if default_mes_str and default_mes_str in meses_opcoes_display else meses_opcoes_display
-                        selected_meses_str = st.multiselect("📆 Mês(es):", options=meses_opcoes_display, default=default_meses_selecionados)
+                        selected_meses_str = st.multiselect("Mês(es):", options=meses_opcoes_display, default=default_meses_selecionados)
                         selected_meses_filter = [int(m.split(" - ")[0]) for m in selected_meses_str]
-                        
-                        # Filtro de Semanas (dependente do ano e mês selecionados)
-                        if selected_meses_filter: # Ou apenas selected_anos_filter se quiser semanas do ano inteiro
-                            df_para_filtro_semana = df_para_filtro_mes[df_para_filtro_mes['Mês'].isin(selected_meses_filter)] # Filtra por mês também para semanas
-                            if not df_para_filtro_semana.empty and 'SemanaAno' in df_para_filtro_semana.columns and not df_para_filtro_semana['SemanaAno'].isnull().all():
-                                semanas_disponiveis = sorted(df_para_filtro_semana['SemanaAno'].dropna().unique().astype(int))
-                                if semanas_disponiveis:
-                                    # Semana atual como padrão se disponível
-                                    semana_atual_datetime = datetime.now()
-                                    semana_atual_iso = semana_atual_datetime.isocalendar().week
-                                    
-                                    # Verifica se a semana atual está nos anos/meses selecionados
-                                    df_semana_atual_check = df_processed[
-                                        (df_processed['Ano'] == semana_atual_datetime.year) & 
-                                        (df_processed['SemanaAno'] == semana_atual_iso)
-                                    ]
-                                    if not df_semana_atual_check.empty and semana_atual_iso in semanas_disponiveis:
-                                         default_semana = [semana_atual_iso]
-                                    else: # Se não, seleciona todas as semanas disponíveis
-                                        default_semana = semanas_disponiveis
+            else: st.sidebar.info("Nenhum ano disponível para filtro.")
+        else: st.sidebar.info("Não há dados processados ou coluna 'Ano' para aplicar filtros.")
+        
+        st.sidebar.subheader("⚙️ Parâmetros Fixos (Simulação)")
+        salario_minimo_input = st.sidebar.number_input("Salário Mínimo Base (R$)", min_value=0.0, value=1412.0, format="%.2f", help="Usado para calcular custo estimado de funcionário (Salário + 55% encargos).")
+        custo_contadora_input = st.sidebar.number_input("Custo Mensal Contadora (R$)", min_value=0.0, value=316.0, format="%.2f")
 
-                                    selected_semanas_filter = st.multiselect(
-                                        "📊 Semana(s) do Ano:", 
-                                        options=semanas_disponiveis, 
-                                        default=default_semana,
-                                        format_func=lambda x: f"Semana {x}"
-                                    )
-            else: 
-                st.info("📊 Nenhum ano disponível para filtro.")
-        else: 
-            st.info("📊 Não há dados processados para aplicar filtros.")
 
-    # Aplicar todos os filtros
     df_filtered = df_processed.copy()
     if not df_filtered.empty:
-        if selected_anos_filter and 'Ano' in df_filtered.columns: 
-            df_filtered = df_filtered[df_filtered['Ano'].isin(selected_anos_filter)]
-        if selected_meses_filter and 'Mês' in df_filtered.columns: 
-            df_filtered = df_filtered[df_filtered['Mês'].isin(selected_meses_filter)]
-        # Aplicar filtro semanal apenas se anos e meses também estiverem selecionados (ou apenas anos se preferir)
-        if selected_anos_filter and selected_meses_filter and selected_semanas_filter and 'SemanaAno' in df_filtered.columns: 
-            df_filtered = df_filtered[df_filtered['SemanaAno'].isin(selected_semanas_filter)]
-        elif selected_anos_filter and not selected_meses_filter and selected_semanas_filter and 'SemanaAno' in df_filtered.columns: # Caso só ano e semana sejam selecionados
-             df_temp_semanas_ano = df_processed[df_processed['Ano'].isin(selected_anos_filter)]
-             df_filtered = df_temp_semanas_ano[df_temp_semanas_ano['SemanaAno'].isin(selected_semanas_filter)]
-
-
-    # Mostrar informações dos filtros aplicados na sidebar
-    if not df_filtered.empty:
-        total_registros_filtrados = len(df_filtered)
-        total_faturamento_filtrado = df_filtered['Total'].sum()
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("### 📈 Resumo dos Filtros Aplicados")
-        st.sidebar.metric("Registros Filtrados", total_registros_filtrados)
-        st.sidebar.metric("Faturamento Filtrado", format_brl(total_faturamento_filtrado))
-    elif not df_processed.empty : # Se df_processed tem dados mas df_filtered está vazio
-        st.sidebar.markdown("---")
-        st.sidebar.info("Nenhum registro corresponde aos filtros selecionados.")
+        if selected_anos_filter and 'Ano' in df_filtered.columns: df_filtered = df_filtered[df_filtered['Ano'].isin(selected_anos_filter)]
+        if selected_meses_filter and 'Mês' in df_filtered.columns: df_filtered = df_filtered[df_filtered['Mês'].isin(selected_meses_filter)]
     
     with tab2:
-        st.header("🔎 Análise Detalhada de Vendas")
+        st.header("🔎 Análise Detalhada de Vendas (Conforme Filtros)")
         if not df_filtered.empty and 'DataFormatada' in df_filtered.columns:
             st.subheader("🧾 Tabela de Vendas Filtradas")
-            # Adicionada 'SemanaAno' para exibição
-            cols_to_display_tab2 = ['DataFormatada', 'DiaSemana', 'SemanaAno', 'Cartão', 'Dinheiro', 'Pix', 'Total']
+            cols_to_display_tab2 = ['DataFormatada', 'DiaSemana', 'Cartão', 'Dinheiro', 'Pix', 'Total']
             cols_existentes_tab2 = [col for col in cols_to_display_tab2 if col in df_filtered.columns]
-            
-            if cols_existentes_tab2: 
-                df_display_tab2 = df_filtered[cols_existentes_tab2].copy()
-                # Formatar SemanaAno para exibição
-                if 'SemanaAno' in df_display_tab2.columns:
-                    df_display_tab2['SemanaAno'] = df_display_tab2['SemanaAno'].apply(lambda x: f"Semana {int(x)}" if pd.notna(x) else "")
-                
-                st.dataframe(df_display_tab2, use_container_width=True, height=600, hide_index=True)
-            else: 
-                st.info("Colunas necessárias para a tabela de dados filtrados não estão disponíveis.")
+            if cols_existentes_tab2: st.dataframe(df_filtered[cols_existentes_tab2], use_container_width=True, height=600, hide_index=True)
+            else: st.info("Colunas necessárias para a tabela de dados filtrados não estão disponíveis.")
             
             st.subheader("🥧 Distribuição por Método de Pagamento")
             if any(col in df_filtered.columns for col in ['Cartão', 'Dinheiro', 'Pix']):
@@ -478,7 +408,7 @@ def main():
              else: st.info("Não há dados para exibir na Análise Detalhada. Pode ser um problema no processamento.")
 
     with tab3:
-        st.header("💡 Estatísticas e Tendências de Vendas")
+        st.header("💡 Estatísticas e Tendências de Vendas (Conforme Filtros)")
         if not df_filtered.empty and 'Total' in df_filtered.columns and not df_filtered['Total'].isnull().all():
             st.subheader("💰 Resumo Financeiro Agregado")
             total_registros = len(df_filtered); total_faturamento = df_filtered['Total'].sum()
@@ -548,6 +478,143 @@ def main():
             elif df_filtered.empty: st.info("Nenhum dado corresponde aos filtros para exibir estatísticas.")
             else: st.info("Não há dados de 'Total' para exibir nas Estatísticas.")
 
-    # --- Aba de Análise Financeira ---
+    # --- Aba de Análise Financeira REORGANIZADA ---
     with tab4:
-        st.header("🔬 Raio-X Financeiro Comple
+        st.header("🔬 Raio-X Financeiro (Baseado nos Filtros)")
+        st.caption("Esta análise considera os dados filtrados no painel à esquerda e os parâmetros fixos (Salário, Contadora) da Sidebar.")
+        
+        # Parâmetro de Custo com Fornecedores agora DENTRO da tab4
+        with st.container(border=True):
+            st.subheader("📦 Parâmetro de Custo Variável")
+            custo_fornecedores_percentual_input = st.number_input(
+                "Custo com Fornecedores (% do Faturamento Bruto)", 
+                min_value=0.0, max_value=100.0, value=30.0, format="%.1f",
+                help="Percentual estimado do faturamento bruto destinado a cobrir custos de insumos (bebidas, frios, pães, etc.).",
+                key="custo_fornecedores_tab4" # Chave única para o widget
+            )
+        st.markdown("---")
+
+        if df_filtered.empty or 'Total' not in df_filtered.columns:
+            st.info("Não há dados de vendas filtrados para realizar a análise financeira. Por favor, ajuste os filtros ou registre vendas.")
+        else:
+            # salario_minimo_input e custo_contadora_input vêm da sidebar
+            resultados_financeiros = calculate_financial_results(
+                df_filtered, 
+                salario_minimo_input, 
+                custo_contadora_input, 
+                custo_fornecedores_percentual_input # Agora da tab4
+            )
+
+            # === BLOCO DE RECEITAS ===
+            with st.container(border=True):
+                st.subheader("📈 Receitas do Período")
+                receita_bruta = resultados_financeiros['faturamento_bruto']
+                receita_tributavel = resultados_financeiros['faturamento_tributavel']
+                receita_nao_tributavel = receita_bruta - receita_tributavel
+
+                col_rec1, col_rec2, col_rec3 = st.columns(3)
+                col_rec1.metric("💰 Faturamento Bruto Total", format_brl(receita_bruta))
+                col_rec2.metric("💳 Receita Tributável (Cartão+PIX)", format_brl(receita_tributavel), 
+                                f"{((receita_tributavel / receita_bruta * 100) if receita_bruta > 0 else 0):.1f}% do total")
+                col_rec3.metric("💵 Receita Não Tributável (Dinheiro)", format_brl(receita_nao_tributavel),
+                                f"{((receita_nao_tributavel / receita_bruta * 100) if receita_bruta > 0 else 0):.1f}% do total")
+            st.markdown("---")
+
+            # === BLOCO DE CUSTOS TOTAIS (FIXOS + VARIÁVEIS) ===
+            with st.container(border=True):
+                st.subheader("💸 Despesas e Custos Operacionais Totais")
+                
+                custos_fixos_operacionais_df = pd.DataFrame({
+                    'Componente de Custo': ['Imposto Simples (6% s/ Trib.)', 'Custo Estimado Funcionário', 'Custo Contadora'],
+                    'Valor (R$)': [
+                        resultados_financeiros['imposto_simples'],
+                        resultados_financeiros['custo_funcionario'],
+                        resultados_financeiros['custo_contadora']
+                    ]
+                })
+                # Adiciona o custo com fornecedores ao DataFrame para o gráfico
+                custo_fornecedores_df = pd.DataFrame({
+                    'Componente de Custo': [f'Custo Fornecedores ({custo_fornecedores_percentual_input}%)'],
+                    'Valor (R$)': [resultados_financeiros['custo_fornecedores_valor']]
+                })
+                
+                todos_custos_df = pd.concat([custos_fixos_operacionais_df, custo_fornecedores_df], ignore_index=True)
+                todos_custos_df = todos_custos_df[todos_custos_df['Valor (R$)'] > 0]
+
+                if not todos_custos_df.empty:
+                    todos_custos_df['Percentual sobre Faturamento Bruto (%)'] = (todos_custos_df['Valor (R$)'] / receita_bruta * 100) if receita_bruta > 0 else 0
+                    
+                    bar_chart_todos_custos = alt.Chart(todos_custos_df).mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3).encode(
+                        x=alt.X('Componente de Custo:N', sort=None, title=None, axis=alt.Axis(labelAngle=-25)), # Ajustado angulo
+                        y=alt.Y('Valor (R$):Q', title="Valor (R$)"),
+                        tooltip=[
+                            alt.Tooltip('Componente de Custo:N', title="Custo"),
+                            alt.Tooltip('Valor (R$):Q', title="Valor", format=",.2f"),
+                            alt.Tooltip('Percentual sobre Faturamento Bruto (%):Q', title="% do Fat. Bruto", format=".2f")
+                        ],
+                        color=alt.Color('Componente de Custo:N', legend=None)
+                    ).properties(
+                        title=alt.TitleParams(text="Composição dos Custos Totais (Fixos + Fornecedores)", anchor='middle'),
+                        height=400 # Ajustado altura
+                    )
+                    st.altair_chart(bar_chart_todos_custos, use_container_width=True)
+
+                    st.markdown("**Detalhamento dos Custos:**")
+                    for _, row in todos_custos_df.iterrows():
+                        st.markdown(f"- **{row['Componente de Custo']}:** {format_brl(row['Valor (R$)'])} ({row['Percentual sobre Faturamento Bruto (%)']:.2f}%)")
+                
+                total_custos_geral_val = resultados_financeiros['total_custos_fixos_operacionais'] + resultados_financeiros['custo_fornecedores_valor']
+                percentual_total_custos_geral = (total_custos_geral_val / receita_bruta * 100) if receita_bruta > 0 else 0
+                st.markdown(f"--- \n- **📉 Total Geral de Custos:** **{format_brl(total_custos_geral_val)}** ({percentual_total_custos_geral:.2f}% do Faturamento Bruto)")
+            st.markdown("---")
+
+            # === BLOCO DE RESULTADOS FINANCEIROS (LUCRO) ===
+            with st.container(border=True):
+                st.subheader("🎯 Resultados e Lucratividade")
+                lucro_liq_op = resultados_financeiros['lucro_liquido_operacional']
+                perc_lucro_liq_op = (lucro_liq_op / receita_bruta * 100) if receita_bruta > 0 else 0
+                
+                lucro_bruto_antes_fornec = resultados_financeiros['lucro_bruto_antes_fornecedores']
+                perc_lucro_bruto_antes_fornec = (lucro_bruto_antes_fornec / receita_bruta * 100) if receita_bruta > 0 else 0
+
+                col_lucro1, col_lucro2 = st.columns(2)
+                with col_lucro1:
+                    st.metric(
+                        "📊 Lucro Bruto (Antes de Fornecedores)",
+                        format_brl(lucro_bruto_antes_fornec),
+                        f"{perc_lucro_bruto_antes_fornec:.2f}% do Fat. Bruto",
+                        delta_color="normal" if lucro_bruto_antes_fornec >=0 else "inverse"
+                    )
+                    st.caption("(Fat. Bruto - Impostos - Funcionário - Contadora)")
+                
+                with col_lucro2:
+                    st.metric(
+                        "🏆 Lucro Líquido Operacional Final",
+                        format_brl(lucro_liq_op),
+                        f"{perc_lucro_liq_op:.2f}% do Fat. Bruto",
+                        delta_color="normal" if lucro_liq_op >= 0 else "inverse"
+                    )
+                    st.caption(f"(Lucro Bruto Antes de Fornecedores - Custo Fornecedores de {custo_fornecedores_percentual_input}%)")
+                
+                st.markdown("---")
+                res_bruto_menos_trib = resultados_financeiros['resultado_bruto_menos_tributavel']
+                st.metric(
+                    "💡 Receita Não Tributada (Dinheiro)",
+                    format_brl(res_bruto_menos_trib)
+                )
+                st.caption("(Faturamento Bruto Total - Faturamento Tributável. Representa o valor recebido em dinheiro.)")
+            st.markdown("---")
+            
+            if receita_bruta > 0:
+                if perc_lucro_liq_op < 5:
+                    st.error(f"🚨 Atenção! O Lucro Líquido Operacional de {perc_lucro_liq_op:.2f}% está baixo. Considere rever o percentual de Custo com Fornecedores ou outras despesas.")
+                elif perc_lucro_liq_op < 15:
+                    st.warning(f"⚠️ O Lucro Líquido Operacional de {perc_lucro_liq_op:.2f}% é moderado. Avalie a otimização de custos.")
+                else:
+                    st.success(f"✅ Ótimo! O Lucro Líquido Operacional de {perc_lucro_liq_op:.2f}% parece saudável.")
+            
+            st.info("Lembre-se: Esta é uma simulação simplificada. Outros custos (aluguel, marketing, taxas de cartão, etc.) e impostos sobre o lucro (ex: IRPJ, CSLL para regimes não-Simples) não estão incluídos.")
+
+# --- Ponto de Entrada da Aplicação ---
+if __name__ == "__main__":
+    main()
