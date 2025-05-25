@@ -11,7 +11,7 @@ SPREADSHEET_ID = '1NTScbiIna-iE7roQ9XBdjUOssRihTFFby4INAAQNXTg'
 WORKSHEET_NAME = 'Vendas'
 
 # Configuração da página Streamlit
-st.set_page_config(page_title="Sistema de Vendas e Análise Financeira", layout="wide", page_icon="📊")
+st.set_page_config(page_title="Sistema Financeiro - Clips Burger", layout="wide", page_icon="🍔")
 
 # Define a ordem correta dos dias da semana e meses
 dias_semana_ordem = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"]
@@ -383,13 +383,13 @@ def main():
         with col_logo:
             st.image('logo.png', width=80)
         with col_title:
-            st.title("🏪 Sistema Completo de Vendas & Análise Financeira")
+            st.title("🍔 SISTEMA FINANCEIRO - CLIPS BURGER")
             st.caption("Gestão inteligente de vendas com análise financeira em tempo real")
     except FileNotFoundError:
-        st.title("🏪 Sistema Completo de Vendas & Análise Financeira")
+        st.title("🍔 SISTEMA FINANCEIRO - CLIPS BURGER")
         st.caption("Gestão inteligente de vendas com análise financeira em tempo real")
     except Exception as e:
-        st.title("🏪 Sistema Completo de Vendas & Análise Financeira")
+        st.title("🍔 SISTEMA FINANCEIRO - CLIPS BURGER")
         st.caption("Gestão inteligente de vendas com análise financeira em tempo real")
 
     df_raw = read_sales_data()
@@ -613,7 +613,7 @@ def main():
         st.markdown("""
         ### 📋 **Sobre esta Análise**
         
-        Esta seção apresenta uma **análise contábil completa** do seu negócio, baseada nos dados de vendas filtrados. 
+        Esta seção apresenta uma **análise contábil completa** do Clips Burger, baseada nos dados de vendas filtrados. 
         Os cálculos seguem as **normas contábeis brasileiras** e consideram:
         
         - **Regime Tributário:** Simples Nacional (6% sobre receita tributável)
@@ -646,7 +646,7 @@ def main():
                 custo_fornecedores_percentual = st.number_input(
                     "📦 Custo dos Produtos (%)",
                     min_value=0.0, max_value=100.0, value=30.0, format="%.1f",
-                    help="Percentual do faturamento destinado à compra de produtos (bebidas, frios, pães, etc.).",
+                    help="Percentual do faturamento destinado à compra de produtos (hambúrgueres, batatas, bebidas, etc.).",
                     key="fornecedores_tab4"
                 )
 
@@ -902,53 +902,15 @@ def main():
 
             st.markdown("---")
 
-            # === SEÇÃO 5: ALERTAS E RECOMENDAÇÕES ===
-            with st.container(border=True):
-                st.subheader("🚨 Alertas e Recomendações Contábeis")
-                
-                # Análise automática dos resultados
-                if resultados['faturamento_bruto'] > 0:
-                    margem_op = resultados['margem_lucro_bruto']
-                    
-                    if margem_op < 5:
-                        st.error(f"""
-                        🚨 **ALERTA CRÍTICO:** Margem operacional muito baixa ({margem_op:.1f}%)
-                        
-                        **Recomendações urgentes:**
-                        - Revisar preços de venda
-                        - Negociar melhores condições com fornecedores
-                        - Analisar custos operacionais excessivos
-                        - Considerar otimização de processos
-                        """)
-                    
-                    elif margem_op < 15:
-                        st.warning(f"""
-                        ⚠️ **ATENÇÃO:** Margem operacional moderada ({margem_op:.1f}%)
-                        
-                        **Recomendações:**
-                        - Monitorar custos de perto
-                        - Buscar oportunidades de otimização
-                        - Avaliar estratégias de aumento de receita
-                        """)
-                    
-                    else:
-                        st.success(f"""
-                        ✅ **EXCELENTE:** Margem operacional saudável ({margem_op:.1f}%)
-                        
-                        **Recomendações:**
-                        - Manter o controle atual
-                        - Considerar investimentos em crescimento
-                        - Criar reservas para contingências
-                        """)
-                    
-                    # Alertas específicos
-                    if resultados['faturamento_nao_tributavel'] / resultados['faturamento_bruto'] > 0.5:
-                        st.info(f"""
-                        💡 **OBSERVAÇÃO FISCAL:** Alto percentual de vendas em dinheiro ({(resultados['faturamento_nao_tributavel'] / resultados['faturamento_bruto'] * 100):.1f}%)
-                        
-                        Considere os aspectos legais e fiscais desta situação.
-                        """)
-
-            st.markdown("---")
-            
             # Nota final
+            st.info("""
+            💡 **Nota Importante:** Esta análise é uma simulação baseada nos dados informados e parâmetros configurados. 
+            Para decisões financeiras importantes, consulte sempre um contador ou consultor financeiro qualificado.
+            
+            **Limitações:** Não inclui outros custos como aluguel, energia, marketing, depreciação, provisões, 
+            nem impostos sobre o lucro (IRPJ, CSLL) que podem ser aplicáveis dependendo do regime tributário.
+            """)
+
+# --- Ponto de Entrada da Aplicação ---
+if __name__ == "__main__":
+    main()
