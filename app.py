@@ -242,130 +242,55 @@ def analyze_sales_by_weekday(df):
         st.error(f"Erro ao analisar vendas por dia da semana: {e}")
         return None, None
 
-# --- Função CORRIGIDA para gráfico de acumulação com fundo escuro ---
+# --- Função CORRIGIDA para gráfico de acumulação estilo montanha ---
 def create_improved_accumulation_chart(df):
-    """Cria um gráfico de acumulação com fundo escuro e linha contrastante."""
+    """Cria um gráfico de acumulação estilo montanha seguindo o padrão dos outros gráficos."""
     if df.empty or 'Data' not in df.columns or 'Total' not in df.columns:
         return None
     
     df_accumulated = df.sort_values('Data').copy()
     df_accumulated['Total Acumulado'] = df_accumulated['Total'].cumsum()
     
-    # Adicionar padding nas datas para melhor visualização
-    data_min = df_accumulated['Data'].min()
-    data_max = df_accumulated['Data'].max()
-    
-    # Calcular padding (5% do range total)
-    range_total = (data_max - data_min).total_seconds()
-    padding_seconds = range_total * 0.05
-    
-    data_min_padded = data_min - timedelta(seconds=padding_seconds)
-    data_max_padded = data_max + timedelta(seconds=padding_seconds)
-    
-    # Criar gráfico com FUNDO ESCURO e linha contrastante
-    base_chart = alt.Chart(df_accumulated).add_selection(
-        alt.selection_interval(bind='scales')
-    )
-    
-    # Área sombreada com cor suave
-    area_chart = base_chart.mark_area(
-        opacity=0.3,
-        color='#00D4AA',  # Verde claro para contraste
-        interpolate='monotone'
-    ).encode(
-        x=alt.X('Data:T', 
-                scale=alt.Scale(domain=[data_min_padded, data_max_padded]),
-                axis=alt.Axis(
-                    format="%d/%m/%y",
-                    labelAngle=-45,
-                    labelFontSize=11,
-                    titleFontSize=13,
-                    labelColor='white',
-                    titleColor='white',
-                    gridColor='#444444',
-                    domainColor='white'
-                )),
-        y=alt.Y('Total Acumulado:Q', 
-                scale=alt.Scale(nice=True, padding=0.1),
-                axis=alt.Axis(
-                    format=",.0f",
-                    labelFontSize=11,
-                    titleFontSize=13,
-                    labelColor='white',
-                    titleColor='white',
-                    gridColor='#444444',
-                    domainColor='white'
-                ))
-    )
-    
-    # Linha principal com cor contrastante
-    line_chart = base_chart.mark_line(
-        point=alt.OverlayMarkDef(
-            filled=True,
-            size=100,
-            color='#1a1a1a',
-            stroke='#00D4AA',
-            strokeWidth=3
-        ),
-        strokeWidth=4,
-        color='#00D4AA',  # Verde vibrante para contraste
-        interpolate='monotone'
+    # Criar gráfico de área (montanha) seguindo o padrão dos outros gráficos
+    area_chart = alt.Chart(df_accumulated).mark_area(
+        opacity=0.7,
+        interpolate='monotone',
+        line={'color': '#1f77b4', 'strokeWidth': 2},
+        color=alt.Gradient(
+            gradient='linear',
+            stops=[
+                alt.GradientStop(color='#1f77b4', offset=0),
+                alt.GradientStop(color='#aec7e8', offset=1)
+            ],
+            x1=1, x2=1, y1=1, y2=0
+        )
     ).encode(
         x=alt.X('Data:T', 
                 title='Período',
-                scale=alt.Scale(domain=[data_min_padded, data_max_padded]),
                 axis=alt.Axis(
                     format="%d/%m/%y",
                     labelAngle=-45,
                     labelFontSize=11,
-                    titleFontSize=13,
-                    labelColor='white',
-                    titleColor='white',
-                    gridColor='#444444',
-                    domainColor='white'
+                    titleFontSize=13
                 )),
         y=alt.Y('Total Acumulado:Q', 
                 title='Capital Acumulado (R$)',
-                scale=alt.Scale(nice=True, padding=0.1),
                 axis=alt.Axis(
                     format=",.0f",
                     labelFontSize=11,
-                    titleFontSize=13,
-                    labelColor='white',
-                    titleColor='white',
-                    gridColor='#444444',
-                    domainColor='white'
+                    titleFontSize=13
                 )),
         tooltip=[
             alt.Tooltip("DataFormatada:N", title="Data"),
             alt.Tooltip("Total:Q", title="Venda do Dia (R$)", format=",.2f"),
             alt.Tooltip("Total Acumulado:Q", title="Acumulado (R$)", format=",.2f")
         ]
-    )
-    
-    # Combinar área e linha com configuração de fundo escuro
-    combined_chart = (area_chart + line_chart).resolve_scale(
-        y='shared'
     ).properties(
-        title=alt.TitleParams(
-            text="Evolução do Capital Acumulado",
-            fontSize=16,
-            fontWeight='bold',
-            anchor='start',
-            offset=20,
-            color='white'
-        ),
-        width='container',
-        height=500,
-        background='#1a1a1a'  # FUNDO ESCURO
-    ).configure_view(
-        strokeWidth=0
-    ).configure_legend(
-        labelColor='white',
-        titleColor='white'
-    )
+        title="Evolução do Capital Acumulado",
+        height=600
+    ).interactive()
     
-    return combined_chart
+    return area_chart
 
 # --- Funções de Cálculos Financeiros ---
 def calculate_financial_results(df, salario_minimo, custo_contadora, custo_fornecedores_percentual):
@@ -412,9 +337,9 @@ def main():
     try:
         col_logo, col_title = st.columns([1, 8])
         with col_logo:
-            st.image('logo.png', width=80)
+            st.image('logo.png', width=120)
         with col_title:
-            st.title("🍔 SISTEMA FINANCEIRO - CLIPS BURGER")
+            st.title("SISTEMA FINANCEIRO - CLIP'S BURGER")
             st.caption("Gestão inteligente de vendas com análise financeira em tempo real")
     except FileNotFoundError:
         st.title("🍔 SISTEMA FINANCEIRO - CLIPS BURGER")
