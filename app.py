@@ -335,9 +335,9 @@ def format_brl(value):
 def main():
     # Título melhorado com logo
     try:
-        col_logo, col_title = st.columns([1, 8])
+        col_logo, col_title = st.columns([2, 7])
         with col_logo:
-            st.image('logo.png', width=120)
+            st.image('logo.png', width=300)
         with col_title:
             st.title("SISTEMA FINANCEIRO - CLIP'S BURGER")
             st.caption("Gestão inteligente de vendas com análise financeira em tempo real")
