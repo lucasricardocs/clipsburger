@@ -5,6 +5,10 @@ import altair as alt
 from datetime import datetime, timedelta
 from google.oauth2.service_account import Credentials
 from gspread.exceptions import SpreadsheetNotFound
+import warnings
+
+# Suprimir warnings específicos do pandas
+warnings.filterwarnings('ignore', category=FutureWarning, message='.*observed=False.*')
 
 # --- Configurações Globais e Constantes ---
 SPREADSHEET_ID = '1NTScbiIna-iE7roQ9XBdjUOssRihTFFby4INAAQNXTg'
@@ -15,6 +19,9 @@ st.set_page_config(page_title="Sistema Financeiro - Clips Burger", layout="cente
 
 # Configuração de tema para gráficos mais bonitos
 alt.data_transformers.enable('json')
+
+# Paleta de cores otimizada para modo escuro
+CORES_MODO_ESCURO = ['#4c78a8', '#54a24b', '#f58518', '#e45756', '#72b7b2', '#ff9da6', '#9d755d', '#bab0ac']
 
 # Define a ordem correta dos dias da semana e meses
 dias_semana_ordem = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"]
@@ -216,7 +223,7 @@ def create_enhanced_payment_pie_chart(df):
     if payment_data.empty:
         return None
     
-    # Gráfico de pizza com Altair
+    # Gráfico de pizza com Altair - cores otimizadas para modo escuro
     pie_chart = alt.Chart(payment_data).mark_arc(
         outerRadius=150,
         innerRadius=50,  # Cria um efeito donut
@@ -226,7 +233,7 @@ def create_enhanced_payment_pie_chart(df):
         theta=alt.Theta('Valor:Q', stack=True),
         color=alt.Color(
             'Método:N',
-            scale=alt.Scale(range=['#1f77b4', '#2ca02c', '#ff7f0e']),
+            scale=alt.Scale(range=CORES_MODO_ESCURO[:3]),
             legend=alt.Legend(
                 title="Método de Pagamento",
                 orient='bottom',
@@ -284,8 +291,11 @@ def create_advanced_daily_sales_chart(df):
         ),
         color=alt.Color(
             'Método:N',
-            scale=alt.Scale(range=['#1f77b4', '#2ca02c', '#ff7f0e']),
-            legend=alt.Legend(title="Método de Pagamento")
+            scale=alt.Scale(range=CORES_MODO_ESCURO[:3]),
+            legend=alt.Legend(
+                title="Método de Pagamento",
+                orient='bottom'
+            )
         ),
         tooltip=[
             alt.Tooltip('DataFormatada:N', title='Data'),
@@ -296,9 +306,9 @@ def create_advanced_daily_sales_chart(df):
     
     # Linha de tendência do total
     line = alt.Chart(df_sorted).mark_line(
-        color='red',
+        color=CORES_MODO_ESCURO[3],  # Cor vibrante para contraste
         strokeWidth=3,
-        point=alt.OverlayMarkDef(color='red', size=60)
+        point=alt.OverlayMarkDef(color=CORES_MODO_ESCURO[3], size=60)
     ).encode(
         x=alt.X('Data:T'),
         y=alt.Y(
@@ -346,12 +356,12 @@ def create_interactive_accumulation_chart(df):
     area_chart = alt.Chart(df_accumulated).mark_area(
         opacity=0.7,
         interpolate='monotone',
-        line={'color': '#1f77b4', 'strokeWidth': 3},
+        line={'color': CORES_MODO_ESCURO[0], 'strokeWidth': 3},
         color=alt.Gradient(
             gradient='linear',
             stops=[
-                alt.GradientStop(color='#1f77b4', offset=0),
-                alt.GradientStop(color='#aec7e8', offset=1)
+                alt.GradientStop(color=CORES_MODO_ESCURO[0], offset=0),
+                alt.GradientStop(color=CORES_MODO_ESCURO[4], offset=1)
             ],
             x1=1, x2=1, y1=1, y2=0
         )
@@ -380,7 +390,7 @@ def create_interactive_accumulation_chart(df):
         'Label': [f'Pico: R$ {max_value:,.0f}']
     })).mark_circle(
         size=200,
-        color='red',
+        color=CORES_MODO_ESCURO[3],
         stroke='white',
         strokeWidth=2
     ).encode(
@@ -399,7 +409,7 @@ def create_interactive_accumulation_chart(df):
         baseline='bottom',
         fontSize=12,
         fontWeight='bold',
-        color='red'
+        color=CORES_MODO_ESCURO[3]
     ).encode(
         x='Data:T',
         y='Total_Acumulado:Q',
@@ -423,7 +433,7 @@ def create_interactive_accumulation_chart(df):
     return combined_chart
 
 def create_enhanced_weekday_analysis(df):
-    """Cria análise avançada de vendas por dia da semana."""
+    """Cria análise de vendas por dia da semana com histogramas únicos."""
     if df.empty or 'DiaSemana' not in df.columns or 'Total' not in df.columns:
         return None, None
     
@@ -434,7 +444,7 @@ def create_enhanced_weekday_analysis(df):
     if df_copy.empty:
         return None, None
     
-    # CORREÇÃO: Adicionar observed=True para evitar o FutureWarning
+    # CORREÇÃO: Adicionar observed=True para evitar FutureWarning
     weekday_stats = df_copy.groupby('DiaSemana', observed=True).agg({
         'Total': ['mean', 'sum', 'count']
     }).round(2)
@@ -443,9 +453,16 @@ def create_enhanced_weekday_analysis(df):
     weekday_stats = weekday_stats.reindex([d for d in dias_semana_ordem if d in weekday_stats.index])
     weekday_stats = weekday_stats.reset_index()
     
-    # Gráfico de barras para média
-    bars_media = alt.Chart(weekday_stats).mark_bar(
-        color='#1f77b4',
+    # Preparar dados para histograma combinado
+    weekday_melted = weekday_stats.melt(
+        id_vars=['DiaSemana'],
+        value_vars=['Média', 'Total'],
+        var_name='Tipo',
+        value_name='Valor'
+    )
+    
+    # Histograma combinado com barras lado a lado
+    histogram_chart = alt.Chart(weekday_melted).mark_bar(
         cornerRadiusTopLeft=3,
         cornerRadiusTopRight=3
     ).encode(
@@ -456,65 +473,45 @@ def create_enhanced_weekday_analysis(df):
             axis=alt.Axis(labelAngle=-45)
         ),
         y=alt.Y(
-            'Média:Q',
-            title='Média de Vendas (R$)'
+            'Valor:Q',
+            title='Valor (R$)'
+        ),
+        color=alt.Color(
+            'Tipo:N',
+            scale=alt.Scale(
+                domain=['Média', 'Total'],
+                range=[CORES_MODO_ESCURO[0], CORES_MODO_ESCURO[2]]
+            ),
+            legend=alt.Legend(
+                title="Tipo de Análise",
+                orient='bottom'
+            )
+        ),
+        column=alt.Column(
+            'Tipo:N',
+            title=None,
+            header=alt.Header(labelFontSize=14, titleFontSize=16)
         ),
         tooltip=[
             alt.Tooltip('DiaSemana:N', title='Dia'),
-            alt.Tooltip('Média:Q', title='Média (R$)', format=',.2f'),
-            alt.Tooltip('Total:Q', title='Total (R$)', format=',.2f'),
-            alt.Tooltip('Dias_Vendas:Q', title='Dias com Vendas')
+            alt.Tooltip('Tipo:N', title='Tipo'),
+            alt.Tooltip('Valor:Q', title='Valor (R$)', format=',.2f')
         ]
     ).properties(
         title=alt.TitleParams(
-            text="📊 Média de Vendas por Dia da Semana",
-            fontSize=14
+            text="📅 Análise por Dia da Semana - Média e Total",
+            fontSize=16,
+            anchor='start'
         ),
         height=400,
-        width=350
-    )
-    
-    # Gráfico de linha para total
-    line_total = alt.Chart(weekday_stats).mark_line(
-        color='#ff7f0e',
-        strokeWidth=3,
-        point=alt.OverlayMarkDef(color='#ff7f0e', size=100)
-    ).encode(
-        x=alt.X(
-            'DiaSemana:O',
-            title='Dia da Semana',
-            sort=dias_semana_ordem,
-            axis=alt.Axis(labelAngle=-45)
-        ),
-        y=alt.Y(
-            'Total:Q',
-            title='Total Acumulado (R$)'
-        ),
-        tooltip=[
-            alt.Tooltip('DiaSemana:N', title='Dia'),
-            alt.Tooltip('Total:Q', title='Total (R$)', format=',.2f'),
-            alt.Tooltip('Média:Q', title='Média (R$)', format=',.2f')
-        ]
-    ).properties(
-        title=alt.TitleParams(
-            text="📈 Total de Vendas por Dia da Semana",
-            fontSize=14
-        ),
-        height=400,
-        width=350
-    )
-    
-    # Combinar gráficos lado a lado
-    combined_chart = alt.hconcat(
-        bars_media,
-        line_total
+        width=300
     ).resolve_scale(
         y='independent'
     )
     
     best_day = weekday_stats.loc[weekday_stats['Média'].idxmax(), 'DiaSemana']
     
-    return combined_chart, best_day
+    return histogram_chart, best_day
 
 def create_financial_dashboard_altair(resultados):
     """Cria um dashboard financeiro usando gráficos de barras horizontais."""
@@ -565,9 +562,12 @@ def create_financial_dashboard_altair(resultados):
             'Tipo:N',
             scale=alt.Scale(
                 domain=['Receita', 'Custo', 'Resultado'],
-                range=['#2ca02c', '#d62728', '#1f77b4']
+                range=[CORES_MODO_ESCURO[1], CORES_MODO_ESCURO[3], CORES_MODO_ESCURO[0]]
             ),
-            legend=alt.Legend(title="Tipo")
+            legend=alt.Legend(
+                title="Tipo",
+                orient='bottom'
+            )
         ),
         tooltip=[
             alt.Tooltip('Categoria:N', title='Categoria'),
@@ -586,63 +586,6 @@ def create_financial_dashboard_altair(resultados):
     
     return chart
 
-def create_payment_evolution_chart(df, title="Evolução da Preferência por Pagamento (Mensal)"):
-    """Cria gráfico de evolução dos métodos de pagamento."""
-    if df.empty or 'AnoMês' not in df.columns or not any(col in df.columns for col in ['Cartão', 'Dinheiro', 'Pix']):
-        return None
-    
-    df_chart = df.sort_values('AnoMês')
-    monthly_payments = df_chart.groupby('AnoMês')[['Cartão', 'Dinheiro', 'Pix']].sum().reset_index()
-    monthly_payments_long = monthly_payments.melt(
-        id_vars=['AnoMês'], 
-        value_vars=['Cartão', 'Dinheiro', 'Pix'], 
-        var_name='Método', 
-        value_name='Valor'
-    )
-    monthly_payments_long = monthly_payments_long[monthly_payments_long['Valor'] > 0]
-    
-    if monthly_payments_long.empty:
-        return None
-    
-    # Gráfico de área empilhada com cores melhoradas
-    area_chart = alt.Chart(monthly_payments_long).mark_area(
-        opacity=0.8,
-        interpolate='monotone'
-    ).encode(
-        x=alt.X(
-            'AnoMês:O',
-            title='Período (Ano-Mês)',
-            sort=None,
-            axis=alt.Axis(labelAngle=-45)
-        ),
-        y=alt.Y(
-            'Valor:Q',
-            title='Valor Total (R$)',
-            stack='zero',
-            axis=alt.Axis(format=",.0f")
-        ),
-        color=alt.Color(
-            'Método:N',
-            scale=alt.Scale(range=['#1f77b4', '#2ca02c', '#ff7f0e']),
-            legend=alt.Legend(title="Método de Pagamento")
-        ),
-        tooltip=[
-            alt.Tooltip("AnoMês:O", title="Período"),
-            alt.Tooltip("Método:N", title="Método"),
-            alt.Tooltip("Valor:Q", title="Valor (R$)", format=",.2f")
-        ]
-    ).properties(
-        title=alt.TitleParams(
-            text=title,
-            fontSize=16,
-            anchor='start'
-        ),
-        height=500,
-        width=700
-    )
-    
-    return area_chart
-
 def create_sales_histogram(df, title="Distribuição dos Valores de Venda Diários"):
     """Cria histograma de distribuição de vendas."""
     if df.empty or 'Total' not in df.columns or df['Total'].isnull().all():
@@ -652,9 +595,9 @@ def create_sales_histogram(df, title="Distribuição dos Valores de Venda Diári
     if df_filtered_hist.empty:
         return None
     
-    # Histograma com cores melhoradas
+    # Histograma com cores melhoradas para modo escuro
     histogram = alt.Chart(df_filtered_hist).mark_bar(
-        color='#1f77b4',
+        color=CORES_MODO_ESCURO[0],
         opacity=0.8,
         cornerRadiusTopLeft=3,
         cornerRadiusTopRight=3
@@ -697,7 +640,7 @@ def analyze_sales_by_weekday(df):
         if df_copy.empty:
             return None, None
         
-        # CORREÇÃO: Adicionar observed=True para evitar o FutureWarning
+        # CORREÇÃO: Adicionar observed=True para evitar FutureWarning
         avg_sales_weekday = df_copy.groupby('DiaSemana', observed=True)['Total'].mean().reindex(dias_semana_ordem).dropna()
         
         if not avg_sales_weekday.empty:
@@ -933,7 +876,7 @@ def main():
             else: st.info("Sem dados de pagamento para exibir o resumo nesta seção.")
             st.divider()
 
-            st.subheader("📅 Análise Avançada por Dia da Semana")
+            st.subheader("📅 Análise por Dia da Semana")
             weekday_chart, best_day = create_enhanced_weekday_analysis(df_filtered)
             if weekday_chart:
                 st.altair_chart(weekday_chart, use_container_width=True)
@@ -941,12 +884,6 @@ def main():
                     st.success(f"🏆 **Melhor Dia da Semana:** {best_day}")
             else:
                 st.info("📊 Dados insuficientes para calcular a análise por dia da semana.")
-            st.divider()
-            
-            st.subheader("📈 Evolução dos Métodos de Pagamento")
-            payment_evolution_chart = create_payment_evolution_chart(df_filtered)
-            if payment_evolution_chart: st.altair_chart(payment_evolution_chart, use_container_width=True)
-            else: st.info("Dados insuficientes para Evolução de Pagamento.")
             st.divider()
 
             st.subheader("📊 Distribuição de Valores de Venda Diários")
