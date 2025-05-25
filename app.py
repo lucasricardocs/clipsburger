@@ -518,20 +518,20 @@ def main():
             with col_param1:
                 salario_minimo_input = st.number_input(
                     "💼 Salário Base Funcionário (R$)",
-                    min_value=0.0, value=1412.0, format="%.2f",
+                    min_value=0.0, value=1550.0, format="%.2f",
                     help="Salário base do funcionário. Os encargos (55%) serão calculados automaticamente.",
                     key="salario_tab4"
                 )
             with col_param2:
                 custo_contadora_input = st.number_input(
-                    "📋 Honorários Contábeis Mensais (R$)",
+                    "📋 Honorários Contábeis (R$)",
                     min_value=0.0, value=316.0, format="%.2f",
                     help="Valor mensal pago pelos serviços contábeis.",
                     key="contadora_tab4"
                 )
             with col_param3:
                 custo_fornecedores_percentual = st.number_input(
-                    "📦 Custo dos Produtos Vendidos (%)",
+                    "📦 Custo dos Produtos (%)",
                     min_value=0.0, max_value=100.0, value=30.0, format="%.1f",
                     help="Percentual do faturamento destinado à compra de produtos (bebidas, frios, pães, etc.).",
                     key="fornecedores_tab4"
