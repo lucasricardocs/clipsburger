@@ -2,9 +2,6 @@ import streamlit as st
 import gspread
 import pandas as pd
 import altair as alt
-import plotly.express as px
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
 from google.oauth2.service_account import Credentials
 from gspread.exceptions import SpreadsheetNotFound
@@ -18,17 +15,6 @@ st.set_page_config(page_title="Sistema Financeiro - Clips Burger", layout="cente
 
 # Configuração de tema para gráficos mais bonitos
 alt.data_transformers.enable('json')
-
-# Paleta de cores personalizada
-CORES_PERSONALIZADAS = {
-    'primary': '#1f77b4',
-    'secondary': '#ff7f0e', 
-    'success': '#2ca02c',
-    'danger': '#d62728',
-    'warning': '#ff7f0e',
-    'info': '#17becf',
-    'gradient': ['#1f77b4', '#aec7e8', '#ff7f0e', '#ffbb78', '#2ca02c', '#98df8a']
-}
 
 # Define a ordem correta dos dias da semana e meses
 dias_semana_ordem = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"]
@@ -215,9 +201,9 @@ def filter_by_rolling_days(df, dias_selecionados):
     
     return df_filtrado
 
-# --- Funções de Gráficos Interativos Aprimorados ---
+# --- Funções de Gráficos Interativos em Altair ---
 def create_enhanced_payment_pie_chart(df):
-    """Cria um gráfico de pizza interativo e moderno para métodos de pagamento."""
+    """Cria um gráfico de pizza interativo usando Altair."""
     if df.empty or not any(col in df.columns for col in ['Cartão', 'Dinheiro', 'Pix']):
         return None
     
@@ -230,168 +216,211 @@ def create_enhanced_payment_pie_chart(df):
     if payment_data.empty:
         return None
     
-    # Gráfico de pizza com Plotly para maior interatividade
-    fig = px.pie(
-        payment_data, 
-        values='Valor', 
-        names='Método',
-        title="🥧 Distribuição por Método de Pagamento",
-        color_discrete_sequence=px.colors.qualitative.Set3,
-        hover_data=['Valor']
+    # Gráfico de pizza com Altair
+    pie_chart = alt.Chart(payment_data).mark_arc(
+        outerRadius=150,
+        innerRadius=50,  # Cria um efeito donut
+        stroke='white',
+        strokeWidth=2
+    ).encode(
+        theta=alt.Theta('Valor:Q', stack=True),
+        color=alt.Color(
+            'Método:N',
+            scale=alt.Scale(range=['#1f77b4', '#2ca02c', '#ff7f0e']),
+            legend=alt.Legend(
+                title="Método de Pagamento",
+                orient='bottom',
+                titleFontSize=14,
+                labelFontSize=12
+            )
+        ),
+        tooltip=[
+            alt.Tooltip('Método:N', title='Método'),
+            alt.Tooltip('Valor:Q', title='Valor (R$)', format=',.2f')
+        ]
+    ).properties(
+        title=alt.TitleParams(
+            text="🥧 Distribuição por Método de Pagamento",
+            fontSize=16,
+            anchor='start'
+        ),
+        height=400,
+        width=400
+    ).resolve_scale(
+        color='independent'
     )
     
-    fig.update_traces(
-        textposition='inside', 
-        textinfo='percent+label',
-        hovertemplate='<b>%{label}</b><br>Valor: R$ %{value:,.2f}<br>Percentual: %{percent}<extra></extra>',
-        pull=[0.1, 0, 0]  # Destaca o primeiro segmento
-    )
-    
-    fig.update_layout(
-        showlegend=True,
-        height=500,
-        font=dict(size=14),
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=-0.2,
-            xanchor="center",
-            x=0.5
-        )
-    )
-    
-    return fig
+    return pie_chart
 
 def create_advanced_daily_sales_chart(df):
-    """Cria um gráfico de vendas diárias com múltiplas visualizações."""
+    """Cria um gráfico de vendas diárias com barras empilhadas e linha de tendência."""
     if df.empty or 'Data' not in df.columns:
         return None
     
-    df_sorted = df.sort_values('Data')
+    df_sorted = df.sort_values('Data').copy()
     
-    # Criar subplot com múltiplos gráficos
-    fig = make_subplots(
-        rows=2, cols=1,
-        subplot_titles=('📊 Vendas Diárias por Método de Pagamento', '📈 Tendência de Vendas Totais'),
-        vertical_spacing=0.12,
-        specs=[[{"secondary_y": False}], [{"secondary_y": True}]]
+    # Preparar dados para barras empilhadas
+    df_melted = df_sorted.melt(
+        id_vars=['Data', 'DataFormatada', 'Total'],
+        value_vars=['Cartão', 'Dinheiro', 'Pix'],
+        var_name='Método',
+        value_name='Valor'
     )
+    df_melted = df_melted[df_melted['Valor'] > 0]
     
     # Gráfico de barras empilhadas
-    fig.add_trace(
-        go.Bar(name='💳 Cartão', x=df_sorted['Data'], y=df_sorted['Cartão'], 
-               marker_color='#1f77b4', hovertemplate='Data: %{x}<br>Cartão: R$ %{y:,.2f}<extra></extra>'),
-        row=1, col=1
-    )
-    fig.add_trace(
-        go.Bar(name='💵 Dinheiro', x=df_sorted['Data'], y=df_sorted['Dinheiro'], 
-               marker_color='#2ca02c', hovertemplate='Data: %{x}<br>Dinheiro: R$ %{y:,.2f}<extra></extra>'),
-        row=1, col=1
-    )
-    fig.add_trace(
-        go.Bar(name='📱 PIX', x=df_sorted['Data'], y=df_sorted['Pix'], 
-               marker_color='#ff7f0e', hovertemplate='Data: %{x}<br>PIX: R$ %{y:,.2f}<extra></extra>'),
-        row=1, col=1
-    )
-    
-    # Linha de tendência
-    fig.add_trace(
-        go.Scatter(name='📈 Total Diário', x=df_sorted['Data'], y=df_sorted['Total'],
-                  mode='lines+markers', line=dict(color='#d62728', width=3),
-                  marker=dict(size=8), hovertemplate='Data: %{x}<br>Total: R$ %{y:,.2f}<extra></extra>'),
-        row=2, col=1
-    )
-    
-    # Média móvel de 7 dias
-    if len(df_sorted) >= 7:
-        df_sorted['Media_Movel'] = df_sorted['Total'].rolling(window=7, center=True).mean()
-        fig.add_trace(
-            go.Scatter(name='📊 Média Móvel (7 dias)', x=df_sorted['Data'], y=df_sorted['Media_Movel'],
-                      mode='lines', line=dict(color='#9467bd', width=2, dash='dash'),
-                      hovertemplate='Data: %{x}<br>Média 7 dias: R$ %{y:,.2f}<extra></extra>'),
-            row=2, col=1
-        )
-    
-    # Configurações do layout
-    fig.update_layout(
-        height=800,
-        showlegend=True,
-        barmode='stack',
-        title_text="📊 Análise Completa de Vendas Diárias",
-        title_x=0.5,
-        font=dict(size=12),
-        legend=dict(orientation="h", yanchor="bottom", y=-0.15, xanchor="center", x=0.5)
+    bars = alt.Chart(df_melted).mark_bar(
+        size=20
+    ).encode(
+        x=alt.X(
+            'Data:T',
+            title='Data',
+            axis=alt.Axis(format='%d/%m', labelAngle=-45)
+        ),
+        y=alt.Y(
+            'Valor:Q',
+            title='Valor (R$)',
+            stack='zero'
+        ),
+        color=alt.Color(
+            'Método:N',
+            scale=alt.Scale(range=['#1f77b4', '#2ca02c', '#ff7f0e']),
+            legend=alt.Legend(title="Método de Pagamento")
+        ),
+        tooltip=[
+            alt.Tooltip('DataFormatada:N', title='Data'),
+            alt.Tooltip('Método:N', title='Método'),
+            alt.Tooltip('Valor:Q', title='Valor (R$)', format=',.2f')
+        ]
     )
     
-    # Configurar eixos
-    fig.update_xaxes(title_text="Data", row=2, col=1)
-    fig.update_yaxes(title_text="Valor (R$)", row=1, col=1)
-    fig.update_yaxes(title_text="Valor Total (R$)", row=2, col=1)
+    # Linha de tendência do total
+    line = alt.Chart(df_sorted).mark_line(
+        color='red',
+        strokeWidth=3,
+        point=alt.OverlayMarkDef(color='red', size=60)
+    ).encode(
+        x=alt.X('Data:T'),
+        y=alt.Y(
+            'Total:Q',
+            title='Total Diário (R$)',
+            scale=alt.Scale(zero=False)
+        ),
+        tooltip=[
+            alt.Tooltip('DataFormatada:N', title='Data'),
+            alt.Tooltip('Total:Q', title='Total (R$)', format=',.2f')
+        ]
+    )
     
-    return fig
+    # Combinar gráficos
+    combined_chart = alt.layer(
+        bars,
+        line
+    ).resolve_scale(
+        y='independent'
+    ).properties(
+        title=alt.TitleParams(
+            text="📊 Vendas Diárias por Método de Pagamento com Tendência",
+            fontSize=16,
+            anchor='start'
+        ),
+        height=500,
+        width=700
+    )
+    
+    return combined_chart
 
 def create_interactive_accumulation_chart(df):
-    """Cria um gráfico de acumulação interativo estilo montanha."""
+    """Cria um gráfico de área para acumulação de capital."""
     if df.empty or 'Data' not in df.columns or 'Total' not in df.columns:
         return None
     
     df_accumulated = df.sort_values('Data').copy()
     df_accumulated['Total_Acumulado'] = df_accumulated['Total'].cumsum()
-    df_accumulated['Crescimento_Diario'] = df_accumulated['Total_Acumulado'].pct_change() * 100
     
-    fig = go.Figure()
-    
-    # Área de acumulação
-    fig.add_trace(go.Scatter(
-        x=df_accumulated['Data'],
-        y=df_accumulated['Total_Acumulado'],
-        fill='tonexty',
-        mode='lines',
-        line=dict(color='rgba(31, 119, 180, 0.8)', width=3),
-        fillcolor='rgba(31, 119, 180, 0.3)',
-        name='💰 Capital Acumulado',
-        hovertemplate='<b>Data:</b> %{x}<br><b>Acumulado:</b> R$ %{y:,.2f}<extra></extra>'
-    ))
-    
-    # Pontos de destaque para valores máximos
+    # Encontrar o pico máximo
     max_value = df_accumulated['Total_Acumulado'].max()
     max_date = df_accumulated[df_accumulated['Total_Acumulado'] == max_value]['Data'].iloc[0]
     
-    fig.add_trace(go.Scatter(
-        x=[max_date],
-        y=[max_value],
-        mode='markers',
-        marker=dict(size=15, color='red', symbol='star'),
-        name='🎯 Pico Máximo',
-        hovertemplate='<b>Pico Máximo</b><br>Data: %{x}<br>Valor: R$ %{y:,.2f}<extra></extra>'
-    ))
-    
-    fig.update_layout(
-        title="🏔️ Evolução do Capital Acumulado",
-        xaxis_title="Período",
-        yaxis_title="Capital Acumulado (R$)",
-        height=600,
-        showlegend=True,
-        hovermode='x unified',
-        font=dict(size=12)
+    # Gráfico de área
+    area_chart = alt.Chart(df_accumulated).mark_area(
+        opacity=0.7,
+        interpolate='monotone',
+        line={'color': '#1f77b4', 'strokeWidth': 3},
+        color=alt.Gradient(
+            gradient='linear',
+            stops=[
+                alt.GradientStop(color='#1f77b4', offset=0),
+                alt.GradientStop(color='#aec7e8', offset=1)
+            ],
+            x1=1, x2=1, y1=1, y2=0
+        )
+    ).encode(
+        x=alt.X(
+            'Data:T',
+            title='Período',
+            axis=alt.Axis(format='%d/%m', labelAngle=-45)
+        ),
+        y=alt.Y(
+            'Total_Acumulado:Q',
+            title='Capital Acumulado (R$)',
+            scale=alt.Scale(zero=True)
+        ),
+        tooltip=[
+            alt.Tooltip('DataFormatada:N', title='Data'),
+            alt.Tooltip('Total:Q', title='Venda do Dia (R$)', format=',.2f'),
+            alt.Tooltip('Total_Acumulado:Q', title='Acumulado (R$)', format=',.2f')
+        ]
     )
     
-    # Adicionar anotação no pico
-    fig.add_annotation(
-        x=max_date,
-        y=max_value,
-        text=f"Pico: R$ {max_value:,.2f}",
-        showarrow=True,
-        arrowhead=2,
-        arrowsize=1,
-        arrowwidth=2,
-        arrowcolor="red",
-        bgcolor="rgba(255,255,255,0.8)",
-        bordercolor="red",
-        borderwidth=1
+    # Ponto de destaque no pico
+    peak_point = alt.Chart(pd.DataFrame({
+        'Data': [max_date],
+        'Total_Acumulado': [max_value],
+        'Label': [f'Pico: R$ {max_value:,.0f}']
+    })).mark_circle(
+        size=200,
+        color='red',
+        stroke='white',
+        strokeWidth=2
+    ).encode(
+        x='Data:T',
+        y='Total_Acumulado:Q',
+        tooltip=['Label:N']
     )
     
-    return fig
+    # Texto de anotação
+    peak_text = alt.Chart(pd.DataFrame({
+        'Data': [max_date],
+        'Total_Acumulado': [max_value * 1.1],
+        'Label': [f'🎯 Pico: R$ {max_value:,.0f}']
+    })).mark_text(
+        align='center',
+        baseline='bottom',
+        fontSize=12,
+        fontWeight='bold',
+        color='red'
+    ).encode(
+        x='Data:T',
+        y='Total_Acumulado:Q',
+        text='Label:N'
+    )
+    
+    combined_chart = alt.layer(
+        area_chart,
+        peak_point,
+        peak_text
+    ).properties(
+        title=alt.TitleParams(
+            text="🏔️ Evolução do Capital Acumulado",
+            fontSize=16,
+            anchor='start'
+        ),
+        height=500,
+        width=700
+    )
+    
+    return combined_chart
 
 def create_enhanced_weekday_analysis(df):
     """Cria análise avançada de vendas por dia da semana."""
@@ -405,137 +434,277 @@ def create_enhanced_weekday_analysis(df):
     if df_copy.empty:
         return None, None
     
-    # Análise por dia da semana
-    weekday_stats = df_copy.groupby('DiaSemana').agg({
-        'Total': ['mean', 'sum', 'count', 'std']
+    # CORREÇÃO: Adicionar observed=True para evitar o FutureWarning
+    weekday_stats = df_copy.groupby('DiaSemana', observed=True).agg({
+        'Total': ['mean', 'sum', 'count']
     }).round(2)
     
-    weekday_stats.columns = ['Média', 'Total', 'Dias_Vendas', 'Desvio_Padrão']
+    weekday_stats.columns = ['Média', 'Total', 'Dias_Vendas']
     weekday_stats = weekday_stats.reindex([d for d in dias_semana_ordem if d in weekday_stats.index])
-    
-    # Gráfico combinado
-    fig = make_subplots(
-        rows=1, cols=2,
-        subplot_titles=('📊 Média de Vendas por Dia', '📈 Total de Vendas por Dia'),
-        specs=[[{"secondary_y": False}, {"secondary_y": True}]]
-    )
+    weekday_stats = weekday_stats.reset_index()
     
     # Gráfico de barras para média
-    fig.add_trace(
-        go.Bar(
-            x=weekday_stats.index,
-            y=weekday_stats['Média'],
-            name='💰 Média Diária',
-            marker_color='lightblue',
-            text=[f'R$ {val:,.0f}' for val in weekday_stats['Média']],
-            textposition='outside',
-            hovertemplate='<b>%{x}</b><br>Média: R$ %{y:,.2f}<extra></extra>'
+    bars_media = alt.Chart(weekday_stats).mark_bar(
+        color='#1f77b4',
+        cornerRadiusTopLeft=3,
+        cornerRadiusTopRight=3
+    ).encode(
+        x=alt.X(
+            'DiaSemana:O',
+            title='Dia da Semana',
+            sort=dias_semana_ordem,
+            axis=alt.Axis(labelAngle=-45)
         ),
-        row=1, col=1
+        y=alt.Y(
+            'Média:Q',
+            title='Média de Vendas (R$)'
+        ),
+        tooltip=[
+            alt.Tooltip('DiaSemana:N', title='Dia'),
+            alt.Tooltip('Média:Q', title='Média (R$)', format=',.2f'),
+            alt.Tooltip('Total:Q', title='Total (R$)', format=',.2f'),
+            alt.Tooltip('Dias_Vendas:Q', title='Dias com Vendas')
+        ]
+    ).properties(
+        title=alt.TitleParams(
+            text="📊 Média de Vendas por Dia da Semana",
+            fontSize=14
+        ),
+        height=400,
+        width=350
     )
     
     # Gráfico de linha para total
-    fig.add_trace(
-        go.Scatter(
-            x=weekday_stats.index,
-            y=weekday_stats['Total'],
-            mode='lines+markers',
-            name='📈 Total Acumulado',
-            line=dict(color='orange', width=3),
-            marker=dict(size=10),
-            hovertemplate='<b>%{x}</b><br>Total: R$ %{y:,.2f}<extra></extra>'
+    line_total = alt.Chart(weekday_stats).mark_line(
+        color='#ff7f0e',
+        strokeWidth=3,
+        point=alt.OverlayMarkDef(color='#ff7f0e', size=100)
+    ).encode(
+        x=alt.X(
+            'DiaSemana:O',
+            title='Dia da Semana',
+            sort=dias_semana_ordem,
+            axis=alt.Axis(labelAngle=-45)
         ),
-        row=1, col=2
+        y=alt.Y(
+            'Total:Q',
+            title='Total Acumulado (R$)'
+        ),
+        tooltip=[
+            alt.Tooltip('DiaSemana:N', title='Dia'),
+            alt.Tooltip('Total:Q', title='Total (R$)', format=',.2f'),
+            alt.Tooltip('Média:Q', title='Média (R$)', format=',.2f')
+        ]
+    ).properties(
+        title=alt.TitleParams(
+            text="📈 Total de Vendas por Dia da Semana",
+            fontSize=14
+        ),
+        height=400,
+        width=350
     )
     
-    fig.update_layout(
-        height=500,
-        showlegend=True,
-        title_text="📅 Análise Detalhada por Dia da Semana"
+    # Combinar gráficos lado a lado
+    combined_chart = alt.hconcat(
+        bars_media,
+        line_total
+    ).resolve_scale(
+        y='independent'
     )
     
-    best_day = weekday_stats['Média'].idxmax()
+    best_day = weekday_stats.loc[weekday_stats['Média'].idxmax(), 'DiaSemana']
     
-    return fig, best_day
+    return combined_chart, best_day
 
-def create_financial_dashboard(resultados):
-    """Cria um dashboard financeiro interativo."""
-    # Dados para o gráfico de cascata
-    categorias = ['Faturamento Bruto', 'Impostos', 'Custo Produtos', 'Folha Pagamento', 'Serviços Contábeis', 'Lucro Final']
-    valores = [
-        resultados['faturamento_bruto'],
-        -resultados['imposto_simples'],
-        -resultados['custo_fornecedores_valor'],
-        -resultados['custo_funcionario'],
-        -resultados['custo_contadora'],
-        resultados['lucro_bruto']
-    ]
+def create_financial_dashboard_altair(resultados):
+    """Cria um dashboard financeiro usando gráficos de barras horizontais."""
+    # Preparar dados para visualização
+    financial_data = pd.DataFrame({
+        'Categoria': [
+            'Faturamento Bruto',
+            'Impostos',
+            'Custo Produtos',
+            'Folha Pagamento',
+            'Serviços Contábeis',
+            'Lucro Final'
+        ],
+        'Valor': [
+            resultados['faturamento_bruto'],
+            -resultados['imposto_simples'],
+            -resultados['custo_fornecedores_valor'],
+            -resultados['custo_funcionario'],
+            -resultados['custo_contadora'],
+            resultados['lucro_bruto']
+        ],
+        'Tipo': [
+            'Receita',
+            'Custo',
+            'Custo',
+            'Custo',
+            'Custo',
+            'Resultado'
+        ]
+    })
     
-    # Gráfico de cascata
-    fig = go.Figure(go.Waterfall(
-        name="Fluxo Financeiro",
-        orientation="v",
-        measure=["absolute", "relative", "relative", "relative", "relative", "total"],
-        x=categorias,
-        textposition="outside",
-        text=[f"R$ {abs(v):,.0f}" for v in valores],
-        y=valores,
-        connector={"line": {"color": "rgb(63, 63, 63)"}},
-        decreasing={"marker": {"color": "red"}},
-        increasing={"marker": {"color": "green"}},
-        totals={"marker": {"color": "blue"}}
-    ))
-    
-    fig.update_layout(
-        title="💰 Fluxo de Formação do Resultado Financeiro",
-        height=600,
-        showlegend=False,
-        xaxis_title="Componentes Financeiros",
-        yaxis_title="Valor (R$)"
+    # Gráfico de barras horizontais
+    chart = alt.Chart(financial_data).mark_bar(
+        cornerRadiusTopRight=5,
+        cornerRadiusBottomRight=5
+    ).encode(
+        x=alt.X(
+            'Valor:Q',
+            title='Valor (R$)',
+            axis=alt.Axis(format=',.0f')
+        ),
+        y=alt.Y(
+            'Categoria:O',
+            title=None,
+            sort=financial_data['Categoria'].tolist()
+        ),
+        color=alt.Color(
+            'Tipo:N',
+            scale=alt.Scale(
+                domain=['Receita', 'Custo', 'Resultado'],
+                range=['#2ca02c', '#d62728', '#1f77b4']
+            ),
+            legend=alt.Legend(title="Tipo")
+        ),
+        tooltip=[
+            alt.Tooltip('Categoria:N', title='Categoria'),
+            alt.Tooltip('Valor:Q', title='Valor (R$)', format=',.2f'),
+            alt.Tooltip('Tipo:N', title='Tipo')
+        ]
+    ).properties(
+        title=alt.TitleParams(
+            text="💰 Composição do Resultado Financeiro",
+            fontSize=16,
+            anchor='start'
+        ),
+        height=400,
+        width=600
     )
     
-    return fig
+    return chart
 
 def create_payment_evolution_chart(df, title="Evolução da Preferência por Pagamento (Mensal)"):
+    """Cria gráfico de evolução dos métodos de pagamento."""
     if df.empty or 'AnoMês' not in df.columns or not any(col in df.columns for col in ['Cartão', 'Dinheiro', 'Pix']):
         return None
+    
     df_chart = df.sort_values('AnoMês')
     monthly_payments = df_chart.groupby('AnoMês')[['Cartão', 'Dinheiro', 'Pix']].sum().reset_index()
     monthly_payments_long = monthly_payments.melt(
-        id_vars=['AnoMês'], value_vars=['Cartão', 'Dinheiro', 'Pix'], var_name='Método', value_name='Valor')
+        id_vars=['AnoMês'], 
+        value_vars=['Cartão', 'Dinheiro', 'Pix'], 
+        var_name='Método', 
+        value_name='Valor'
+    )
     monthly_payments_long = monthly_payments_long[monthly_payments_long['Valor'] > 0]
-    if monthly_payments_long.empty: return None
-    area_chart = alt.Chart(monthly_payments_long).mark_area().encode(
-        x=alt.X('AnoMês:N', title='Mês/Ano', sort=None, axis=alt.Axis(labelAngle=-45)),
-        y=alt.Y('Valor:Q', title='Valor Total (R$)', stack='zero', axis=alt.Axis(format=",.2f")),
-        color=alt.Color('Método:N', legend=alt.Legend(title="Método de Pagamento")),
-        tooltip=[alt.Tooltip("AnoMês", title="Mês/Ano"), alt.Tooltip("Método", title="Método"), alt.Tooltip("Valor", title="Valor (R$)", format=",.2f")]
-    ).properties(title=title, height=600).interactive()
+    
+    if monthly_payments_long.empty:
+        return None
+    
+    # Gráfico de área empilhada com cores melhoradas
+    area_chart = alt.Chart(monthly_payments_long).mark_area(
+        opacity=0.8,
+        interpolate='monotone'
+    ).encode(
+        x=alt.X(
+            'AnoMês:O',
+            title='Período (Ano-Mês)',
+            sort=None,
+            axis=alt.Axis(labelAngle=-45)
+        ),
+        y=alt.Y(
+            'Valor:Q',
+            title='Valor Total (R$)',
+            stack='zero',
+            axis=alt.Axis(format=",.0f")
+        ),
+        color=alt.Color(
+            'Método:N',
+            scale=alt.Scale(range=['#1f77b4', '#2ca02c', '#ff7f0e']),
+            legend=alt.Legend(title="Método de Pagamento")
+        ),
+        tooltip=[
+            alt.Tooltip("AnoMês:O", title="Período"),
+            alt.Tooltip("Método:N", title="Método"),
+            alt.Tooltip("Valor:Q", title="Valor (R$)", format=",.2f")
+        ]
+    ).properties(
+        title=alt.TitleParams(
+            text=title,
+            fontSize=16,
+            anchor='start'
+        ),
+        height=500,
+        width=700
+    )
+    
     return area_chart
 
 def create_sales_histogram(df, title="Distribuição dos Valores de Venda Diários"):
-    if df.empty or 'Total' not in df.columns or df['Total'].isnull().all(): return None
+    """Cria histograma de distribuição de vendas."""
+    if df.empty or 'Total' not in df.columns or df['Total'].isnull().all():
+        return None
+    
     df_filtered_hist = df[df['Total'] > 0].copy()
-    if df_filtered_hist.empty: return None
-    histogram = alt.Chart(df_filtered_hist).mark_bar().encode(
-        alt.X("Total:Q", bin=alt.Bin(maxbins=20), title="Faixa de Valor da Venda Diária (R$)"),
-        alt.Y('count()', title='Número de Dias (Frequência)'),
-        tooltip=[alt.Tooltip("Total:Q", bin=True, title="Faixa de Valor (R$)"), alt.Tooltip("count()", title="Número de Dias")]
-    ).properties(title=title, height=600).interactive()
+    if df_filtered_hist.empty:
+        return None
+    
+    # Histograma com cores melhoradas
+    histogram = alt.Chart(df_filtered_hist).mark_bar(
+        color='#1f77b4',
+        opacity=0.8,
+        cornerRadiusTopLeft=3,
+        cornerRadiusTopRight=3
+    ).encode(
+        x=alt.X(
+            "Total:Q",
+            bin=alt.Bin(maxbins=15),
+            title="Faixa de Valor da Venda Diária (R$)"
+        ),
+        y=alt.Y(
+            'count():Q',
+            title='Número de Dias (Frequência)'
+        ),
+        tooltip=[
+            alt.Tooltip("Total:Q", bin=True, title="Faixa de Valor (R$)", format=",.0f"),
+            alt.Tooltip("count():Q", title="Número de Dias")
+        ]
+    ).properties(
+        title=alt.TitleParams(
+            text=title,
+            fontSize=16,
+            anchor='start'
+        ),
+        height=500,
+        width=700
+    )
+    
     return histogram
 
 def analyze_sales_by_weekday(df):
-    if df.empty or 'DiaSemana' not in df.columns or 'Total' not in df.columns or df['DiaSemana'].isnull().all() or df['Total'].isnull().all(): return None, None
+    """Analisa vendas por dia da semana."""
+    if df.empty or 'DiaSemana' not in df.columns or 'Total' not in df.columns or df['DiaSemana'].isnull().all() or df['Total'].isnull().all():
+        return None, None
+    
     try:
         df_copy = df.copy()
         df_copy['Total'] = pd.to_numeric(df_copy['Total'], errors='coerce')
         df_copy.dropna(subset=['Total', 'DiaSemana'], inplace=True)
-        if df_copy.empty: return None, None
-        avg_sales_weekday = df_copy.groupby('DiaSemana', observed=False)['Total'].mean().reindex(dias_semana_ordem).dropna()
+        
+        if df_copy.empty:
+            return None, None
+        
+        # CORREÇÃO: Adicionar observed=True para evitar o FutureWarning
+        avg_sales_weekday = df_copy.groupby('DiaSemana', observed=True)['Total'].mean().reindex(dias_semana_ordem).dropna()
+        
         if not avg_sales_weekday.empty:
             best_day = avg_sales_weekday.idxmax()
             return best_day, avg_sales_weekday
-        else: return None, avg_sales_weekday
+        else:
+            return None, avg_sales_weekday
     except Exception as e:
         st.error(f"Erro ao analisar vendas por dia da semana: {e}")
         return None, None
@@ -708,21 +877,21 @@ def main():
             st.subheader("🥧 Distribuição por Método de Pagamento")
             pie_chart = create_enhanced_payment_pie_chart(df_filtered)
             if pie_chart:
-                st.plotly_chart(pie_chart, use_container_width=True)
+                st.altair_chart(pie_chart, use_container_width=True)
             else:
                 st.info("Sem dados de pagamento para exibir o gráfico de pizza nos filtros selecionados.")
 
             st.subheader("📊 Análise Completa de Vendas Diárias")
             daily_chart = create_advanced_daily_sales_chart(df_filtered)
             if daily_chart:
-                st.plotly_chart(daily_chart, use_container_width=True)
+                st.altair_chart(daily_chart, use_container_width=True)
             else:
                 st.info("Sem dados de vendas diárias para exibir o gráfico nos filtros selecionados.")
 
             st.subheader("🏔️ Evolução do Capital Acumulado")
             accumulation_chart = create_interactive_accumulation_chart(df_filtered)
             if accumulation_chart:
-                st.plotly_chart(accumulation_chart, use_container_width=True)
+                st.altair_chart(accumulation_chart, use_container_width=True)
             else:
                 st.info("Não foi possível gerar o gráfico de acumulação.")
         else:
@@ -767,7 +936,7 @@ def main():
             st.subheader("📅 Análise Avançada por Dia da Semana")
             weekday_chart, best_day = create_enhanced_weekday_analysis(df_filtered)
             if weekday_chart:
-                st.plotly_chart(weekday_chart, use_container_width=True)
+                st.altair_chart(weekday_chart, use_container_width=True)
                 if best_day:
                     st.success(f"🏆 **Melhor Dia da Semana:** {best_day}")
             else:
@@ -845,9 +1014,9 @@ def main():
             )
 
             st.subheader("💰 Dashboard Financeiro Interativo")
-            financial_dashboard = create_financial_dashboard(resultados)
+            financial_dashboard = create_financial_dashboard_altair(resultados)
             if financial_dashboard:
-                st.plotly_chart(financial_dashboard, use_container_width=True)
+                st.altair_chart(financial_dashboard, use_container_width=True)
 
             # === SEÇÃO 1: DEMONSTRATIVO DE RECEITAS ===
             with st.container(border=True):
