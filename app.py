@@ -242,9 +242,9 @@ def analyze_sales_by_weekday(df):
         st.error(f"Erro ao analisar vendas por dia da semana: {e}")
         return None, None
 
-# --- Função melhorada para gráfico de acumulação ---
+# --- Função CORRIGIDA para gráfico de acumulação com fundo escuro ---
 def create_improved_accumulation_chart(df):
-    """Cria um gráfico de acumulação melhorado com melhor espaçamento e estética."""
+    """Cria um gráfico de acumulação com fundo escuro e linha contrastante."""
     if df.empty or 'Data' not in df.columns or 'Total' not in df.columns:
         return None
     
@@ -262,22 +262,53 @@ def create_improved_accumulation_chart(df):
     data_min_padded = data_min - timedelta(seconds=padding_seconds)
     data_max_padded = data_max + timedelta(seconds=padding_seconds)
     
-    # Criar gráfico com melhor estética
+    # Criar gráfico com FUNDO ESCURO e linha contrastante
     base_chart = alt.Chart(df_accumulated).add_selection(
         alt.selection_interval(bind='scales')
     )
     
-    # Linha principal
+    # Área sombreada com cor suave
+    area_chart = base_chart.mark_area(
+        opacity=0.3,
+        color='#00D4AA',  # Verde claro para contraste
+        interpolate='monotone'
+    ).encode(
+        x=alt.X('Data:T', 
+                scale=alt.Scale(domain=[data_min_padded, data_max_padded]),
+                axis=alt.Axis(
+                    format="%d/%m/%y",
+                    labelAngle=-45,
+                    labelFontSize=11,
+                    titleFontSize=13,
+                    labelColor='white',
+                    titleColor='white',
+                    gridColor='#444444',
+                    domainColor='white'
+                )),
+        y=alt.Y('Total Acumulado:Q', 
+                scale=alt.Scale(nice=True, padding=0.1),
+                axis=alt.Axis(
+                    format=",.0f",
+                    labelFontSize=11,
+                    titleFontSize=13,
+                    labelColor='white',
+                    titleColor='white',
+                    gridColor='#444444',
+                    domainColor='white'
+                ))
+    )
+    
+    # Linha principal com cor contrastante
     line_chart = base_chart.mark_line(
         point=alt.OverlayMarkDef(
             filled=True,
-            size=80,
-            color='white',
-            stroke='#2E86AB',
-            strokeWidth=2
+            size=100,
+            color='#1a1a1a',
+            stroke='#00D4AA',
+            strokeWidth=3
         ),
         strokeWidth=4,
-        color='#2E86AB',
+        color='#00D4AA',  # Verde vibrante para contraste
         interpolate='monotone'
     ).encode(
         x=alt.X('Data:T', 
@@ -288,8 +319,10 @@ def create_improved_accumulation_chart(df):
                     labelAngle=-45,
                     labelFontSize=11,
                     titleFontSize=13,
-                    grid=True,
-                    gridOpacity=0.3
+                    labelColor='white',
+                    titleColor='white',
+                    gridColor='#444444',
+                    domainColor='white'
                 )),
         y=alt.Y('Total Acumulado:Q', 
                 title='Capital Acumulado (R$)',
@@ -298,8 +331,10 @@ def create_improved_accumulation_chart(df):
                     format=",.0f",
                     labelFontSize=11,
                     titleFontSize=13,
-                    grid=True,
-                    gridOpacity=0.3
+                    labelColor='white',
+                    titleColor='white',
+                    gridColor='#444444',
+                    domainColor='white'
                 )),
         tooltip=[
             alt.Tooltip("DataFormatada:N", title="Data"),
@@ -308,17 +343,7 @@ def create_improved_accumulation_chart(df):
         ]
     )
     
-    # Área sombreada abaixo da linha
-    area_chart = base_chart.mark_area(
-        opacity=0.2,
-        color='#2E86AB',
-        interpolate='monotone'
-    ).encode(
-        x=alt.X('Data:T', scale=alt.Scale(domain=[data_min_padded, data_max_padded])),
-        y=alt.Y('Total Acumulado:Q', scale=alt.Scale(nice=True, padding=0.1))
-    )
-    
-    # Combinar área e linha
+    # Combinar área e linha com configuração de fundo escuro
     combined_chart = (area_chart + line_chart).resolve_scale(
         y='shared'
     ).properties(
@@ -327,11 +352,17 @@ def create_improved_accumulation_chart(df):
             fontSize=16,
             fontWeight='bold',
             anchor='start',
-            offset=20
+            offset=20,
+            color='white'
         ),
         width='container',
         height=500,
-        background='white'
+        background='#1a1a1a'  # FUNDO ESCURO
+    ).configure_view(
+        strokeWidth=0
+    ).configure_legend(
+        labelColor='white',
+        titleColor='white'
     )
     
     return combined_chart
