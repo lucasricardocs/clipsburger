@@ -228,7 +228,7 @@ def create_enhanced_payment_pie_chart(df):
         outerRadius=150,
         innerRadius=50,  # Cria um efeito donut
         stroke='white',
-        strokeWidth=4
+        strokeWidth=2
     ).encode(
         theta=alt.Theta('Valor:Q', stack=True),
         color=alt.Color(
@@ -260,7 +260,7 @@ def create_enhanced_payment_pie_chart(df):
     return pie_chart
 
 def create_advanced_daily_sales_chart(df):
-    """Cria um gráfico de vendas diárias com barras empilhadas e linha de tendência."""
+    """Cria um gráfico de vendas diárias com barras empilhadas."""
     if df.empty or 'Data' not in df.columns:
         return None
     
@@ -302,17 +302,9 @@ def create_advanced_daily_sales_chart(df):
             alt.Tooltip('Método:N', title='Método'),
             alt.Tooltip('Valor:Q', title='Valor (R$)', format=',.2f')
         ]
-    )
-    
-    
-    # Combinar gráficos
-    combined_chart = alt.layer(
-        bars
-    ).resolve_scale(
-        y='independent'
     ).properties(
         title=alt.TitleParams(
-            text="📊 Vendas Diárias por Método de Pagamento com Tendência",
+            text="📊 Vendas Diárias por Método de Pagamento",
             fontSize=16,
             anchor='start'
         ),
@@ -320,7 +312,7 @@ def create_advanced_daily_sales_chart(df):
         width=700
     )
     
-    return combined_chart
+    return bars
 
 def create_interactive_accumulation_chart(df):
     """Cria um gráfico de área para acumulação de capital."""
@@ -508,79 +500,6 @@ def create_enhanced_weekday_analysis(df):
     
     return combined_chart, best_day
 
-def create_financial_dashboard_altair(resultados):
-    """Cria um dashboard financeiro usando gráficos de barras horizontais."""
-    # Preparar dados para visualização
-    financial_data = pd.DataFrame({
-        'Categoria': [
-            'Faturamento Bruto',
-            'Impostos',
-            'Custo Produtos',
-            'Folha Pagamento',
-            'Serviços Contábeis',
-            'Lucro Final'
-        ],
-        'Valor': [
-            resultados['faturamento_bruto'],
-            -resultados['imposto_simples'],
-            -resultados['custo_fornecedores_valor'],
-            -resultados['custo_funcionario'],
-            -resultados['custo_contadora'],
-            resultados['lucro_bruto']
-        ],
-        'Tipo': [
-            'Receita',
-            'Custo',
-            'Custo',
-            'Custo',
-            'Custo',
-            'Resultado'
-        ]
-    })
-    
-    # Gráfico de barras horizontais
-    chart = alt.Chart(financial_data).mark_bar(
-        cornerRadiusTopRight=5,
-        cornerRadiusBottomRight=5
-    ).encode(
-        x=alt.X(
-            'Valor:Q',
-            title='Valor (R$)',
-            axis=alt.Axis(format=',.0f')
-        ),
-        y=alt.Y(
-            'Categoria:O',
-            title=None,
-            sort=financial_data['Categoria'].tolist()
-        ),
-        color=alt.Color(
-            'Tipo:N',
-            scale=alt.Scale(
-                domain=['Receita', 'Custo', 'Resultado'],
-                range=[CORES_MODO_ESCURO[1], CORES_MODO_ESCURO[3], CORES_MODO_ESCURO[0]]
-            ),
-            legend=alt.Legend(
-                title="Tipo",
-                orient='bottom'
-            )
-        ),
-        tooltip=[
-            alt.Tooltip('Categoria:N', title='Categoria'),
-            alt.Tooltip('Valor:Q', title='Valor (R$)', format=',.2f'),
-            alt.Tooltip('Tipo:N', title='Tipo')
-        ]
-    ).properties(
-        title=alt.TitleParams(
-            text="💰 Composição do Resultado Financeiro",
-            fontSize=16,
-            anchor='start'
-        ),
-        height=400,
-        width=600
-    )
-    
-    return chart
-
 def create_sales_histogram(df, title="Distribuição dos Valores de Venda Diários"):
     """Cria histograma de distribuição de vendas."""
     if df.empty or 'Total' not in df.columns or df['Total'].isnull().all():
@@ -647,40 +566,201 @@ def analyze_sales_by_weekday(df):
         st.error(f"Erro ao analisar vendas por dia da semana: {e}")
         return None, None
 
-# --- Funções de Cálculos Financeiros ---
+# --- Funções de Cálculos Financeiros Corrigidas ---
 def calculate_financial_results(df, salario_minimo, custo_contadora, custo_fornecedores_percentual):
-    """Calcula os resultados financeiros com base nos dados de vendas."""
+    """Calcula os resultados financeiros com base nos dados de vendas seguindo normas contábeis."""
     results = {
-        'faturamento_bruto': 0, 'faturamento_tributavel': 0, 'faturamento_nao_tributavel': 0,
-        'imposto_simples': 0, 'custo_funcionario': 0, 'custo_contadora': custo_contadora,
-        'custo_fornecedores_valor': 0, 'total_custos': 0,
-        'lucro_bruto': 0, 'margem_lucro_bruto': 0, 'lucro_liquido': 0, 'margem_lucro_liquido': 0
+        # RECEITAS
+        'receita_bruta': 0,
+        'receita_tributavel': 0, 
+        'receita_nao_tributavel': 0,
+        
+        # DEDUÇÕES DA RECEITA BRUTA
+        'impostos_sobre_vendas': 0,
+        'receita_liquida': 0,
+        
+        # CUSTOS DOS PRODUTOS VENDIDOS (CPV)
+        'custo_produtos_vendidos': 0,
+        'lucro_bruto': 0,
+        'margem_bruta': 0,
+        
+        # DESPESAS OPERACIONAIS
+        'despesas_administrativas': 0,
+        'despesas_com_pessoal': 0,
+        'despesas_contabeis': custo_contadora,
+        'total_despesas_operacionais': 0,
+        
+        # RESULTADOS
+        'lucro_operacional': 0,
+        'margem_operacional': 0,
+        'lucro_antes_ir': 0,
+        'lucro_liquido': 0,
+        'margem_liquida': 0,
+        
+        # INDICADORES AUXILIARES
+        'diferenca_tributavel_nao_tributavel': 0
     }
     
     if df.empty: 
         return results
     
-    # RECEITAS
-    results['faturamento_bruto'] = df['Total'].sum()
-    results['faturamento_tributavel'] = df['Cartão'].sum() + df['Pix'].sum()
-    results['faturamento_nao_tributavel'] = df['Dinheiro'].sum()
+    # === RECEITAS ===
+    results['receita_bruta'] = df['Total'].sum()
+    results['receita_tributavel'] = df['Cartão'].sum() + df['Pix'].sum()
+    results['receita_nao_tributavel'] = df['Dinheiro'].sum()
     
-    # CUSTOS E DESPESAS
-    results['imposto_simples'] = results['faturamento_tributavel'] * 0.06
-    results['custo_funcionario'] = salario_minimo * 1.55
-    results['custo_fornecedores_valor'] = results['faturamento_bruto'] * (custo_fornecedores_percentual / 100)
-    results['total_custos'] = results['imposto_simples'] + results['custo_funcionario'] + results['custo_contadora'] + results['custo_fornecedores_valor']
+    # === DEDUÇÕES DA RECEITA BRUTA ===
+    # Simples Nacional 6% sobre receita tributável
+    results['impostos_sobre_vendas'] = results['receita_tributavel'] * 0.06
+    results['receita_liquida'] = results['receita_bruta'] - results['impostos_sobre_vendas']
     
-    # RESULTADOS
-    results['lucro_bruto'] = results['faturamento_bruto'] - results['total_custos']
-    results['lucro_liquido'] = results['faturamento_bruto'] - results['faturamento_tributavel']
+    # === CUSTO DOS PRODUTOS VENDIDOS (CPV) ===
+    results['custo_produtos_vendidos'] = results['receita_bruta'] * (custo_fornecedores_percentual / 100)
     
-    # MARGENS
-    if results['faturamento_bruto'] > 0:
-        results['margem_lucro_bruto'] = (results['lucro_bruto'] / results['faturamento_bruto']) * 100
-        results['margem_lucro_liquido'] = (results['lucro_liquido'] / results['faturamento_bruto']) * 100
+    # === LUCRO BRUTO ===
+    results['lucro_bruto'] = results['receita_liquida'] - results['custo_produtos_vendidos']
+    if results['receita_liquida'] > 0:
+        results['margem_bruta'] = (results['lucro_bruto'] / results['receita_liquida']) * 100
+    
+    # === DESPESAS OPERACIONAIS ===
+    # Salário + encargos (INSS, FGTS, 13º, férias, etc.)
+    results['despesas_com_pessoal'] = salario_minimo * 1.55
+    results['despesas_contabeis'] = custo_contadora
+    results['despesas_administrativas'] = 0  # Pode ser expandido futuramente
+    results['total_despesas_operacionais'] = (
+        results['despesas_com_pessoal'] + 
+        results['despesas_contabeis'] + 
+        results['despesas_administrativas']
+    )
+    
+    # === LUCRO OPERACIONAL (EBIT) ===
+    results['lucro_operacional'] = results['lucro_bruto'] - results['total_despesas_operacionais']
+    if results['receita_liquida'] > 0:
+        results['margem_operacional'] = (results['lucro_operacional'] / results['receita_liquida']) * 100
+    
+    # === LUCRO ANTES DO IR ===
+    results['lucro_antes_ir'] = results['lucro_operacional']  # Sem receitas/despesas financeiras
+    
+    # === LUCRO LÍQUIDO ===
+    # No Simples Nacional, o IR já está incluído nos 6%
+    results['lucro_liquido'] = results['lucro_antes_ir']
+    if results['receita_liquida'] > 0:
+        results['margem_liquida'] = (results['lucro_liquido'] / results['receita_liquida']) * 100
+    
+    # === INDICADOR AUXILIAR ===
+    results['diferenca_tributavel_nao_tributavel'] = results['receita_nao_tributavel']
     
     return results
+
+def create_dre_table(resultados):
+    """Cria uma tabela DRE formatada."""
+    dre_data = [
+        ["DEMONSTRAÇÃO DO RESULTADO DO EXERCÍCIO", ""],
+        ["", ""],
+        ["RECEITA OPERACIONAL BRUTA", format_brl(resultados['receita_bruta'])],
+        ["  Vendas de Produtos", format_brl(resultados['receita_bruta'])],
+        ["", ""],
+        ["(-) DEDUÇÕES DA RECEITA BRUTA", format_brl(-resultados['impostos_sobre_vendas'])],
+        ["  Simples Nacional (6%)", format_brl(-resultados['impostos_sobre_vendas'])],
+        ["", ""],
+        ["(=) RECEITA OPERACIONAL LÍQUIDA", format_brl(resultados['receita_liquida'])],
+        ["", ""],
+        ["(-) CUSTO DOS PRODUTOS VENDIDOS", format_brl(-resultados['custo_produtos_vendidos'])],
+        ["  Custo de Mercadorias", format_brl(-resultados['custo_produtos_vendidos'])],
+        ["", ""],
+        ["(=) LUCRO BRUTO", format_brl(resultados['lucro_bruto'])],
+        [f"    Margem Bruta: {resultados['margem_bruta']:.2f}%", ""],
+        ["", ""],
+        ["(-) DESPESAS OPERACIONAIS", format_brl(-resultados['total_despesas_operacionais'])],
+        ["  Despesas com Pessoal", format_brl(-resultados['despesas_com_pessoal'])],
+        ["  Serviços Contábeis", format_brl(-resultados['despesas_contabeis'])],
+        ["", ""],
+        ["(=) LUCRO OPERACIONAL (EBIT)", format_brl(resultados['lucro_operacional'])],
+        [f"    Margem Operacional: {resultados['margem_operacional']:.2f}%", ""],
+        ["", ""],
+        ["(=) LUCRO ANTES DO IR", format_brl(resultados['lucro_antes_ir'])],
+        ["", ""],
+        ["(-) Provisão para IR e CSLL", "R$ 0,00"],
+        ["    (Já incluído no Simples Nacional)", ""],
+        ["", ""],
+        ["(=) LUCRO LÍQUIDO DO PERÍODO", format_brl(resultados['lucro_liquido'])],
+        [f"    Margem Líquida: {resultados['margem_liquida']:.2f}%", ""],
+    ]
+    
+    return pd.DataFrame(dre_data, columns=["Descrição", "Valor"])
+
+def create_financial_dashboard_altair(resultados):
+    """Cria um dashboard financeiro usando gráficos de barras horizontais."""
+    # Preparar dados para visualização do fluxo de resultado
+    financial_data = pd.DataFrame({
+        'Categoria': [
+            'Receita Bruta',
+            'Impostos s/ Vendas',
+            'Custo Produtos',
+            'Despesas Pessoal',
+            'Serviços Contábeis',
+            'Lucro Líquido'
+        ],
+        'Valor': [
+            resultados['receita_bruta'],
+            -resultados['impostos_sobre_vendas'],
+            -resultados['custo_produtos_vendidos'],
+            -resultados['despesas_com_pessoal'],
+            -resultados['despesas_contabeis'],
+            resultados['lucro_liquido']
+        ],
+        'Tipo': [
+            'Receita',
+            'Dedução',
+            'CPV',
+            'Despesa',
+            'Despesa',
+            'Resultado'
+        ]
+    })
+    
+    # Gráfico de barras horizontais
+    chart = alt.Chart(financial_data).mark_bar(
+        cornerRadiusTopRight=5,
+        cornerRadiusBottomRight=5
+    ).encode(
+        x=alt.X(
+            'Valor:Q',
+            title='Valor (R$)',
+            axis=alt.Axis(format=',.0f')
+        ),
+        y=alt.Y(
+            'Categoria:O',
+            title=None,
+            sort=financial_data['Categoria'].tolist()
+        ),
+        color=alt.Color(
+            'Tipo:N',
+            scale=alt.Scale(
+                domain=['Receita', 'Dedução', 'CPV', 'Despesa', 'Resultado'],
+                range=[CORES_MODO_ESCURO[1], CORES_MODO_ESCURO[3], CORES_MODO_ESCURO[2], CORES_MODO_ESCURO[4], CORES_MODO_ESCURO[0]]
+            ),
+            legend=alt.Legend(
+                title="Tipo",
+                orient='bottom'
+            )
+        ),
+        tooltip=[
+            alt.Tooltip('Categoria:N', title='Categoria'),
+            alt.Tooltip('Valor:Q', title='Valor (R$)', format=',.2f'),
+            alt.Tooltip('Tipo:N', title='Tipo')
+        ]
+    ).properties(
+        title=alt.TitleParams(
+            text="💰 Composição do Resultado Financeiro",
+            fontSize=16,
+            anchor='start'
+        ),
+        height=400,
+        width=600
+    )
+    
+    return chart
 
 # Função para formatar valores em moeda brasileira
 def format_brl(value):
@@ -896,15 +976,12 @@ def main():
         st.header("📊 Análise Contábil e Financeira Detalhada")
         
         st.markdown("""
-        ### 📋 **Sobre esta Análise**
+        ### 📋 **Demonstração do Resultado do Exercício (DRE)**
         
-        Esta seção apresenta uma **análise contábil completa** do Clips Burger, baseada nos dados de vendas filtrados. 
-        Os cálculos seguem as **normas contábeis brasileiras** e consideram:
-        
-        - **Regime Tributário:** Simples Nacional (6% sobre receita tributável)
-        - **Receita Tributável:** Apenas vendas via Cartão e PIX
-        - **Receita Não Tributável:** Vendas em dinheiro (não declaradas)
-        - **Custos Operacionais:** Funcionários, contadora e fornecedores
+        Esta análise segue as **normas contábeis brasileiras** com estrutura de DRE conforme:
+        - **Lei 6.404/76** (Lei das S.A.)
+        - **NBC TG 26** (Apresentação das Demonstrações Contábeis)
+        - **Regime Tributário:** Simples Nacional
         """)
         
         # Parâmetros Financeiros
@@ -931,7 +1008,7 @@ def main():
                 custo_fornecedores_percentual = st.number_input(
                     "📦 Custo dos Produtos (%)",
                     min_value=0.0, max_value=100.0, value=30.0, format="%.1f",
-                    help="Percentual do faturamento destinado à compra de produtos (hambúrgueres, batatas, bebidas, etc.).",
+                    help="Percentual da receita bruta destinado à compra de produtos.",
                     key="fornecedores_tab4"
                 )
 
@@ -945,118 +1022,142 @@ def main():
                 df_filtered, salario_minimo_input, custo_contadora_input, custo_fornecedores_percentual
             )
 
+            # === SEÇÃO 1: DRE COMPLETA ===
+            with st.container(border=True):
+                st.subheader("📊 Demonstração do Resultado do Exercício (DRE)")
+                
+                # Criar e exibir tabela DRE
+                dre_df = create_dre_table(resultados)
+                
+                # Estilizar a tabela DRE
+                st.markdown("""
+                <style>
+                .dre-table {
+                    font-family: 'Courier New', monospace;
+                    font-size: 14px;
+                }
+                </style>
+                """, unsafe_allow_html=True)
+                
+                st.dataframe(
+                    dre_df,
+                    use_container_width=True,
+                    hide_index=True,
+                    height=800
+                )
+
+            st.markdown("---")
+
+            # === SEÇÃO 2: DASHBOARD VISUAL ===
             st.subheader("💰 Dashboard Financeiro Interativo")
             financial_dashboard = create_financial_dashboard_altair(resultados)
             if financial_dashboard:
                 st.altair_chart(financial_dashboard, use_container_width=True)
 
-            # === SEÇÃO 1: DEMONSTRATIVO DE RECEITAS ===
+            st.markdown("---")
+
+            # === SEÇÃO 3: ANÁLISE DE MARGENS ===
             with st.container(border=True):
-                st.subheader("💰 Demonstrativo de Receitas")
+                st.subheader("📈 Análise de Margens e Indicadores")
                 st.markdown("""
-                **Explicação:** As receitas são classificadas entre tributáveis e não tributáveis conforme a legislação brasileira.
-                No Simples Nacional, apenas as receitas declaradas (cartão e PIX) são tributadas.
+                **Explicação das Margens Contábeis:**
+                - **Margem Bruta:** (Lucro Bruto ÷ Receita Líquida) × 100
+                - **Margem Operacional:** (Lucro Operacional ÷ Receita Líquida) × 100  
+                - **Margem Líquida:** (Lucro Líquido ÷ Receita Líquida) × 100
                 """)
                 
-                col_rec1, col_rec2, col_rec3 = st.columns(3)
+                col_margin1, col_margin2, col_margin3 = st.columns(3)
                 
-                with col_rec1:
+                with col_margin1:
                     st.metric(
-                        "📈 Faturamento Bruto Total",
-                        format_brl(resultados['faturamento_bruto']),
-                        help="Soma de todas as vendas (cartão + PIX + dinheiro)"
+                        "📊 Margem Bruta",
+                        f"{resultados['margem_bruta']:.2f}%",
+                        help="Indica a eficiência na gestão dos custos diretos"
+                    )
+                    st.metric(
+                        "🏛️ Carga Tributária",
+                        f"{(resultados['impostos_sobre_vendas'] / resultados['receita_bruta'] * 100) if resultados['receita_bruta'] > 0 else 0:.2f}%",
+                        help="Percentual de impostos sobre a receita bruta"
                     )
                 
-                with col_rec2:
+                with col_margin2:
                     st.metric(
-                        "🏦 Receita Tributável",
-                        format_brl(resultados['faturamento_tributavel']),
-                        f"{((resultados['faturamento_tributavel'] / resultados['faturamento_bruto'] * 100) if resultados['faturamento_bruto'] > 0 else 0):.1f}% do total",
-                        help="Vendas via cartão e PIX (sujeitas à tributação)"
+                        "💼 Margem Operacional",
+                        f"{resultados['margem_operacional']:.2f}%",
+                        help="Indica a eficiência operacional do negócio"
+                    )
+                    st.metric(
+                        "👥 Custo de Pessoal",
+                        f"{(resultados['despesas_com_pessoal'] / resultados['receita_bruta'] * 100) if resultados['receita_bruta'] > 0 else 0:.2f}%",
+                        help="Percentual das despesas com pessoal sobre receita"
                     )
                 
-                with col_rec3:
+                with col_margin3:
                     st.metric(
-                        "💵 Receita Não Tributável",
-                        format_brl(resultados['faturamento_nao_tributavel']),
-                        f"{((resultados['faturamento_nao_tributavel'] / resultados['faturamento_bruto'] * 100) if resultados['faturamento_bruto'] > 0 else 0):.1f}% do total",
-                        help="Vendas em dinheiro (não declaradas)"
+                        "💰 Margem Líquida",
+                        f"{resultados['margem_liquida']:.2f}%",
+                        help="Rentabilidade final após todos os custos e despesas"
+                    )
+                    st.metric(
+                        "📦 Custo dos Produtos",
+                        f"{(resultados['custo_produtos_vendidos'] / resultados['receita_bruta'] * 100) if resultados['receita_bruta'] > 0 else 0:.2f}%",
+                        help="Percentual do CPV sobre receita bruta"
                     )
 
             st.markdown("---")
 
-            # === SEÇÃO 2: DEMONSTRATIVO DE RESULTADOS ===
+            # === SEÇÃO 4: RESUMO EXECUTIVO ===
             with st.container(border=True):
-                st.subheader("🎯 Demonstrativo de Resultados (DRE Simplificado)")
-                st.markdown("""
-                **Explicação:** O DRE mostra a formação do resultado financeiro do período, seguindo a estrutura contábil padrão.
-                """)
+                st.subheader("📋 Resumo Executivo")
                 
-                # Métricas de resultado
-                col_result1, col_result2 = st.columns(2)
+                col_exec1, col_exec2 = st.columns(2)
                 
-                with col_result1:
-                    st.metric(
-                        "💰 Lucro Operacional",
-                        format_brl(resultados['lucro_bruto']),
-                        f"{resultados['margem_lucro_bruto']:.2f}% do Faturamento",
-                        delta_color="normal" if resultados['lucro_bruto'] >= 0 else "inverse"
-                    )
-                    st.caption("Resultado após todos os custos e despesas operacionais")
+                with col_exec1:
+                    st.markdown("**💰 Receitas:**")
+                    st.write(f"• Receita Bruta: {format_brl(resultados['receita_bruta'])}")
+                    st.write(f"• Receita Líquida: {format_brl(resultados['receita_liquida'])}")
+                    st.write(f"• Receita Tributável: {format_brl(resultados['receita_tributavel'])}")
+                    st.write(f"• Receita Não Tributável: {format_brl(resultados['receita_nao_tributavel'])}")
+                    
+                    st.markdown("**📊 Resultados:**")
+                    st.write(f"• Lucro Bruto: {format_brl(resultados['lucro_bruto'])}")
+                    st.write(f"• Lucro Operacional: {format_brl(resultados['lucro_operacional'])}")
+                    st.write(f"• Lucro Líquido: {format_brl(resultados['lucro_liquido'])}")
                 
-                with col_result2:
-                    st.metric(
-                        "🏦 Diferença (Bruto - Tributável)",
-                        format_brl(resultados['lucro_liquido']),
-                        f"{resultados['margem_lucro_liquido']:.2f}% do Faturamento",
-                        delta_color="off"
-                    )
-                    st.caption("Diferença entre faturamento total e receita declarada")
-
-            st.markdown("---")
-
-            # === SEÇÃO 3: ANÁLISE DE INDICADORES ===
-            with st.container(border=True):
-                st.subheader("📈 Análise de Indicadores Financeiros")
-                st.markdown("""
-                **Explicação:** Os indicadores financeiros ajudam a avaliar a saúde econômica do negócio e comparar com benchmarks do setor.
-                """)
-                
-                # Calcular indicadores
-                if resultados['faturamento_bruto'] > 0:
-                    indicadores = {
-                        'Margem Bruta': (resultados['faturamento_bruto'] - resultados['custo_fornecedores_valor']) / resultados['faturamento_bruto'] * 100,
-                        'Margem Operacional': resultados['margem_lucro_bruto'],
-                        'Carga Tributária': resultados['imposto_simples'] / resultados['faturamento_bruto'] * 100,
-                        'Custo de Pessoal': resultados['custo_funcionario'] / resultados['faturamento_bruto'] * 100,
-                        'Custo dos Produtos': resultados['custo_fornecedores_valor'] / resultados['faturamento_bruto'] * 100
-                    }
+                with col_exec2:
+                    st.markdown("**💸 Custos e Despesas:**")
+                    st.write(f"• Impostos s/ Vendas: {format_brl(resultados['impostos_sobre_vendas'])}")
+                    st.write(f"• Custo dos Produtos: {format_brl(resultados['custo_produtos_vendidos'])}")
+                    st.write(f"• Despesas com Pessoal: {format_brl(resultados['despesas_com_pessoal'])}")
+                    st.write(f"• Serviços Contábeis: {format_brl(resultados['despesas_contabeis'])}")
                     
-                    # Exibir indicadores
-                    col_ind1, col_ind2, col_ind3 = st.columns(3)
+                    st.markdown("**🎯 Indicadores-Chave:**")
+                    if resultados['margem_bruta'] >= 50:
+                        st.success(f"✅ Margem Bruta Saudável: {resultados['margem_bruta']:.1f}%")
+                    elif resultados['margem_bruta'] >= 30:
+                        st.warning(f"⚠️ Margem Bruta Moderada: {resultados['margem_bruta']:.1f}%")
+                                        else:
+                        st.error(f"❌ Margem Bruta Baixa: {resultados['margem_bruta']:.1f}%")
                     
-                    with col_ind1:
-                        st.metric("📊 Margem Bruta", f"{indicadores['Margem Bruta']:.1f}%")
-                        st.metric("🏛️ Carga Tributária", f"{indicadores['Carga Tributária']:.1f}%")
-                    
-                    with col_ind2:
-                        st.metric("💼 Margem Operacional", f"{indicadores['Margem Operacional']:.1f}%")
-                        st.metric("👥 Custo de Pessoal", f"{indicadores['Custo de Pessoal']:.1f}%")
-                    
-                    with col_ind3:
-                        st.metric("📦 Custo dos Produtos", f"{indicadores['Custo dos Produtos']:.1f}%")
-
-            st.markdown("---")
+                    if resultados['lucro_liquido'] > 0:
+                        st.success(f"✅ Resultado Positivo: {format_brl(resultados['lucro_liquido'])}")
+                    else:
+                        st.error(f"❌ Resultado Negativo: {format_brl(resultados['lucro_liquido'])}")
 
             # Nota final
             st.info("""
-            💡 **Nota Importante:** Esta análise é uma simulação baseada nos dados informados e parâmetros configurados. 
-            Para decisões financeiras importantes, consulte sempre um contador ou consultor financeiro qualificado.
+            💡 **Nota Importante:** Esta DRE segue a estrutura contábil brasileira oficial. 
+            Os cálculos de margem estão conforme as normas contábeis, usando a Receita Líquida como base.
             
-            **Limitações:** Não inclui outros custos como aluguel, energia, marketing, depreciação, provisões, 
-            nem impostos sobre o lucro (IRPJ, CSLL) que podem ser aplicáveis dependendo do regime tributário.
+            **Metodologia:** 
+            - Margem Bruta = (Lucro Bruto ÷ Receita Líquida) × 100
+            - Margem Operacional = (EBIT ÷ Receita Líquida) × 100
+            - Margem Líquida = (Lucro Líquido ÷ Receita Líquida) × 100
+            
+            Para decisões estratégicas, consulte sempre um contador qualificado.
             """)
 
 # --- Ponto de Entrada da Aplicação ---
 if __name__ == "__main__":
     main()
+
