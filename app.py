@@ -1136,7 +1136,7 @@ def main():
                         st.success(f"✅ Margem Bruta Saudável: {resultados['margem_bruta']:.1f}%")
                     elif resultados['margem_bruta'] >= 30:
                         st.warning(f"⚠️ Margem Bruta Moderada: {resultados['margem_bruta']:.1f}%")
-                                        else:
+                    else:
                         st.error(f"❌ Margem Bruta Baixa: {resultados['margem_bruta']:.1f}%")
                     
                     if resultados['lucro_liquido'] > 0:
