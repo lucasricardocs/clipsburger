@@ -228,7 +228,7 @@ def create_enhanced_payment_pie_chart(df):
         outerRadius=150,
         innerRadius=50,  # Cria um efeito donut
         stroke='white',
-        strokeWidth=2
+        strokeWidth=4
     ).encode(
         theta=alt.Theta('Valor:Q', stack=True),
         color=alt.Color(
@@ -304,28 +304,10 @@ def create_advanced_daily_sales_chart(df):
         ]
     )
     
-    # Linha de tendência do total
-    line = alt.Chart(df_sorted).mark_line(
-        color=CORES_MODO_ESCURO[3],  # Cor vibrante para contraste
-        strokeWidth=3,
-        point=alt.OverlayMarkDef(color=CORES_MODO_ESCURO[3], size=60)
-    ).encode(
-        x=alt.X('Data:T'),
-        y=alt.Y(
-            'Total:Q',
-            title='Total Diário (R$)',
-            scale=alt.Scale(zero=False)
-        ),
-        tooltip=[
-            alt.Tooltip('DataFormatada:N', title='Data'),
-            alt.Tooltip('Total:Q', title='Total (R$)', format=',.2f')
-        ]
-    )
     
     # Combinar gráficos
     combined_chart = alt.layer(
-        bars,
-        line
+        bars
     ).resolve_scale(
         y='independent'
     ).properties(
