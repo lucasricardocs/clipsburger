@@ -453,16 +453,9 @@ def create_enhanced_weekday_analysis(df):
     weekday_stats = weekday_stats.reindex([d for d in dias_semana_ordem if d in weekday_stats.index])
     weekday_stats = weekday_stats.reset_index()
     
-    # Preparar dados para histograma combinado
-    weekday_melted = weekday_stats.melt(
-        id_vars=['DiaSemana'],
-        value_vars=['Média', 'Total'],
-        var_name='Tipo',
-        value_name='Valor'
-    )
-    
-    # Histograma combinado com barras lado a lado
-    histogram_chart = alt.Chart(weekday_melted).mark_bar(
+    # Gráfico de barras para média
+    bars_media = alt.Chart(weekday_stats).mark_bar(
+        color=CORES_MODO_ESCURO[0],
         cornerRadiusTopLeft=3,
         cornerRadiusTopRight=3
     ).encode(
@@ -473,45 +466,65 @@ def create_enhanced_weekday_analysis(df):
             axis=alt.Axis(labelAngle=-45)
         ),
         y=alt.Y(
-            'Valor:Q',
-            title='Valor (R$)'
-        ),
-        color=alt.Color(
-            'Tipo:N',
-            scale=alt.Scale(
-                domain=['Média', 'Total'],
-                range=[CORES_MODO_ESCURO[0], CORES_MODO_ESCURO[2]]
-            ),
-            legend=alt.Legend(
-                title="Tipo de Análise",
-                orient='bottom'
-            )
-        ),
-        column=alt.Column(
-            'Tipo:N',
-            title=None,
-            header=alt.Header(labelFontSize=14, titleFontSize=16)
+            'Média:Q',
+            title='Média de Vendas (R$)'
         ),
         tooltip=[
             alt.Tooltip('DiaSemana:N', title='Dia'),
-            alt.Tooltip('Tipo:N', title='Tipo'),
-            alt.Tooltip('Valor:Q', title='Valor (R$)', format=',.2f')
+            alt.Tooltip('Média:Q', title='Média (R$)', format=',.2f'),
+            alt.Tooltip('Total:Q', title='Total (R$)', format=',.2f'),
+            alt.Tooltip('Dias_Vendas:Q', title='Dias com Vendas')
         ]
     ).properties(
         title=alt.TitleParams(
-            text="📅 Análise por Dia da Semana - Média e Total",
-            fontSize=16,
-            anchor='start'
+            text="📊 Média de Vendas por Dia da Semana",
+            fontSize=14
         ),
-        height=400,
-        width=300
+        height=300,
+        width=600
+    )
+    
+    # Gráfico de barras para total
+    bars_total = alt.Chart(weekday_stats).mark_bar(
+        color=CORES_MODO_ESCURO[2],
+        cornerRadiusTopLeft=3,
+        cornerRadiusTopRight=3
+    ).encode(
+        x=alt.X(
+            'DiaSemana:O',
+            title='Dia da Semana',
+            sort=dias_semana_ordem,
+            axis=alt.Axis(labelAngle=-45)
+        ),
+        y=alt.Y(
+            'Total:Q',
+            title='Total Acumulado (R$)'
+        ),
+        tooltip=[
+            alt.Tooltip('DiaSemana:N', title='Dia'),
+            alt.Tooltip('Total:Q', title='Total (R$)', format=',.2f'),
+            alt.Tooltip('Média:Q', title='Média (R$)', format=',.2f')
+        ]
+    ).properties(
+        title=alt.TitleParams(
+            text="📈 Total de Vendas por Dia da Semana",
+            fontSize=14
+        ),
+        height=300,
+        width=600
+    )
+    
+    # Combinar gráficos verticalmente (um embaixo do outro)
+    combined_chart = alt.vconcat(
+        bars_media,
+        bars_total
     ).resolve_scale(
         y='independent'
     )
     
     best_day = weekday_stats.loc[weekday_stats['Média'].idxmax(), 'DiaSemana']
     
-    return histogram_chart, best_day
+    return combined_chart, best_day
 
 def create_financial_dashboard_altair(resultados):
     """Cria um dashboard financeiro usando gráficos de barras horizontais."""
