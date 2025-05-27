@@ -711,12 +711,14 @@ def create_dre_textual(resultados, df_filtered, selected_anos_filter):
     else:
         resultados_ano = resultados
 
-    # Cabeçalho centralizado
+    # Cabeçalho centralizado com alinhamento corrigido
     st.markdown(f"""
     <div style="text-align: center; margin-bottom: 30px;">
         <h3 style="margin: 0; font-weight: normal;">DEMONSTRAÇÃO DO RESULTADO DO EXERCÍCIO</h3>
         <p style="margin: 5px 0; font-style: italic;">Clips Burger - Exercício {ano_dre}</p>
-        <p style="margin: 0; text-align: right; font-size: 14px;">Em R$</p>
+    </div>
+    <div style="text-align: right; margin-bottom: 20px;">
+        <p style="margin: 0; font-size: 14px;">Em R$</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -805,12 +807,12 @@ def create_dre_textual(resultados, df_filtered, selected_anos_filter):
     # Linha de separação
     st.markdown("---")
     
-    # RESULTADO LÍQUIDO - destacado
+    # RESULTADO LÍQUIDO - com fonte menor
     col1, col2 = st.columns([6, 2])
     with col1:
-        st.markdown("## **RESULTADO LÍQUIDO DO EXERCÍCIO**")
+        st.markdown("### **RESULTADO LÍQUIDO DO EXERCÍCIO**")
     with col2:
-        st.markdown(f"## **{format_val(resultados_ano['lucro_liquido'])}**")
+        st.markdown(f"### **{format_val(resultados_ano['lucro_liquido'])}**")
     
     # Nota explicativa
     st.info(f"📅 **Nota:** Este DRE apresenta os resultados consolidados do exercício {ano_dre}, independente do filtro de mês aplicado nas outras análises.")
