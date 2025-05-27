@@ -76,16 +76,16 @@ def inject_css():
         display: flex;
         justify-content: center;
         align-items: center;
-        width: 100px;
-        height: 100px;
+        width: 240px;
+        height: 240px;
         margin: 0 auto;
     }
     
     .logo-aura::before {
         content: '';
         position: absolute;
-        top: 50%;
-        left: 50%;
+        top: 25%;
+        left: 25%;
         transform: translate(-50%, -50%);
         width: 150px;
         height: 150px;
