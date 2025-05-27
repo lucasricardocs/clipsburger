@@ -439,134 +439,164 @@ def process_data(df_input):
 
 # --- Função para criar gráfico de calendário ---
 def create_calendar_chart(df):
-    """Cria um gráfico de calendário com as vendas - FUNCIONANDO."""
+    """Cria um gráfico de calendário usando Plotly (mais compatível com Streamlit)."""
     if df.empty or 'Data' not in df.columns:
         return None
     
-    # Preparar dados para o calendário
-    calendar_data = []
-    for _, row in df.iterrows():
-        total = row['Total']
-        # Determinar nível baseado no valor
+    import plotly.graph_objects as go
+    import plotly.express as px
+    from datetime import datetime, timedelta
+    import numpy as np
+    
+    # Preparar dados
+    df_cal = df.copy()
+    df_cal['Data'] = pd.to_datetime(df_cal['Data'])
+    df_cal = df_cal.sort_values('Data')
+    
+    # Criar range de datas completo
+    start_date = df_cal['Data'].min()
+    end_date = df_cal['Data'].max()
+    
+    # Criar DataFrame com todas as datas
+    date_range = pd.date_range(start=start_date, end=end_date, freq='D')
+    df_complete = pd.DataFrame({'Data': date_range})
+    
+    # Merge com dados existentes
+    df_complete = df_complete.merge(df_cal[['Data', 'Total']], on='Data', how='left')
+    df_complete['Total'] = df_complete['Total'].fillna(0)
+    
+    # Adicionar informações de calendário
+    df_complete['Ano'] = df_complete['Data'].dt.year
+    df_complete['Mes'] = df_complete['Data'].dt.month
+    df_complete['Dia'] = df_complete['Data'].dt.day
+    df_complete['DiaSemana'] = df_complete['Data'].dt.dayofweek
+    df_complete['Semana'] = df_complete['Data'].dt.isocalendar().week
+    
+    # Determinar cores baseadas no valor
+    def get_color(total):
         if total == 0:
-            level = 0
+            return '#2d333b'
         elif total <= 50:
-            level = 1
+            return '#0D4428'
         elif total <= 100:
-            level = 2
+            return '#006D31'
         elif total <= 200:
-            level = 3
+            return '#37AB4B'
         else:
-            level = 4
-            
-        calendar_data.append({
-            'date': row['Data'].strftime('%Y-%m-%d'),
-            'level': level,
-            'count': total
-        })
+            return '#39D353'
     
-    # Converter para JSON
-    import json
-    calendar_json = json.dumps(calendar_data)
+    df_complete['Cor'] = df_complete['Total'].apply(get_color)
+    df_complete['Texto'] = df_complete['Total'].apply(lambda x: f"R$ {x:.0f}" if x > 0 else "")
     
-    calendar_html = f"""
-    <div class="calendar-container">
-        <h3 style="color: white; text-align: center; margin-bottom: 20px; font-size: 1.25rem; font-weight: 600; font-family: Arial, sans-serif;">📅</h3>
-        <div id="calendar-container" style="width: 100%; height: 300px; background: transparent;"></div>
-    </div>
+    # Criar o heatmap
+    fig = go.Figure()
     
-    <script src="https://cdn.anychart.com/releases/v8/js/anychart-base.min.js"></script>
-    <script src="https://cdn.anychart.com/releases/v8/js/anychart-ui.min.js"></script>
-    <script src="https://cdn.anychart.com/releases/v8/js/anychart-exports.min.js"></script>
-    <script src="https://cdn.anychart.com/releases/v8/js/anychart-calendar.min.js"></script>
-    <script src="https://cdn.anychart.com/releases/v8/js/anychart-data-adapter.min.js"></script>
-    <link href="https://cdn.anychart.com/releases/v8/css/anychart-ui.min.css" type="text/css" rel="stylesheet">
-    <link href="https://cdn.anychart.com/releases/v8/fonts/css/anychart-font.min.css" type="text/css" rel="stylesheet">
+    # Agrupar por mês para criar subplots
+    for mes in df_complete['Mes'].unique():
+        df_mes = df_complete[df_complete['Mes'] == mes].copy()
+        
+        # Criar matriz do calendário (semanas x dias da semana)
+        semanas = df_mes['Semana'].unique()
+        
+        for _, row in df_mes.iterrows():
+            fig.add_trace(go.Scatter(
+                x=[row['DiaSemana']],
+                y=[row['Semana']],
+                mode='markers+text',
+                marker=dict(
+                    size=30,
+                    color=row['Cor'],
+                    line=dict(width=1, color='white')
+                ),
+                text=row['Dia'],
+                textfont=dict(color='white', size=10),
+                hovertemplate=f"<b>{row['Data'].strftime('%d/%m/%Y')}</b><br>" +
+                             f"Vendas: R$ {row['Total']:.2f}<br>" +
+                             "<extra></extra>",
+                showlegend=False
+            ))
     
-    <script>
-        anychart.onDocumentReady(function() {{
-            try {{
-                var data = {calendar_json};
-                
-                if (!data || data.length === 0) {{
-                    document.getElementById('calendar-container').innerHTML = '<p style="color: white; text-align: center; padding: 50px;">Nenhum dado de vendas disponível para o calendário</p>';
-                    return;
-                }}
-                
-                var dataset = anychart.data.set(data);
-                var mapping = dataset.mapAs({{
-                    x: 'date',
-                    value: 'level'
-                }});
-                var chart = anychart.calendar(mapping);
-
-                // Configurar background
-                chart.background().fill('#22282D');
-
-                // Configurar meses
-                chart.months()
-                    .stroke(false)
-                    .noDataStroke(false)
-                    .labels()
-                        .fontSize(12)
-                        .fontFamily('Arial, sans-serif')
-                        .fontColor('#ffffff');
-
-                // Configurar dias
-                chart.days()
-                    .spacing(2)
-                    .stroke(false)
-                    .noDataStroke(false)
-                    .noDataFill('#2d333b')
-                    .noDataHatchFill(false);
-
-                // Configurar semanas
-                chart.weeks()
-                    .labels()
-                        .fontSize(11)
-                        .fontFamily('Arial, sans-serif')
-                        .fontColor('#ffffff');
-
-                // Remover barra de cores
-                chart.colorRange(false);
-
-                // Configurar escala de cores
-                var customColorScale = anychart.scales.ordinalColor();
-                customColorScale.ranges([
-                    {{equal: 0, color: '#2d333b'}},
-                    {{equal: 1, color: '#0D4428'}},
-                    {{equal: 2, color: '#006D31'}},
-                    {{equal: 3, color: '#37AB4B'}},
-                    {{equal: 4, color: '#39D353'}}
-                ]);
-
-                chart.colorScale(customColorScale);
-
-                // Configurar tooltip
-                chart.tooltip()
-                    .format('R$ {{%count}} em vendas')
-                    .fontSize(12)
-                    .fontFamily('Arial, sans-serif');
-
-                // Ajustar altura
-                chart.listen('chartDraw', function() {{
-                    var actualHeight = Math.min(chart.getActualHeight(), 320);
-                    document.getElementById('calendar-container').style.height = actualHeight + 'px';
-                }});
-
-                chart.container('calendar-container');
-                chart.draw();
-                
-            }} catch (error) {{
-                console.error('Erro ao criar calendário:', error);
-                document.getElementById('calendar-container').innerHTML = '<p style="color: white; text-align: center; padding: 50px;">Erro ao carregar o calendário</p>';
-            }}
-        }});
-    </script>
-    """
+    # Configurar layout
+    fig.update_layout(
+        title=dict(
+            text="📅 Calendário de Vendas",
+            x=0.5,
+            font=dict(size=18, color='white')
+        ),
+        xaxis=dict(
+            tickmode='array',
+            tickvals=[0, 1, 2, 3, 4, 5, 6],
+            ticktext=['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'],
+            showgrid=False,
+            zeroline=False,
+            color='white'
+        ),
+        yaxis=dict(
+            showticklabels=False,
+            showgrid=False,
+            zeroline=False,
+            autorange='reversed'
+        ),
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        height=400,
+        margin=dict(l=20, r=20, t=60, b=20)
+    )
     
-    return calendar_html
+    return fig
 
+def create_calendar_chart_alternative(df):
+    """Versão alternativa mais simples do calendário."""
+    if df.empty or 'Data' not in df.columns:
+        return None
+    
+    import plotly.graph_objects as go
+    
+    # Preparar dados
+    df_cal = df.copy()
+    df_cal['Data'] = pd.to_datetime(df_cal['Data'])
+    df_cal['DataStr'] = df_cal['Data'].dt.strftime('%Y-%m-%d')
+    df_cal['Mes'] = df_cal['Data'].dt.strftime('%Y-%m')
+    df_cal['Dia'] = df_cal['Data'].dt.day
+    
+    # Criar heatmap simples
+    fig = go.Figure(data=go.Heatmap(
+        z=df_cal['Total'],
+        x=df_cal['DataStr'],
+        y=['Vendas'],
+        colorscale=[
+            [0, '#2d333b'],
+            [0.25, '#0D4428'],
+            [0.5, '#006D31'],
+            [0.75, '#37AB4B'],
+            [1, '#39D353']
+        ],
+        hovertemplate='<b>%{x}</b><br>Vendas: R$ %{z:.2f}<extra></extra>',
+        showscale=False
+    ))
+    
+    fig.update_layout(
+        title=dict(
+            text="📅 Calendário de Vendas",
+            x=0.5,
+            font=dict(size=18, color='white')
+        ),
+        xaxis=dict(
+            title='',
+            tickangle=45,
+            color='white'
+        ),
+        yaxis=dict(
+            title='',
+            showticklabels=False
+        ),
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        height=200,
+        margin=dict(l=20, r=20, t=60, b=60)
+    )
+    
+    return fig
 
 # --- Função para criar gráfico de frequência por dia ---
 def create_frequency_chart(attendance_data):
@@ -2003,11 +2033,18 @@ def main():
             
             # === SEÇÃO 2: CALENDÁRIO DE VENDAS ===
             st.subheader("📅 Calendário de Atividades")
-            calendar_html = create_calendar_chart(df_filtered)
-            if calendar_html:
-                st.components.v1.html(calendar_html, height=450, scrolling=False)
+            
+            # Tentar calendário Plotly primeiro
+            calendar_fig = create_calendar_chart(df_filtered)
+            if calendar_fig:
+                st.plotly_chart(calendar_fig, use_container_width=True)
             else:
-                st.info("📅 Sem dados suficientes para exibir o calendário de vendas.")
+                # Fallback para versão alternativa
+                calendar_alt = create_calendar_chart_alternative(df_filtered)
+                if calendar_alt:
+                    st.plotly_chart(calendar_alt, use_container_width=True)
+                else:
+                    st.info("📅 Sem dados suficientes para exibir o calendário de vendas.")
             
             st.markdown("---")
             
@@ -2063,7 +2100,8 @@ def main():
             
         else:
             st.warning("⚠️ Sem dados disponíveis. Ajuste os filtros na sidebar ou registre algumas vendas para visualizar o dashboard premium.")
-
+    
+    
 
 # --- Ponto de Entrada da Aplicação ---
 if __name__ == "__main__":
