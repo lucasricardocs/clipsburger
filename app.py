@@ -74,6 +74,14 @@ def inject_css():
         display: flex;
         flex-direction: column;
         justify-content: center;
+        transition: all 0.3s ease;
+        animation: slideInUp 0.6s ease-out;
+    }
+    
+    .stMetric:hover {
+        transform: translateY(-3px);
+        background-color: rgba(255, 255, 255, 0.1);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.2);
     }
     
     /* Dashboard Premium Styles */
@@ -81,7 +89,7 @@ def inject_css():
         background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%);
     }
     
-    /* Logo com aura CORRIGIDA */
+    /* Logo com aura CORRIGIDA - tamanho 2 e aura 5% maior */
     .logo-aura {
         position: relative;
         display: flex;
@@ -98,8 +106,8 @@ def inject_css():
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        width: 200px;
-        height: 200px;
+        width: 168px;  /* 5% maior que a logo (160px * 1.05) */
+        height: 168px; /* 5% maior que a logo (160px * 1.05) */
         background: radial-gradient(circle, rgba(76, 120, 168, 0.4) 0%, rgba(76, 120, 168, 0.2) 40%, rgba(76, 120, 168, 0.1) 70%, transparent 100%);
         border-radius: 50%;
         animation: pulse-aura 3s ease-in-out infinite;
@@ -124,7 +132,41 @@ def inject_css():
         }
     }
     
-    /* Cards uniformes INTERATIVOS */
+    /* Animações para containers */
+    @keyframes slideInUp {
+        from {
+            opacity: 0;
+            transform: translateY(30px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    @keyframes fadeInScale {
+        from {
+            opacity: 0;
+            transform: scale(0.9);
+        }
+        to {
+            opacity: 1;
+            transform: scale(1);
+        }
+    }
+    
+    @keyframes slideInLeft {
+        from {
+            opacity: 0;
+            transform: translateX(-30px);
+        }
+        to {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+    
+    /* Cards uniformes ANIMADOS */
     .uniform-card {
         background: rgba(255,255,255,0.1);
         padding: 1.5rem;
@@ -134,35 +176,55 @@ def inject_css():
         display: flex;
         flex-direction: column;
         justify-content: center;
-        transition: all 0.3s ease;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         cursor: pointer;
         border: 1px solid rgba(255,255,255,0.1);
+        animation: fadeInScale 0.6s ease-out;
     }
     
     .uniform-card:hover {
-        transform: translateY(-5px) scale(1.02);
+        transform: translateY(-8px) scale(1.03);
         background: rgba(255,255,255,0.2);
-        box-shadow: 0 15px 35px rgba(0,0,0,0.3);
+        box-shadow: 0 20px 40px rgba(0,0,0,0.3);
         border: 1px solid rgba(255,255,255,0.3);
     }
     
-    /* Container interativo para gráficos */
+    /* Container interativo para gráficos ANIMADO */
     .interactive-container {
         background: rgba(255,255,255,0.05);
         border-radius: 15px;
         padding: 1rem;
         margin: 1rem 0;
         border: 1px solid rgba(255,255,255,0.1);
-        transition: all 0.3s ease;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        animation: slideInLeft 0.8s ease-out;
     }
     
     .interactive-container:hover {
         background: rgba(255,255,255,0.1);
         border: 1px solid rgba(255,255,255,0.2);
-        box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        box-shadow: 0 15px 30px rgba(0,0,0,0.2);
+        transform: translateY(-5px);
     }
     
-    /* Responsividade */
+    /* Calendar container ANIMADO */
+    .calendar-container {
+        background: rgba(255,255,255,0.05);
+        border-radius: 15px;
+        padding: 1rem;
+        margin: 1rem 0;
+        border: 1px solid rgba(255,255,255,0.1);
+        min-height: 400px;
+        animation: fadeInScale 0.8s ease-out;
+        transition: all 0.3s ease;
+    }
+    
+    .calendar-container:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 12px 25px rgba(0,0,0,0.2);
+    }
+    
+    /* Responsividade MELHORADA */
     .stPlotlyChart, .stAltairChart {
         width: 100% !important;
         min-height: 600px;
@@ -174,17 +236,43 @@ def inject_css():
         max-width: 100%;
     }
     
+    /* Responsividade para containers de dados */
+    @media (max-width: 1200px) {
+        .uniform-card {
+            min-height: 160px;
+            margin: 0.5rem 0;
+        }
+    }
+    
     @media (max-width: 768px) {
         .logo-aura {
             width: 120px;
             height: 120px;
         }
         .logo-aura::before {
-            width: 150px;
-            height: 150px;
+            width: 126px; /* 5% maior que 120px */
+            height: 126px;
         }
         .logo-aura img {
             width: 80px !important;
+        }
+        
+        .uniform-card {
+            min-height: 140px;
+            padding: 1rem;
+            margin: 0.5rem 0;
+        }
+        
+        .interactive-container {
+            padding: 0.5rem;
+            margin: 0.5rem 0;
+        }
+    }
+    
+    @media (max-width: 480px) {
+        .uniform-card {
+            min-height: 120px;
+            padding: 0.8rem;
         }
     }
     </style>
@@ -363,6 +451,169 @@ def process_data(df_input):
             
     return df
 
+# --- Função para criar gráfico de calendário ---
+def create_calendar_chart(df):
+    """Cria um gráfico de calendário com as vendas."""
+    if df.empty or 'Data' not in df.columns:
+        return None
+    
+    # Preparar dados para o calendário
+    calendar_data = []
+    for _, row in df.iterrows():
+        total = row['Total']
+        # Determinar nível baseado no valor
+        if total == 0:
+            level = 0
+        elif total <= 50:
+            level = 1
+        elif total <= 100:
+            level = 2
+        elif total <= 200:
+            level = 3
+        else:
+            level = 4
+            
+        calendar_data.append({
+            'date': row['Data'].strftime('%Y-%m-%d'),
+            'level': level,
+            'count': total
+        })
+    
+    # Converter para JSON
+    import json
+    calendar_json = json.dumps(calendar_data)
+    
+    calendar_html = f"""
+    <div class="calendar-container">
+        <h3 style="color: white; text-align: center; margin-bottom: 20px;">📅 Calendário de Vendas</h3>
+        <div id="calendar-container" style="width: 100%; height: 400px;"></div>
+    </div>
+    
+    <script src="https://cdn.anychart.com/releases/v8/js/anychart-base.min.js"></script>
+    <script src="https://cdn.anychart.com/releases/v8/js/anychart-ui.min.js"></script>
+    <script src="https://cdn.anychart.com/releases/v8/js/anychart-exports.min.js"></script>
+    <script src="https://cdn.anychart.com/releases/v8/js/anychart-calendar.min.js"></script>
+    <script src="https://cdn.anychart.com/releases/v8/js/anychart-data-adapter.min.js"></script>
+    <link href="https://cdn.anychart.com/releases/v8/css/anychart-ui.min.css" type="text/css" rel="stylesheet">
+    <link href="https://cdn.anychart.com/releases/v8/fonts/css/anychart-font.min.css" type="text/css" rel="stylesheet">
+    
+    <script>
+        anychart.onDocumentReady(function() {{
+            var data = {calendar_json};
+            var dataset = anychart.data.set(data);
+            var mapping = dataset.mapAs({{
+                x: 'date',
+                value: 'level'
+            }});
+            var chart = anychart.calendar(mapping);
+
+            chart.background('#22282D');
+
+            chart.months()
+                .stroke(false)
+                .noDataStroke(false);
+
+            chart.days()
+                .spacing(3)
+                .stroke(false)
+                .noDataStroke(false)
+                .noDataFill('#2d333b')
+                .noDataHatchFill(false);
+
+            chart.colorRange(false);
+
+            var customColorScale = anychart.scales.ordinalColor();
+            customColorScale.ranges([
+                {{equal: 0, color: '#2d333b'}},
+                {{equal: 1, color: '#0D4428'}},
+                {{equal: 2, color: '#006D31'}},
+                {{equal: 3, color: '#37AB4B'}},
+                {{equal: 4, color: '#39D353'}}
+            ]);
+
+            chart.colorScale(customColorScale);
+
+            chart.tooltip()
+                .format('R$ {{%count}} em vendas');
+
+            chart.listen('chartDraw', function() {{
+                document.getElementById('calendar-container').style.height = chart.getActualHeight() + 'px';
+            }});
+
+            chart.container('calendar-container');
+            chart.draw();
+        }});
+    </script>
+    """
+    
+    return calendar_html
+
+# --- Função para criar gráfico de frequência por dia ---
+def create_frequency_chart(attendance_data):
+    """Cria gráfico de frequência por dia da semana."""
+    if not attendance_data or 'frequencia_por_dia' not in attendance_data:
+        return None
+    
+    freq_data = []
+    for dia, dados in attendance_data['frequencia_por_dia'].items():
+        freq_data.append({
+            'Dia': dia,
+            'Frequência (%)': dados['frequencia'],
+            'Trabalhados': dados['trabalhados'],
+            'Esperados': dados['esperados'],
+            'Faltas': dados['faltas']
+        })
+    
+    freq_df = pd.DataFrame(freq_data)
+    
+    if freq_df.empty:
+        return None
+    
+    # Gráfico de frequência por dia
+    freq_chart = alt.Chart(freq_df).mark_bar(
+        color='#4caf50',
+        cornerRadiusTopLeft=5,
+        cornerRadiusTopRight=5,
+        stroke='white',
+        strokeWidth=1
+    ).encode(
+        x=alt.X('Dia:O', title='Dia da Semana', sort=["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"]),
+        y=alt.Y('Frequência (%):Q', title='Taxa de Frequência (%)', scale=alt.Scale(domain=[0, 100])),
+        tooltip=[
+            alt.Tooltip('Dia:N', title='Dia'),
+            alt.Tooltip('Trabalhados:Q', title='Dias Trabalhados'),
+            alt.Tooltip('Esperados:Q', title='Dias Esperados'),
+            alt.Tooltip('Faltas:Q', title='Faltas'),
+            alt.Tooltip('Frequência (%):Q', title='Frequência (%)', format='.1f')
+        ]
+    )
+    
+    # Adicionar texto com percentuais
+    text = alt.Chart(freq_df).mark_text(
+        dy=-8,
+        color='white',
+        fontSize=12,
+        fontWeight='bold',
+        stroke='black',
+        strokeWidth=1
+    ).encode(
+        x=alt.X('Dia:O', sort=["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"]),
+        y=alt.Y('Frequência (%):Q'),
+        text=alt.Text('Frequência (%):Q', format='.0f')
+    )
+    
+    chart = (freq_chart + text).properties(
+        title="📊 Taxa de Frequência por Dia da Semana",
+        height=400,
+        width='container'
+    ).configure_view(
+        stroke=None
+    ).configure(
+        background='transparent'
+    )
+    
+    return chart
+
 # --- Funções de Análise de Frequência ---
 def calculate_attendance_analysis(df):
     """Calcula análise detalhada de frequência e faltas."""
@@ -429,8 +680,8 @@ def calculate_attendance_analysis(df):
     }
 
 # --- Funções de Gráficos Interativos em Altair ---
-def create_interactive_pie_chart(df):
-    """Cria um gráfico de pizza interativo com valores exibidos."""
+def create_interactive_radial_chart(df):
+    """Cria um gráfico radial (não pizza) sem valores exibidos."""
     if df.empty or not any(col in df.columns for col in ['Cartão', 'Dinheiro', 'Pix']):
         return None
     
@@ -443,19 +694,20 @@ def create_interactive_pie_chart(df):
     if payment_data.empty:
         return None
 
-    # Calcular percentuais
+    # Calcular percentuais para tooltip apenas
     total_geral = payment_data['Valor'].sum()
     payment_data['Percentual'] = (payment_data['Valor'] / total_geral * 100).round(1)
-    payment_data['Valor_Formatado'] = payment_data['Valor'].apply(lambda x: f"R$ {x:,.0f}".replace(",", "."))
 
-    # Gráfico de pizza base
-    pie_chart = alt.Chart(payment_data).mark_arc(
-        innerRadius=50,
-        outerRadius=150,
+    # Gráfico radial usando mark_arc com raios diferentes
+    radial_chart = alt.Chart(payment_data).mark_arc(
+        innerRadius=60,
+        outerRadius=180,
         stroke='white',
-        strokeWidth=2
+        strokeWidth=3,
+        cornerRadius=5
     ).encode(
-        theta=alt.Theta('Valor:Q'),
+        theta=alt.Theta('Valor:Q', stack=True),
+        radius=alt.Radius('Valor:Q', scale=alt.Scale(type='sqrt', zero=True, rangeMin=60, rangeMax=180)),
         color=alt.Color(
             'Método:N',
             scale=alt.Scale(range=CORES_MODO_ESCURO[:3]),
@@ -475,26 +727,8 @@ def create_interactive_pie_chart(df):
             alt.Tooltip('Valor:Q', title='Valor (R$)', format=',.2f'),
             alt.Tooltip('Percentual:Q', title='Percentual (%)', format='.1f')
         ]
-    )
-
-    # Texto com valores
-    text_chart = alt.Chart(payment_data).mark_text(
-        fontSize=14,
-        fontWeight='bold',
-        color='white',
-        stroke='black',
-        strokeWidth=1,
-        radius=100
-    ).encode(
-        theta=alt.Theta('Valor:Q'),
-        text=alt.Text('Percentual:Q', format='.1f'),
-        color=alt.value('white')
-    ).transform_calculate(
-        text_display="datum.Percentual + '%'"
-    )
-
-    chart = (pie_chart + text_chart).properties(
-        title="🎯 Distribuição por Método de Pagamento",
+    ).properties(
+        title="🎯 Distribuição Radial por Método de Pagamento",
         width=600,
         height=600,
         padding={'bottom': 100}
@@ -504,7 +738,7 @@ def create_interactive_pie_chart(df):
         background='transparent'
     )
 
-    return chart
+    return radial_chart
 
 def create_interactive_histogram(df, title="Distribuição dos Valores de Venda Diários"):
     """Histograma interativo com valores exibidos acima das barras."""
@@ -599,19 +833,19 @@ def create_area_chart_with_gradient(df):
         return None
     
     df_sorted = df.sort_values('Data').copy()
-    df_sorted['Total_Acumulado'] = df_sorted['Total'].cumsum()  # MUDANÇA: Agora é acumulado
+    df_sorted['Total_Acumulado'] = df_sorted['Total'].cumsum()
     
     if df_sorted.empty:
         return None
     
     area_chart = alt.Chart(df_sorted).mark_area(
         interpolate='monotone',
-        line={'color': '#2a9d8f', 'strokeWidth': 3},  # Verde-azulado elegante
+        line={'color': '#2a9d8f', 'strokeWidth': 3},
         color=alt.Gradient(
             gradient='linear',
             stops=[
-                alt.GradientStop(color='#2a9d8f', offset=0),    # Verde-azulado
-                alt.GradientStop(color='#98c1d9', offset=1)     # Azul claro
+                alt.GradientStop(color='#2a9d8f', offset=0),
+                alt.GradientStop(color='#98c1d9', offset=1)
             ],
             x1=1, x2=1, y1=1, y2=0
         )
@@ -622,18 +856,18 @@ def create_area_chart_with_gradient(df):
             axis=alt.Axis(format='%d/%m', labelAngle=-45, labelFontSize=12)
         ),
         y=alt.Y(
-            'Total_Acumulado:Q',  # MUDANÇA: Usando valor acumulado
-            title='Vendas Acumuladas (R$)',  # MUDANÇA: Título atualizado
+            'Total_Acumulado:Q',
+            title='Vendas Acumuladas (R$)',
             axis=alt.Axis(labelFontSize=12)
         ),
         tooltip=[
             alt.Tooltip('DataFormatada:N', title='Data'),
             alt.Tooltip('Total:Q', title='Venda do Dia (R$)', format=',.2f'),
-            alt.Tooltip('Total_Acumulado:Q', title='Total Acumulado (R$)', format=',.2f')  # MUDANÇA: Tooltip melhorado
+            alt.Tooltip('Total_Acumulado:Q', title='Total Acumulado (R$)', format=',.2f')
         ]
     ).properties(
         title=alt.TitleParams(
-            text='📈 Evolução Acumulada das Vendas',  # MUDANÇA: Título atualizado
+            text='📈 Evolução Acumulada das Vendas',
             fontSize=18,
             anchor='start'
         ),
@@ -665,12 +899,12 @@ def create_interactive_accumulation_chart(df):
     area_chart = alt.Chart(df_accumulated).mark_area(
         opacity=0.7,
         interpolate='monotone',
-        line={'color': '#e76f51', 'strokeWidth': 3},  # Laranja elegante
+        line={'color': '#e76f51', 'strokeWidth': 3},
         color=alt.Gradient(
             gradient='linear',
             stops=[
-                alt.GradientStop(color='#e76f51', offset=0),    # Laranja
-                alt.GradientStop(color='#f4a261', offset=1)     # Amarelo-laranja
+                alt.GradientStop(color='#e76f51', offset=0),
+                alt.GradientStop(color='#f4a261', offset=1)
             ],
             x1=1, x2=1, y1=1, y2=0
         )
@@ -695,9 +929,9 @@ def create_interactive_accumulation_chart(df):
     
     # Linha de tendência com cor harmoniosa
     line_chart = alt.Chart(df_accumulated).mark_line(
-        color='#e76f51',  # Mesma cor da área
+        color='#e76f51',
         strokeWidth=4,
-        point=alt.OverlayMarkDef(color='#264653', size=100)  # Pontos em verde escuro
+        point=alt.OverlayMarkDef(color='#264653', size=100)
     ).encode(
         x='Data:T',
         y='Patrimonio_Acumulado:Q',
@@ -716,7 +950,7 @@ def create_interactive_accumulation_chart(df):
     
     peak_point = alt.Chart(peak_data).mark_circle(
         size=300,
-        color='#264653',  # Verde escuro para destaque
+        color='#264653',
         stroke='white',
         strokeWidth=3
     ).encode(
@@ -730,7 +964,7 @@ def create_interactive_accumulation_chart(df):
         baseline='bottom',
         fontSize=14,
         fontWeight='bold',
-        color='#264653',  # Verde escuro
+        color='#264653',
         dy=-15
     ).encode(
         x='Data:T',
@@ -1216,7 +1450,7 @@ def create_premium_kpi_cards(df):
             )
 
 def create_attendance_insights(df):
-    """Cria seção de insights de frequência e assiduidade."""
+    """Cria seção de insights de frequência e assiduidade com gráfico."""
     if df.empty:
         return
     
@@ -1260,66 +1494,38 @@ def create_attendance_insights(df):
             help="Domingos no período (folgas programadas)"
         )
     
-    # Análise detalhada por dia da semana
+    # Gráfico de frequência por dia da semana
     st.subheader("📊 Frequência por Dia da Semana")
     
-    freq_data = []
-    for dia, dados in attendance_data['frequencia_por_dia'].items():
-        freq_data.append({
-            'Dia': dia,
-            'Esperados': dados['esperados'],
-            'Trabalhados': dados['trabalhados'],
-            'Faltas': dados['faltas'],
-            'Frequência (%)': dados['frequencia']
-        })
-    
-    freq_df = pd.DataFrame(freq_data)
-    
-    if not freq_df.empty:
-        # Tabela de frequência
-        st.dataframe(freq_df, use_container_width=True, hide_index=True)
-        
-        # Gráfico de frequência por dia
-        freq_chart = alt.Chart(freq_df).mark_bar(
-            color=CORES_MODO_ESCURO[1],
-            cornerRadiusTopLeft=5,
-            cornerRadiusTopRight=5
-        ).encode(
-            x=alt.X('Dia:O', title='Dia da Semana', sort=["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"]),
-            y=alt.Y('Frequência (%):Q', title='Taxa de Frequência (%)', scale=alt.Scale(domain=[0, 100])),
-            tooltip=[
-                alt.Tooltip('Dia:N', title='Dia'),
-                alt.Tooltip('Trabalhados:Q', title='Dias Trabalhados'),
-                alt.Tooltip('Esperados:Q', title='Dias Esperados'),
-                alt.Tooltip('Faltas:Q', title='Faltas'),
-                alt.Tooltip('Frequência (%):Q', title='Frequência (%)', format='.1f')
-            ]
-        ).properties(
-            title="Taxa de Frequência por Dia da Semana",
-            height=400,
-            width='container'
-        ).configure_view(
-            stroke=None
-        ).configure(
-            background='transparent'
-        )
-        
+    freq_chart = create_frequency_chart(attendance_data)
+    if freq_chart:
         st.altair_chart(freq_chart, use_container_width=True)
+    
+    # Insights sobre frequência
+    if attendance_data['frequencia_por_dia']:
+        freq_data = []
+        for dia, dados in attendance_data['frequencia_por_dia'].items():
+            freq_data.append({
+                'Dia': dia,
+                'Frequência (%)': dados['frequencia']
+            })
         
-        # Insights sobre frequência
-        melhor_freq_dia = freq_df.loc[freq_df['Frequência (%)'].idxmax(), 'Dia']
-        pior_freq_dia = freq_df.loc[freq_df['Frequência (%)'].idxmin(), 'Dia']
+        freq_df = pd.DataFrame(freq_data)
         
-        col_insight1, col_insight2 = st.columns(2)
-        
-        with col_insight1:
-            st.success(f"🏆 **Melhor Frequência:** {melhor_freq_dia} ({freq_df.loc[freq_df['Dia'] == melhor_freq_dia, 'Frequência (%)'].iloc[0]:.1f}%)")
-        
-        with col_insight2:
-            if freq_df.loc[freq_df['Dia'] == pior_freq_dia, 'Frequência (%)'].iloc[0] < 80:
-                st.warning(f"⚠️ **Atenção:** {pior_freq_dia} ({freq_df.loc[freq_df['Dia'] == pior_freq_dia, 'Frequência (%)'].iloc[0]:.1f}%)")
-            else:
-                st.info(f"📊 **Menor Frequência:** {pior_freq_dia} ({freq_df.loc[freq_df['Dia'] == pior_freq_dia, 'Frequência (%)'].iloc[0]:.1f}%)")
+        if not freq_df.empty:
+            melhor_freq_dia = freq_df.loc[freq_df['Frequência (%)'].idxmax(), 'Dia']
+            pior_freq_dia = freq_df.loc[freq_df['Frequência (%)'].idxmin(), 'Dia']
+            
+            col_insight1, col_insight2 = st.columns(2)
+            
+            with col_insight1:
+                st.success(f"🏆 **Melhor Frequência:** {melhor_freq_dia} ({freq_df.loc[freq_df['Dia'] == melhor_freq_dia, 'Frequência (%)'].iloc[0]:.1f}%)")
+            
+            with col_insight2:
+                if freq_df.loc[freq_df['Dia'] == pior_freq_dia, 'Frequência (%)'].iloc[0] < 80:
+                    st.warning(f"⚠️ **Atenção:** {pior_freq_dia} ({freq_df.loc[freq_df['Dia'] == pior_freq_dia, 'Frequência (%)'].iloc[0]:.1f}%)")
+                else:
+                    st.info(f"📊 **Menor Frequência:** {pior_freq_dia} ({freq_df.loc[freq_df['Dia'] == pior_freq_dia, 'Frequência (%)'].iloc[0]:.1f}%)")
 
 def create_premium_insights(df):
     """Insights otimizados com informações relevantes."""
@@ -1355,18 +1561,6 @@ def create_premium_insights(df):
     else:
         melhor_metodo = "N/A"
         percentual_melhor = 0
-    
-    # Análise de sazonalidade
-    # Análise de sazonalidade
-    if 'Data' in df.columns and len(df) >= 30:
-        df_sazonal = df.copy()
-        df_sazonal['Semana'] = df_sazonal['Data'].dt.isocalendar().week
-        vendas_por_semana = df_sazonal.groupby('Semana')['Total'].mean()
-        variacao_semanal = vendas_por_semana.std() / vendas_por_semana.mean() * 100 if vendas_por_semana.mean() > 0 else 0
-        sazonalidade_texto = "alta" if variacao_semanal > 20 else "baixa"
-    else:
-        variacao_semanal = 0
-        sazonalidade_texto = "estável"
     
     st.subheader("🧠 Insights Estratégicos Avançados")
     
@@ -1444,9 +1638,9 @@ def format_brl(value):
 
 # --- Interface Principal da Aplicação ---
 def main():
-    # Título com logo CORRIGIDO - aura atrás do logo
+    # Título com logo CORRIGIDO - tamanho 2 e título 5
     try:
-        col_logo, col_title = st.columns([1.5, 5.5])
+        col_logo, col_title = st.columns([2, 5])  # MUDANÇA: proporção 2:5
         with col_logo:
             # Logo com aura CORRIGIDA usando CSS
             logo_base64 = get_base64_of_image('logo.png')
@@ -1618,22 +1812,20 @@ def main():
                 st.info("Colunas necessárias para a tabela de dados filtrados não estão disponíveis.")
 
             # Container interativo para gráfico de vendas diárias
-            st.markdown('<div class="interactive-container">', unsafe_allow_html=True)
-            daily_chart = create_advanced_daily_sales_chart(df_filtered)
-            if daily_chart:
-                st.altair_chart(daily_chart, use_container_width=True)
-            else:
-                st.info("Sem dados de vendas diárias para exibir o gráfico nos filtros selecionados.")
-            st.markdown('</div>', unsafe_allow_html=True)
+            with st.container():
+                daily_chart = create_advanced_daily_sales_chart(df_filtered)
+                if daily_chart:
+                    st.altair_chart(daily_chart, use_container_width=True)
+                else:
+                    st.info("Sem dados de vendas diárias para exibir o gráfico nos filtros selecionados.")
 
             # Container interativo para gráfico de área ACUMULADO
-            st.markdown('<div class="interactive-container">', unsafe_allow_html=True)
-            area_chart = create_area_chart_with_gradient(df_filtered)
-            if area_chart:
-                st.altair_chart(area_chart, use_container_width=True)
-            else:
-                st.info("Não foi possível gerar o gráfico de área.")
-            st.markdown('</div>', unsafe_allow_html=True)
+            with st.container():
+                area_chart = create_area_chart_with_gradient(df_filtered)
+                if area_chart:
+                    st.altair_chart(area_chart, use_container_width=True)
+                else:
+                    st.info("Não foi possível gerar o gráfico de área.")
         else:
              if df_processed.empty and df_raw.empty and get_worksheet() is None: 
                  st.warning("Não foi possível carregar os dados. Verifique configurações e credenciais.")
@@ -1805,65 +1997,78 @@ def main():
             
             st.markdown("---")
             
-            # === SEÇÃO 2: ANÁLISE DE FREQUÊNCIA E ASSIDUIDADE ===
+            # === SEÇÃO 2: CALENDÁRIO DE VENDAS ===
+            calendar_html = create_calendar_chart(df_filtered)
+            if calendar_html:
+                st.components.v1.html(calendar_html, height=500)
+            
+            st.markdown("---")
+            
+            # === SEÇÃO 3: ANÁLISE DE FREQUÊNCIA E ASSIDUIDADE ===
             create_attendance_insights(df_filtered)
             
             st.markdown("---")
             
-            # === SEÇÃO 3: GRÁFICOS PRINCIPAIS INTERATIVOS ===
+            # === SEÇÃO 4: GRÁFICOS PRINCIPAIS RESPONSIVOS ===
             st.subheader("📊 Análise Visual Avançada")
             
-            # Gráficos lado a lado - 2/3 para vendas diárias, 1/3 para pizza
-            col_chart1, col_chart2 = st.columns([2, 1])
+            # Layout responsivo: em telas menores, os gráficos vão para baixo
+            col_chart1, col_chart2 = st.columns([2, 1], gap="large")
             
             with col_chart1:
-                st.markdown('<div class="interactive-container">', unsafe_allow_html=True)
-                daily_chart = create_advanced_daily_sales_chart(df_filtered)
-                if daily_chart:
-                    st.altair_chart(daily_chart, use_container_width=True)
-                st.markdown('</div>', unsafe_allow_html=True)
+                with st.container():
+                    st.markdown('<div class="interactive-container">', unsafe_allow_html=True)
+                    daily_chart = create_advanced_daily_sales_chart(df_filtered)
+                    if daily_chart:
+                        st.altair_chart(daily_chart, use_container_width=True)
+                    st.markdown('</div>', unsafe_allow_html=True)
             
             with col_chart2:
+                with st.container():
+                    st.markdown('<div class="interactive-container">', unsafe_allow_html=True)
+                    # MUDANÇA: Usando gráfico radial em vez de pizza
+                    radial_chart = create_interactive_radial_chart(df_filtered)
+                    if radial_chart:
+                        st.altair_chart(radial_chart, use_container_width=True)
+                    st.markdown('</div>', unsafe_allow_html=True)
+            
+            st.markdown("---")
+            
+            # === SEÇÃO 5: GRÁFICO DE PATRIMÔNIO ACUMULADO ===
+            with st.container():
                 st.markdown('<div class="interactive-container">', unsafe_allow_html=True)
-                pie_chart = create_interactive_pie_chart(df_filtered)
-                if pie_chart:
-                    st.altair_chart(pie_chart, use_container_width=True)
+                accumulation_chart = create_interactive_accumulation_chart(df_filtered)
+                if accumulation_chart:
+                    st.altair_chart(accumulation_chart, use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
             
             st.markdown("---")
             
-            # === SEÇÃO 4: GRÁFICO DE PATRIMÔNIO ACUMULADO ===
-            st.markdown('<div class="interactive-container">', unsafe_allow_html=True)
-            accumulation_chart = create_interactive_accumulation_chart(df_filtered)
-            if accumulation_chart:
-                st.altair_chart(accumulation_chart, use_container_width=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-            
-            st.markdown("---")
-            
-            # === SEÇÃO 5: ANÁLISE POR DIA DA SEMANA ===
+            # === SEÇÃO 6: ANÁLISE POR DIA DA SEMANA ===
             st.subheader("📅 Performance por Dia da Semana")
             
-            st.markdown('<div class="interactive-container">', unsafe_allow_html=True)
-            weekday_chart, best_day = create_enhanced_weekday_analysis(df_filtered)
-            if weekday_chart:
-                st.altair_chart(weekday_chart, use_container_width=True)
-            st.markdown('</div>', unsafe_allow_html=True)
+            with st.container():
+                st.markdown('<div class="interactive-container">', unsafe_allow_html=True)
+                weekday_chart, best_day = create_enhanced_weekday_analysis(df_filtered)
+                if weekday_chart:
+                    st.altair_chart(weekday_chart, use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
             
             st.markdown("---")
             
-            # === SEÇÃO 6: HISTOGRAMA INTERATIVO ===
+            # === SEÇÃO 7: HISTOGRAMA INTERATIVO ===
             st.subheader("📊 Distribuição de Valores de Vendas")
             
-            st.markdown('<div class="interactive-container">', unsafe_allow_html=True)
-            sales_histogram_chart = create_interactive_histogram(df_filtered)
-            if sales_histogram_chart: 
-                st.altair_chart(sales_histogram_chart, use_container_width=True)
-            st.markdown('</div>', unsafe_allow_html=True)
+            with st.container():
+                st.markdown('<div class="interactive-container">', unsafe_allow_html=True)
+                sales_histogram_chart = create_interactive_histogram(df_filtered)
+                if sales_histogram_chart: 
+                    st.altair_chart(sales_histogram_chart, use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
             
             st.markdown("---")
             
-            # === SEÇÃO 7: INSIGHTS ESTRATÉGICOS ===
+            # === SEÇÃO 8: INSIGHTS ESTRATÉGICOS ===
             create_premium_insights(df_filtered)
             
         else:
