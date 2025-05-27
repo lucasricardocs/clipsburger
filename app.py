@@ -70,45 +70,47 @@ def inject_css():
         background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%);
     }
     
-    /* Responsividade para gráficos */
-    .stPlotlyChart, .stAltairChart {
-        width: 100% !important;
-        min-height: 600px;
+    /* Logo com aura CORRIGIDA */
+    .logo-aura {
+        position: relative;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        width: 160px;
+        height: 160px;
+        margin: 0 auto;
     }
     
-    /* Melhor aproveitamento de espaço */
-    .block-container {
-        padding-top: 2rem;
-        padding-bottom: 2rem;
-        max-width: 100%;
+    .logo-aura::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 200px;
+        height: 200px;
+        background: radial-gradient(circle, rgba(76, 120, 168, 0.4) 0%, rgba(76, 120, 168, 0.2) 40%, rgba(76, 120, 168, 0.1) 70%, transparent 100%);
+        border-radius: 50%;
+        animation: pulse-aura 3s ease-in-out infinite;
+        z-index: 1;
     }
     
-    /* Logo com efeito de aura responsivo */
-    @media (max-width: 768px) {
-        .logo-container img {
-            width: 80px !important;
+    .logo-aura img {
+        position: relative;
+        z-index: 2;
+        border-radius: 15px;
+        filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.3));
+    }
+    
+    @keyframes pulse-aura {
+        0%, 100% { 
+            transform: translate(-50%, -50%) scale(1);
+            opacity: 0.6;
         }
-    }
-    
-    /* Gráficos adaptativos */
-    .chart-container {
-        width: 100%;
-        height: auto;
-        min-height: 600px;
-        aspect-ratio: 16/10;
-    }
-    
-    /* Grid para gráficos do dashboard premium */
-    .premium-charts-grid {
-        display: grid;
-        grid-template-columns: 2fr 1fr;
-        gap: 2rem;
-        margin: 2rem 0;
-    }
-    
-    .premium-chart-full {
-        grid-column: 1 / -1;
-        margin: 2rem 0;
+        50% { 
+            transform: translate(-50%, -50%) scale(1.1);
+            opacity: 1;
+        }
     }
     
     /* Cards uniformes */
@@ -128,6 +130,32 @@ def inject_css():
         transform: translateY(-3px);
         background: rgba(255,255,255,0.15);
         box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    }
+    
+    /* Responsividade */
+    .stPlotlyChart, .stAltairChart {
+        width: 100% !important;
+        min-height: 600px;
+    }
+    
+    .block-container {
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+        max-width: 100%;
+    }
+    
+    @media (max-width: 768px) {
+        .logo-aura {
+            width: 120px;
+            height: 120px;
+        }
+        .logo-aura::before {
+            width: 150px;
+            height: 150px;
+        }
+        .logo-aura img {
+            width: 80px !important;
+        }
     }
     </style>
     """, unsafe_allow_html=True)
@@ -306,8 +334,8 @@ def process_data(df_input):
     return df
 
 # --- Funções de Gráficos Interativos em Altair ---
-def create_radial_plot(df):
-    """Cria um gráfico radial plot com valores exibidos."""
+def create_simple_pie_chart(df):
+    """Cria um gráfico de pizza simples e funcional."""
     if df.empty or not any(col in df.columns for col in ['Cartão', 'Dinheiro', 'Pix']):
         return None
     
@@ -320,16 +348,19 @@ def create_radial_plot(df):
     if payment_data.empty:
         return None
 
-    # Calcular percentuais para exibir
+    # Calcular percentuais
     total_geral = payment_data['Valor'].sum()
     payment_data['Percentual'] = (payment_data['Valor'] / total_geral * 100).round(1)
-    payment_data['Valor_Formatado'] = payment_data['Valor'].apply(lambda x: f"R$ {x:,.0f}".replace(",", "."))
 
-    base = alt.Chart(payment_data).encode(
-        theta=alt.Theta('Valor:Q', stack=True),
-        radius=alt.Radius('Valor:Q', scale=alt.Scale(type='sqrt', zero=True, rangeMin=30, rangeMax=150)),
+    chart = alt.Chart(payment_data).mark_arc(
+        innerRadius=50,
+        outerRadius=150,
+        stroke='white',
+        strokeWidth=2
+    ).encode(
+        theta=alt.Theta('Valor:Q'),
         color=alt.Color(
-            'Método:N', 
+            'Método:N',
             scale=alt.Scale(range=CORES_MODO_ESCURO[:3]),
             legend=alt.Legend(
                 title="Método de Pagamento",
@@ -338,11 +369,8 @@ def create_radial_plot(df):
                 titleFontSize=14,
                 labelFontSize=12,
                 symbolSize=100,
-                symbolStrokeWidth=2,
                 titlePadding=10,
-                padding=10,
-                rowPadding=5,
-                columnPadding=15
+                padding=10
             )
         ),
         tooltip=[
@@ -350,43 +378,8 @@ def create_radial_plot(df):
             alt.Tooltip('Valor:Q', title='Valor (R$)', format=',.2f'),
             alt.Tooltip('Percentual:Q', title='Percentual (%)', format='.1f')
         ]
-    )
-
-    radial_plot = base.mark_arc(
-        innerRadius=40, 
-        stroke='white', 
-        strokeWidth=3
-    )
-
-    # Adicionar texto com valores e percentuais
-    text_valores = base.mark_text(
-        radiusOffset=20,
-        fontSize=14,
-        fontWeight='bold',
-        color='white',
-        stroke='black',
-        strokeWidth=1
-    ).encode(
-        text=alt.Text('Valor_Formatado:N')
-    )
-
-    text_percentuais = base.mark_text(
-        radiusOffset=40,
-        fontSize=12,
-        fontWeight='bold',
-        color='white',
-        stroke='black',
-        strokeWidth=1
-    ).encode(
-        text=alt.expr('datum.Percentual + "%"')
-    )
-
-    chart = (radial_plot + text_valores + text_percentuais).properties(
-        title=alt.TitleParams(
-            text='🎯 Gráfico Radial de Métodos de Pagamento', 
-            fontSize=18,
-            anchor='start'
-        ),
+    ).properties(
+        title="🎯 Distribuição por Método de Pagamento",
         width=600,
         height=600,
         padding={'bottom': 100}
@@ -399,7 +392,7 @@ def create_radial_plot(df):
     return chart
 
 def create_area_chart_with_gradient(df):
-    """Cria gráfico de área com gradiente substituindo o gráfico de montanha."""
+    """Cria gráfico de área com gradiente."""
     if df.empty or 'Data' not in df.columns or 'Total' not in df.columns:
         return None
     
@@ -563,7 +556,7 @@ def create_interactive_accumulation_chart(df):
     return combined_chart
 
 def create_advanced_daily_sales_chart(df):
-    """Cria um gráfico de vendas diárias sem animação."""
+    """Cria um gráfico de vendas diárias."""
     if df.empty or 'Data' not in df.columns:
         return None
     
@@ -638,7 +631,7 @@ def create_advanced_daily_sales_chart(df):
     return bars
 
 def create_enhanced_weekday_analysis(df):
-    """Cria análise de vendas por dia da semana sem animação."""
+    """Cria análise de vendas por dia da semana."""
     if df.empty or 'DiaSemana' not in df.columns or 'Total' not in df.columns:
         return None, None
     
@@ -787,30 +780,6 @@ def create_sales_histogram(df, title="Distribuição dos Valores de Venda Diári
 
     return chart
 
-def analyze_sales_by_weekday(df):
-    """Analisa vendas por dia da semana."""
-    if df.empty or 'DiaSemana' not in df.columns or 'Total' not in df.columns or df['DiaSemana'].isnull().all() or df['Total'].isnull().all():
-        return None, None
-    
-    try:
-        df_copy = df.copy()
-        df_copy['Total'] = pd.to_numeric(df_copy['Total'], errors='coerce')
-        df_copy.dropna(subset=['Total', 'DiaSemana'], inplace=True)
-        
-        if df_copy.empty:
-            return None, None
-        
-        avg_sales_weekday = df_copy.groupby('DiaSemana', observed=True)['Total'].mean().reindex(dias_semana_ordem).dropna()
-        
-        if not avg_sales_weekday.empty:
-            best_day = avg_sales_weekday.idxmax()
-            return best_day, avg_sales_weekday
-        else:
-            return None, avg_sales_weekday
-    except Exception as e:
-        st.error(f"Erro ao analisar vendas por dia da semana: {e}")
-        return None, None
-
 # --- Funções de Cálculos Financeiros ---
 def calculate_financial_results(df, salario_minimo, custo_contadora, custo_fornecedores_percentual):
     """Calcula os resultados financeiros com base nos dados de vendas seguindo normas contábeis."""
@@ -864,11 +833,6 @@ def create_dre_textual(resultados, df_filtered, selected_anos_filter):
     """Cria uma apresentação textual do DRE no estilo tradicional contábil usando dados anuais."""
     def format_val(value):
         return f"{value:,.0f}".replace(",", ".")
-
-    def calc_percent(value, base):
-        if base == 0:
-            return 0
-        return (value / base) * 100
 
     # Determinar o ano para o DRE
     if selected_anos_filter and len(selected_anos_filter) == 1:
@@ -1241,46 +1205,24 @@ def format_brl(value):
 
 # --- Interface Principal da Aplicação ---
 def main():
-    # Título com logo MAIOR e efeito de aura
+    # Título com logo CORRIGIDO - aura atrás do logo
     try:
         col_logo, col_title = st.columns([1.5, 5.5])
         with col_logo:
-            st.markdown(f"""
-            <div style="
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                padding: 20px;
-                background: radial-gradient(circle, rgba(76, 120, 168, 0.3) 0%, rgba(76, 120, 168, 0.1) 50%, transparent 70%);
-                border-radius: 50%;
-                box-shadow: 
-                    0 0 30px rgba(76, 120, 168, 0.5),
-                    0 0 60px rgba(76, 120, 168, 0.3),
-                    0 0 90px rgba(76, 120, 168, 0.1);
-                animation: pulse-aura 3s ease-in-out infinite;
-            ">
-                <img src="data:image/png;base64,{get_base64_of_image('logo.png')}" width="120" style="
-                    filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.3));
-                    border-radius: 15px;
-                "/>
-            </div>
-            <style>
-                @keyframes pulse-aura {{
-                    0%, 100% {{ 
-                        box-shadow: 
-                            0 0 30px rgba(76, 120, 168, 0.5),
-                            0 0 60px rgba(76, 120, 168, 0.3),
-                            0 0 90px rgba(76, 120, 168, 0.1);
-                    }}
-                    50% {{ 
-                        box-shadow: 
-                            0 0 40px rgba(76, 120, 168, 0.7),
-                            0 0 80px rgba(76, 120, 168, 0.5),
-                            0 0 120px rgba(76, 120, 168, 0.3);
-                    }}
-                }}
-            </style>
-            """, unsafe_allow_html=True)
+            # Logo com aura CORRIGIDA usando CSS
+            logo_base64 = get_base64_of_image('logo.png')
+            if logo_base64:
+                st.markdown(f"""
+                <div class="logo-aura">
+                    <img src="data:image/png;base64,{logo_base64}" width="120" alt="Logo Clips Burger"/>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown("""
+                <div class="logo-aura">
+                    <div style="width: 120px; height: 120px; background: #4c78a8; border-radius: 15px; display: flex; align-items: center; justify-content: center; font-size: 2rem; color: white; position: relative; z-index: 2;">🍔</div>
+                </div>
+                """, unsafe_allow_html=True)
         
         with col_title:
             st.markdown(f"""
@@ -1359,7 +1301,6 @@ def main():
         </div>
         """, unsafe_allow_html=True)
         
-        # Botão de registrar (fora do form)
         # Botão de registrar (fora do form)
         if st.button("✅ Registrar Venda", type="primary", use_container_width=True):
             if total_venda_form > 0:
@@ -1699,7 +1640,7 @@ def main():
             # === SEÇÃO 4: GRÁFICOS PRINCIPAIS ===
             st.subheader("📊 Análise Visual Avançada")
             
-            # Gráficos lado a lado - 2/3 para vendas diárias, 1/3 para radial
+            # Gráficos lado a lado - 2/3 para vendas diárias, 1/3 para pizza
             col_chart1, col_chart2 = st.columns([2, 1])
             
             with col_chart1:
@@ -1708,9 +1649,9 @@ def main():
                     st.altair_chart(daily_chart, use_container_width=True)
             
             with col_chart2:
-                radial_chart = create_radial_plot(df_filtered)
-                if radial_chart:
-                    st.altair_chart(radial_chart, use_container_width=True)
+                pie_chart = create_simple_pie_chart(df_filtered)
+                if pie_chart:
+                    st.altair_chart(pie_chart, use_container_width=True)
             
             st.markdown("---")
             
