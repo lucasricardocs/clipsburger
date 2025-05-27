@@ -190,24 +190,6 @@ def process_data(df_input):
             
     return df
 
-# --- Função para filtrar por somatório de últimos N dias ---
-def filter_by_rolling_days(df, dias_selecionados):
-    """Filtra o DataFrame para incluir apenas registros dos últimos N dias selecionados."""
-    if df.empty or not dias_selecionados or 'Data' not in df.columns:
-        return df
-    
-    # Pega a data mais recente dos dados
-    data_mais_recente = df['Data'].max()
-    
-    # Calcula o maior período selecionado
-    max_dias = max(dias_selecionados)
-    
-    # Filtra para incluir apenas os últimos N dias
-    data_inicio = data_mais_recente - timedelta(days=max_dias - 1)
-    df_filtrado = df[df['Data'] >= data_inicio].copy()
-    
-    return df_filtrado
-
 # --- Funções de Gráficos Interativos em Altair ---
 def create_enhanced_payment_pie_chart(df):
     """Cria um gráfico de pizza interativo usando Altair."""
@@ -566,7 +548,7 @@ def analyze_sales_by_weekday(df):
         st.error(f"Erro ao analisar vendas por dia da semana: {e}")
         return None, None
 
-# --- Funções de Cálculos Financeiros Corrigidas ---
+# --- Funções de Cálculos Financeiros ---
 def calculate_financial_results(df, salario_minimo, custo_contadora, custo_fornecedores_percentual):
     """Calcula os resultados financeiros com base nos dados de vendas seguindo normas contábeis."""
     results = {
@@ -652,42 +634,59 @@ def calculate_financial_results(df, salario_minimo, custo_contadora, custo_forne
     
     return results
 
-def create_dre_table(resultados):
-    """Cria uma tabela DRE formatada."""
-    dre_data = [
-        ["DEMONSTRAÇÃO DO RESULTADO DO EXERCÍCIO", ""],
-        ["", ""],
-        ["RECEITA OPERACIONAL BRUTA", format_brl(resultados['receita_bruta'])],
-        ["  Vendas de Produtos", format_brl(resultados['receita_bruta'])],
-        ["", ""],
-        ["(-) DEDUÇÕES DA RECEITA BRUTA", format_brl(-resultados['impostos_sobre_vendas'])],
-        ["  Simples Nacional (6%)", format_brl(-resultados['impostos_sobre_vendas'])],
-        ["", ""],
-        ["(=) RECEITA OPERACIONAL LÍQUIDA", format_brl(resultados['receita_liquida'])],
-        ["", ""],
-        ["(-) CUSTO DOS PRODUTOS VENDIDOS", format_brl(-resultados['custo_produtos_vendidos'])],
-        ["  Custo de Mercadorias", format_brl(-resultados['custo_produtos_vendidos'])],
-        ["", ""],
-        ["(=) LUCRO BRUTO", format_brl(resultados['lucro_bruto'])],
-        [f"    Margem Bruta: {resultados['margem_bruta']:.2f}%", ""],
-        ["", ""],
-        ["(-) DESPESAS OPERACIONAIS", format_brl(-resultados['total_despesas_operacionais'])],
-        ["  Despesas com Pessoal", format_brl(-resultados['despesas_com_pessoal'])],
-        ["  Serviços Contábeis", format_brl(-resultados['despesas_contabeis'])],
-        ["", ""],
-        ["(=) LUCRO OPERACIONAL (EBIT)", format_brl(resultados['lucro_operacional'])],
-        [f"    Margem Operacional: {resultados['margem_operacional']:.2f}%", ""],
-        ["", ""],
-        ["(=) LUCRO ANTES DO IR", format_brl(resultados['lucro_antes_ir'])],
-        ["", ""],
-        ["(-) Provisão para IR e CSLL", "R$ 0,00"],
-        ["    (Já incluído no Simples Nacional)", ""],
-        ["", ""],
-        ["(=) LUCRO LÍQUIDO DO PERÍODO", format_brl(resultados['lucro_liquido'])],
-        [f"    Margem Líquida: {resultados['margem_liquida']:.2f}%", ""],
-    ]
+def create_dre_textual(resultados):
+    """Cria uma apresentação textual do DRE com formatação HTML."""
+    def format_value(value, is_negative=False):
+        formatted = f"R$ {abs(value):,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
+        if is_negative or value < 0:
+            return f'<span style="color: #e45756; font-weight: bold;">{formatted}</span>'
+        return f'<span style="font-weight: bold;">{formatted}</span>'
     
-    return pd.DataFrame(dre_data, columns=["Descrição", "Valor"])
+    dre_html = f"""
+    <div style="font-family: 'Courier New', monospace; font-size: 16px; line-height: 1.8; background-color: rgba(0,0,0,0.1); padding: 20px; border-radius: 10px;">
+        <h3 style="text-align: center; color: #4c78a8; margin-bottom: 30px;">📊 DEMONSTRAÇÃO DO RESULTADO DO EXERCÍCIO</h3>
+        
+        <p><strong>RECEITA OPERACIONAL BRUTA</strong></p>
+        <p style="margin-left: 20px;">Vendas de Produtos: {format_value(resultados['receita_bruta'])}</p>
+        <hr style="border: 1px solid #444;">
+        
+        <p><strong>(-) DEDUÇÕES DA RECEITA BRUTA</strong></p>
+        <p style="margin-left: 20px;">Simples Nacional (6%): {format_value(resultados['impostos_sobre_vendas'], True)}</p>
+        <hr style="border: 1px solid #444;">
+        
+        <p><strong>(=) RECEITA OPERACIONAL LÍQUIDA: {format_value(resultados['receita_liquida'])}</strong></p>
+        <hr style="border: 1px solid #444;">
+        
+        <p><strong>(-) CUSTO DOS PRODUTOS VENDIDOS</strong></p>
+        <p style="margin-left: 20px;">Custo de Mercadorias: {format_value(resultados['custo_produtos_vendidos'], True)}</p>
+        <hr style="border: 1px solid #444;">
+        
+        <p><strong>(=) LUCRO BRUTO: {format_value(resultados['lucro_bruto'])}</strong></p>
+        <p style="margin-left: 20px; color: #54a24b;">Margem Bruta: {resultados['margem_bruta']:.2f}%</p>
+        <hr style="border: 1px solid #444;">
+        
+        <p><strong>(-) DESPESAS OPERACIONAIS</strong></p>
+        <p style="margin-left: 20px;">Despesas com Pessoal: {format_value(resultados['despesas_com_pessoal'], True)}</p>
+        <p style="margin-left: 20px;">Serviços Contábeis: {format_value(resultados['despesas_contabeis'], True)}</p>
+        <hr style="border: 1px solid #444;">
+        
+        <p><strong>(=) LUCRO OPERACIONAL (EBIT): {format_value(resultados['lucro_operacional'])}</strong></p>
+        <p style="margin-left: 20px; color: #54a24b;">Margem Operacional: {resultados['margem_operacional']:.2f}%</p>
+        <hr style="border: 1px solid #444;">
+        
+        <p><strong>(=) LUCRO ANTES DO IR: {format_value(resultados['lucro_antes_ir'])}</strong></p>
+        <hr style="border: 1px solid #444;">
+        
+        <p><strong>(-) Provisão para IR e CSLL</strong></p>
+        <p style="margin-left: 20px; font-style: italic;">R$ 0,00 (Já incluído no Simples Nacional)</p>
+        <hr style="border: 2px solid #4c78a8;">
+        
+        <p style="font-size: 18px;"><strong>(=) LUCRO LÍQUIDO DO PERÍODO: {format_value(resultados['lucro_liquido'])}</strong></p>
+        <p style="margin-left: 20px; color: #54a24b; font-size: 16px;">Margem Líquida: {resultados['margem_liquida']:.2f}%</p>
+    </div>
+    """
+    
+    return dre_html
 
 def create_financial_dashboard_altair(resultados):
     """Cria um dashboard financeiro usando gráficos de barras horizontais."""
@@ -810,8 +809,8 @@ def main():
                     elif not worksheet_obj: st.error("❌ Falha ao conectar à planilha. Venda não registrada.")
                 else: st.warning("⚠️ O valor total da venda deve ser maior que zero.")
 
-    # --- SIDEBAR COM FILTROS MELHORADOS ---
-    selected_anos_filter, selected_meses_filter, selected_dias_rolling = [], [], []
+    # --- SIDEBAR COM FILTROS ---
+    selected_anos_filter, selected_meses_filter = [], []
     
     with st.sidebar:
         st.header("🔍 Filtros de Período")
@@ -836,16 +835,6 @@ def main():
                         default_meses_selecionados = [default_mes_str] if default_mes_str and default_mes_str in meses_opcoes_display else meses_opcoes_display
                         selected_meses_str = st.multiselect("📆 Mês(es):", options=meses_opcoes_display, default=default_meses_selecionados)
                         selected_meses_filter = [int(m.split(" - ")[0]) for m in selected_meses_str]
-                        
-                        # NOVO: Filtro de Somatório dos Últimos N Dias
-                        st.markdown("### 📊 Análise de Últimos Dias")
-                        dias_opcoes = [1, 2, 3, 5, 7]
-                        selected_dias_rolling = st.multiselect(
-                            "🔄 Somatório dos últimos:",
-                            options=dias_opcoes,
-                            default=[7],
-                            format_func=lambda x: f"Últimos {x} dia{'s' if x > 1 else ''}"
-                        )
             else: 
                 st.info("📊 Nenhum ano disponível para filtro.")
         else: 
@@ -858,10 +847,6 @@ def main():
             df_filtered = df_filtered[df_filtered['Ano'].isin(selected_anos_filter)]
         if selected_meses_filter and 'Mês' in df_filtered.columns: 
             df_filtered = df_filtered[df_filtered['Mês'].isin(selected_meses_filter)]
-        
-        # Aplicar filtro de rolling days se selecionado
-        if selected_dias_rolling:
-            df_filtered = filter_by_rolling_days(df_filtered, selected_dias_rolling)
 
     # Mostrar informações dos filtros aplicados na sidebar
     if not df_filtered.empty:
@@ -871,11 +856,6 @@ def main():
         st.sidebar.markdown("### 📈 Resumo dos Filtros Aplicados")
         st.sidebar.metric("Registros Filtrados", total_registros_filtrados)
         st.sidebar.metric("Faturamento Filtrado", format_brl(total_faturamento_filtrado))
-        
-        # Mostrar informação sobre filtro de dias se aplicado
-        if selected_dias_rolling:
-            max_dias = max(selected_dias_rolling)
-            st.sidebar.info(f"📅 Exibindo dados dos últimos {max_dias} dias")
     elif not df_processed.empty:
         st.sidebar.markdown("---")
         st.sidebar.info("Nenhum registro corresponde aos filtros selecionados.")
@@ -892,21 +872,18 @@ def main():
             else: 
                 st.info("Colunas necessárias para a tabela de dados filtrados não estão disponíveis.")
             
-            st.subheader("🥧 Distribuição por Método de Pagamento")
             pie_chart = create_enhanced_payment_pie_chart(df_filtered)
             if pie_chart:
                 st.altair_chart(pie_chart, use_container_width=True)
             else:
                 st.info("Sem dados de pagamento para exibir o gráfico de pizza nos filtros selecionados.")
 
-            st.subheader("📊 Análise Completa de Vendas Diárias")
             daily_chart = create_advanced_daily_sales_chart(df_filtered)
             if daily_chart:
                 st.altair_chart(daily_chart, use_container_width=True)
             else:
                 st.info("Sem dados de vendas diárias para exibir o gráfico nos filtros selecionados.")
 
-            st.subheader("🏔️ Evolução do Capital Acumulado")
             accumulation_chart = create_interactive_accumulation_chart(df_filtered)
             if accumulation_chart:
                 st.altair_chart(accumulation_chart, use_container_width=True)
@@ -951,7 +928,6 @@ def main():
             else: st.info("Sem dados de pagamento para exibir o resumo nesta seção.")
             st.divider()
 
-            st.subheader("📅 Análise por Dia da Semana")
             weekday_chart, best_day = create_enhanced_weekday_analysis(df_filtered)
             if weekday_chart:
                 st.altair_chart(weekday_chart, use_container_width=True)
@@ -961,7 +937,6 @@ def main():
                 st.info("📊 Dados insuficientes para calcular a análise por dia da semana.")
             st.divider()
 
-            st.subheader("📊 Distribuição de Valores de Venda Diários")
             sales_histogram_chart = create_sales_histogram(df_filtered)
             if sales_histogram_chart: st.altair_chart(sales_histogram_chart, use_container_width=True)
             else: st.info("Dados insuficientes para o Histograma de Vendas.")
@@ -975,19 +950,19 @@ def main():
     with tab4:
         st.header("📊 Análise Contábil e Financeira Detalhada")
         
+        # Explicação geral consolidada no início
         st.markdown("""
-        ### 📋 **Demonstração do Resultado do Exercício (DRE)**
+        ### 📋 **Sobre esta Análise**
         
         Esta análise segue as **normas contábeis brasileiras** com estrutura de DRE conforme:
-        - **Lei 6.404/76** (Lei das S.A.)
-        - **NBC TG 26** (Apresentação das Demonstrações Contábeis)
-        - **Regime Tributário:** Simples Nacional
+        - **Lei 6.404/76** (Lei das S.A.) | **NBC TG 26** (Apresentação das Demonstrações Contábeis)
+        - **Regime Tributário:** Simples Nacional (6% sobre receita tributável)
+        - **Metodologia de Margens:** Margem Bruta = (Lucro Bruto ÷ Receita Líquida) × 100
         """)
         
         # Parâmetros Financeiros
         with st.container(border=True):
             st.subheader("⚙️ Parâmetros para Simulação Contábil")
-            st.markdown("Configure os valores abaixo para simular diferentes cenários financeiros:")
             
             col_param1, col_param2, col_param3 = st.columns(3)
             with col_param1:
@@ -1022,49 +997,23 @@ def main():
                 df_filtered, salario_minimo_input, custo_contadora_input, custo_fornecedores_percentual
             )
 
-            # === SEÇÃO 1: DRE COMPLETA ===
+            # === DRE TEXTUAL ===
             with st.container(border=True):
-                st.subheader("📊 Demonstração do Resultado do Exercício (DRE)")
-                
-                # Criar e exibir tabela DRE
-                dre_df = create_dre_table(resultados)
-                
-                # Estilizar a tabela DRE
-                st.markdown("""
-                <style>
-                .dre-table {
-                    font-family: 'Courier New', monospace;
-                    font-size: 14px;
-                }
-                </style>
-                """, unsafe_allow_html=True)
-                
-                st.dataframe(
-                    dre_df,
-                    use_container_width=True,
-                    hide_index=True,
-                    height=800
-                )
+                dre_html = create_dre_textual(resultados)
+                st.markdown(dre_html, unsafe_allow_html=True)
 
             st.markdown("---")
 
-            # === SEÇÃO 2: DASHBOARD VISUAL ===
-            st.subheader("💰 Dashboard Financeiro Interativo")
+            # === DASHBOARD VISUAL ===
             financial_dashboard = create_financial_dashboard_altair(resultados)
             if financial_dashboard:
                 st.altair_chart(financial_dashboard, use_container_width=True)
 
             st.markdown("---")
 
-            # === SEÇÃO 3: ANÁLISE DE MARGENS ===
+            # === ANÁLISE DE MARGENS ===
             with st.container(border=True):
                 st.subheader("📈 Análise de Margens e Indicadores")
-                st.markdown("""
-                **Explicação das Margens Contábeis:**
-                - **Margem Bruta:** (Lucro Bruto ÷ Receita Líquida) × 100
-                - **Margem Operacional:** (Lucro Operacional ÷ Receita Líquida) × 100  
-                - **Margem Líquida:** (Lucro Líquido ÷ Receita Líquida) × 100
-                """)
                 
                 col_margin1, col_margin2, col_margin3 = st.columns(3)
                 
@@ -1106,7 +1055,7 @@ def main():
 
             st.markdown("---")
 
-            # === SEÇÃO 4: RESUMO EXECUTIVO ===
+            # === RESUMO EXECUTIVO ===
             with st.container(border=True):
                 st.subheader("📋 Resumo Executivo")
                 
@@ -1147,17 +1096,9 @@ def main():
             # Nota final
             st.info("""
             💡 **Nota Importante:** Esta DRE segue a estrutura contábil brasileira oficial. 
-            Os cálculos de margem estão conforme as normas contábeis, usando a Receita Líquida como base.
-            
-            **Metodologia:** 
-            - Margem Bruta = (Lucro Bruto ÷ Receita Líquida) × 100
-            - Margem Operacional = (EBIT ÷ Receita Líquida) × 100
-            - Margem Líquida = (Lucro Líquido ÷ Receita Líquida) × 100
-            
             Para decisões estratégicas, consulte sempre um contador qualificado.
             """)
 
 # --- Ponto de Entrada da Aplicação ---
 if __name__ == "__main__":
     main()
-
