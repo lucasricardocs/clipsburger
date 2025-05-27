@@ -228,7 +228,7 @@ def process_data(df_input):
 
 # --- Funções de Gráficos Interativos em Altair ---
 def create_enhanced_payment_pie_chart(df):
-    """Cria um gráfico de pizza interativo usando Altair."""
+    """Cria um gráfico de pizza interativo usando Altair com legenda à direita."""
     if df.empty or not any(col in df.columns for col in ['Cartão', 'Dinheiro', 'Pix']):
         return None
     
@@ -253,7 +253,7 @@ def create_enhanced_payment_pie_chart(df):
             scale=alt.Scale(range=CORES_MODO_ESCURO[:3]),
             legend=alt.Legend(
                 title="Método de Pagamento",
-                orient='bottom',
+                orient='right',  # MUDANÇA: de 'bottom' para 'right' para evitar corte do título
                 titleFontSize=16,
                 labelFontSize=14
             )
@@ -269,7 +269,7 @@ def create_enhanced_payment_pie_chart(df):
             anchor='start'
         ),
         height=500,
-        width=500
+        width=600  # Aumentado para acomodar legenda à direita
     ).resolve_scale(
         color='independent'
     )
@@ -310,7 +310,7 @@ def create_advanced_daily_sales_chart(df):
             scale=alt.Scale(range=CORES_MODO_ESCURO[:3]),
             legend=alt.Legend(
                 title="Método de Pagamento",
-                orient='bottom',
+                orient='right',  # Legenda à direita
                 titleFontSize=16,
                 labelFontSize=14
             )
@@ -422,7 +422,7 @@ def create_interactive_accumulation_chart(df):
     return combined_chart
 
 def create_enhanced_weekday_analysis(df):
-    """Cria análise de vendas por dia da semana com histogramas únicos."""
+    """Cria análise de vendas por dia da semana com percentuais nas barras."""
     if df.empty or 'DiaSemana' not in df.columns or 'Total' not in df.columns:
         return None, None
     
@@ -441,6 +441,15 @@ def create_enhanced_weekday_analysis(df):
     weekday_stats = weekday_stats.reindex([d for d in dias_semana_ordem if d in weekday_stats.index])
     weekday_stats = weekday_stats.reset_index()
     
+    # Calcular percentuais para as médias
+    total_media_geral = weekday_stats['Média'].sum()
+    weekday_stats['Percentual_Media'] = (weekday_stats['Média'] / total_media_geral * 100).round(1)
+    
+    # Calcular percentuais para os totais
+    total_vendas_geral = weekday_stats['Total'].sum()
+    weekday_stats['Percentual_Total'] = (weekday_stats['Total'] / total_vendas_geral * 100).round(1)
+    
+    # Gráfico de barras para média com percentuais
     bars_media = alt.Chart(weekday_stats).mark_bar(
         color=CORES_MODO_ESCURO[0],
         cornerRadiusTopLeft=5,
@@ -460,10 +469,29 @@ def create_enhanced_weekday_analysis(df):
         tooltip=[
             alt.Tooltip('DiaSemana:N', title='Dia'),
             alt.Tooltip('Média:Q', title='Média (R$)', format=',.2f'),
-            alt.Tooltip('Total:Q', title='Total (R$)', format=',.2f'),
+            alt.Tooltip('Percentual_Media:Q', title='% da Média Total', format='.1f'),
             alt.Tooltip('Dias_Vendas:Q', title='Dias com Vendas')
         ]
-    ).properties(
+    )
+    
+    # Texto com percentuais acima das barras de média
+    text_media = alt.Chart(weekday_stats).mark_text(
+        align='center',
+        baseline='bottom',
+        dy=-5,  # Posiciona o texto acima da barra
+        fontSize=12,
+        fontWeight='bold',
+        color='white',
+        stroke='black',
+        strokeWidth=0.5
+    ).encode(
+        x=alt.X('DiaSemana:O', sort=dias_semana_ordem),
+        y=alt.Y('Média:Q'),
+        text=alt.Text('Percentual_Media:Q', format='.1f%')
+    )
+    
+    # Combinar barras e texto para média
+    chart_media = (bars_media + text_media).properties(
         title=alt.TitleParams(
             text="📊 Média de Vendas por Dia da Semana",
             fontSize=18
@@ -472,6 +500,7 @@ def create_enhanced_weekday_analysis(df):
         width=1000
     )
     
+    # Gráfico de barras para total com percentuais
     bars_total = alt.Chart(weekday_stats).mark_bar(
         color=CORES_MODO_ESCURO[2],
         cornerRadiusTopLeft=5,
@@ -491,9 +520,29 @@ def create_enhanced_weekday_analysis(df):
         tooltip=[
             alt.Tooltip('DiaSemana:N', title='Dia'),
             alt.Tooltip('Total:Q', title='Total (R$)', format=',.2f'),
+            alt.Tooltip('Percentual_Total:Q', title='% do Total Geral', format='.1f'),
             alt.Tooltip('Média:Q', title='Média (R$)', format=',.2f')
         ]
-    ).properties(
+    )
+    
+    # Texto com percentuais acima das barras de total
+    text_total = alt.Chart(weekday_stats).mark_text(
+        align='center',
+        baseline='bottom',
+        dy=-5,  # Posiciona o texto acima da barra
+        fontSize=12,
+        fontWeight='bold',
+        color='white',
+        stroke='black',
+        strokeWidth=0.5
+    ).encode(
+        x=alt.X('DiaSemana:O', sort=dias_semana_ordem),
+        y=alt.Y('Total:Q'),
+        text=alt.Text('Percentual_Total:Q', format='.1f%')
+    )
+    
+    # Combinar barras e texto para total
+    chart_total = (bars_total + text_total).properties(
         title=alt.TitleParams(
             text="📈 Total de Vendas por Dia da Semana",
             fontSize=18
@@ -502,9 +551,10 @@ def create_enhanced_weekday_analysis(df):
         width=1000
     )
     
+    # Combinar gráficos verticalmente
     combined_chart = alt.vconcat(
-        bars_media,
-        bars_total
+        chart_media,
+        chart_total
     ).resolve_scale(
         y='independent'
     )
@@ -629,121 +679,110 @@ def calculate_financial_results(df, salario_minimo, custo_contadora, custo_forne
     return results
 
 def create_dre_textual(resultados):
-    """Cria uma apresentação textual do DRE em formato tradicional."""
+    """Cria uma apresentação textual do DRE baseada na imagem fornecida."""
     def format_val(value):
-        return f"R$ {value:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
+        return f"{value:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
 
-    def format_val_color(value):
-        val_str = format_val(abs(value))
-        if value < 0:
-            return f"<span style='color: #e45756; font-weight: bold;'>({val_str})</span>"
-        else:
-            return f"<span style='font-weight: bold;'>{val_str}</span>"
+    def calc_percent(value, base):
+        if base == 0:
+            return 0
+        return (value / base) * 100
 
-    dre_html = f"""
-    <div style="font-family: 'Courier New', monospace; font-size: 16px; line-height: 2; background-color: rgba(0,0,0,0.1); padding: 30px; border-radius: 15px; max-width: 800px; margin: 0 auto;">
-        <h2 style="text-align: center; color: #4c78a8; margin-bottom: 40px; font-size: 24px;">📊 DEMONSTRAÇÃO DO RESULTADO DO EXERCÍCIO</h2>
-        
-        <table style="width: 100%; border-collapse: collapse;">
-            <tr>
-                <td style="padding: 8px 0; border-bottom: 1px solid #333;">RECEITA OPERACIONAL BRUTA</td>
-                <td style="padding: 8px 0; text-align: right; border-bottom: 1px solid #333;">{format_val(resultados['receita_bruta'])}</td>
-            </tr>
-            <tr>
-                <td style="padding: 8px 0 8px 20px;">Vendas de Produtos</td>
-                <td style="padding: 8px 0; text-align: right;">{format_val(resultados['receita_bruta'])}</td>
-            </tr>
-            <tr><td colspan="2" style="padding: 15px 0;"></td></tr>
-            
-            <tr>
-                <td style="padding: 8px 0; border-bottom: 1px solid #333;">(-) DEDUÇÕES DA RECEITA BRUTA</td>
-                <td style="padding: 8px 0; text-align: right; border-bottom: 1px solid #333;">{format_val_color(-resultados['impostos_sobre_vendas'])}</td>
-            </tr>
-            <tr>
-                <td style="padding: 8px 0 8px 20px;">Simples Nacional (6%)</td>
-                <td style="padding: 8px 0; text-align: right;">{format_val_color(-resultados['impostos_sobre_vendas'])}</td>
-            </tr>
-            <tr><td colspan="2" style="padding: 15px 0;"></td></tr>
-            
-            <tr style="background-color: rgba(76, 120, 168, 0.2);">
-                <td style="padding: 12px 0; font-weight: bold; border-top: 2px solid #4c78a8; border-bottom: 2px solid #4c78a8;">(=) RECEITA OPERACIONAL LÍQUIDA</td>
-                <td style="padding: 12px 0; text-align: right; font-weight: bold; border-top: 2px solid #4c78a8; border-bottom: 2px solid #4c78a8;">{format_val(resultados['receita_liquida'])}</td>
-            </tr>
-            <tr><td colspan="2" style="padding: 15px 0;"></td></tr>
-            
-            <tr>
-                <td style="padding: 8px 0; border-bottom: 1px solid #333;">(-) CUSTO DOS PRODUTOS VENDIDOS</td>
-                <td style="padding: 8px 0; text-align: right; border-bottom: 1px solid #333;">{format_val_color(-resultados['custo_produtos_vendidos'])}</td>
-            </tr>
-            <tr>
-                <td style="padding: 8px 0 8px 20px;">Custo de Mercadorias</td>
-                <td style="padding: 8px 0; text-align: right;">{format_val_color(-resultados['custo_produtos_vendidos'])}</td>
-            </tr>
-            <tr><td colspan="2" style="padding: 15px 0;"></td></tr>
-            
-            <tr style="background-color: rgba(84, 162, 75, 0.2);">
-                <td style="padding: 12px 0; font-weight: bold; border-top: 2px solid #54a24b; border-bottom: 2px solid #54a24b;">(=) LUCRO BRUTO</td>
-                <td style="padding: 12px 0; text-align: right; font-weight: bold; border-top: 2px solid #54a24b; border-bottom: 2px solid #54a24b;">{format_val(resultados['lucro_bruto'])}</td>
-            </tr>
-            <tr>
-                <td style="padding: 8px 0 8px 20px; font-style: italic; color: #54a24b;">Margem Bruta: {resultados['margem_bruta']:.2f}%</td>
-                <td style="padding: 8px 0;"></td>
-            </tr>
-            <tr><td colspan="2" style="padding: 15px 0;"></td></tr>
-            
-            <tr>
-                <td style="padding: 8px 0; border-bottom: 1px solid #333;">(-) DESPESAS OPERACIONAIS</td>
-                <td style="padding: 8px 0; text-align: right; border-bottom: 1px solid #333;">{format_val_color(-resultados['total_despesas_operacionais'])}</td>
-            </tr>
-            <tr>
-                <td style="padding: 8px 0 8px 20px;">Despesas com Pessoal</td>
-                <td style="padding: 8px 0; text-align: right;">{format_val_color(-resultados['despesas_com_pessoal'])}</td>
-            </tr>
-            <tr>
-                <td style="padding: 8px 0 8px 20px;">Serviços Contábeis</td>
-                <td style="padding: 8px 0; text-align: right;">{format_val_color(-resultados['despesas_contabeis'])}</td>
-            </tr>
-            <tr><td colspan="2" style="padding: 15px 0;"></td></tr>
-            
-            <tr style="background-color: rgba(245, 133, 24, 0.2);">
-                <td style="padding: 12px 0; font-weight: bold; border-top: 2px solid #f58518; border-bottom: 2px solid #f58518;">(=) LUCRO OPERACIONAL (EBIT)</td>
-                <td style="padding: 12px 0; text-align: right; font-weight: bold; border-top: 2px solid #f58518; border-bottom: 2px solid #f58518;">{format_val(resultados['lucro_operacional'])}</td>
-            </tr>
-            <tr>
-                <td style="padding: 8px 0 8px 20px; font-style: italic; color: #f58518;">Margem Operacional: {resultados['margem_operacional']:.2f}%</td>
-                <td style="padding: 8px 0;"></td>
-            </tr>
-            <tr><td colspan="2" style="padding: 15px 0;"></td></tr>
-            
-            <tr>
-                <td style="padding: 8px 0;">(=) LUCRO ANTES DO IR</td>
-                <td style="padding: 8px 0; text-align: right;">{format_val(resultados['lucro_antes_ir'])}</td>
-            </tr>
-            <tr><td colspan="2" style="padding: 10px 0;"></td></tr>
-            
-            <tr>
-                <td style="padding: 8px 0; border-bottom: 1px solid #333;">(-) Provisão para IR e CSLL</td>
-                <td style="padding: 8px 0; text-align: right; border-bottom: 1px solid #333;">R$ 0,00</td>
-            </tr>
-            <tr>
-                <td style="padding: 8px 0 8px 20px; font-style: italic; color: #888;">(Já incluído no Simples Nacional)</td>
-                <td style="padding: 8px 0;"></td>
-            </tr>
-            <tr><td colspan="2" style="padding: 20px 0;"></td></tr>
-            
-            <tr style="background-color: rgba(76, 120, 168, 0.3); border: 3px solid #4c78a8;">
-                <td style="padding: 20px 10px; font-weight: bold; font-size: 20px; color: #4c78a8;">(=) LUCRO LÍQUIDO DO PERÍODO</td>
-                <td style="padding: 20px 10px; text-align: right; font-weight: bold; font-size: 20px; color: #4c78a8;">{format_val(resultados['lucro_liquido'])}</td>
-            </tr>
-            <tr>
-                <td style="padding: 10px 0 10px 20px; font-style: italic; color: #4c78a8; font-size: 16px;">Margem Líquida: {resultados['margem_liquida']:.2f}%</td>
-                <td style="padding: 10px 0;"></td>
-            </tr>
-        </table>
+    # Base para cálculo percentual (Receita Bruta)
+    base_receita = resultados['receita_bruta']
+    ano_atual = datetime.now().year
+
+    # Cabeçalho personalizado
+    st.markdown(f"""
+    <div style="background: linear-gradient(90deg, #ff5722, #ff7043); color: white; padding: 10px; border-radius: 8px; margin-bottom: 10px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h3 style="margin: 0; font-size: 18px;">DRE {ano_atual}</h3>
+            <div style="display: flex; gap: 120px; font-weight: bold;">
+                <span>Valor</span>
+                <span>%V</span>
+            </div>
+        </div>
     </div>
-    """
+    """, unsafe_allow_html=True)
     
-    return dre_html
+    # Criar dados para o DRE
+    dre_data = []
+    
+    # RECEITA OPERACIONAL BRUTA
+    dre_data.append(['RECEITA OPERACIONAL BRUTA', format_val(resultados['receita_bruta']), '100,00%'])
+    dre_data.append(['    Vendas de produtos', format_val(resultados['receita_bruta']), '100,00%'])
+    dre_data.append(['', '', ''])  # Linha vazia
+    
+    # DEDUÇÕES DA RECEITA BRUTA
+    dre_data.append(['(-) DEDUÇÕES DA RECEITA BRUTA', f"-{format_val(resultados['impostos_sobre_vendas'])}", f"-{calc_percent(resultados['impostos_sobre_vendas'], base_receita):.2f}%"])
+    dre_data.append(['    Impostos sobre vendas', f"-{format_val(resultados['impostos_sobre_vendas'])}", f"-{calc_percent(resultados['impostos_sobre_vendas'], base_receita):.2f}%"])
+    dre_data.append(['', '', ''])  # Linha vazia
+    
+    # RECEITA OPERACIONAL LÍQUIDA
+    dre_data.append(['= RECEITA OPERACIONAL LÍQUIDA', format_val(resultados['receita_liquida']), f"{calc_percent(resultados['receita_liquida'], base_receita):.2f}%"])
+    dre_data.append(['', '', ''])  # Linha vazia
+    
+    # CUSTOS DOS PRODUTOS VENDIDOS
+    dre_data.append(['(-) CUSTOS DOS PRODUTOS VENDIDOS', f"-{format_val(resultados['custo_produtos_vendidos'])}", f"-{calc_percent(resultados['custo_produtos_vendidos'], base_receita):.2f}%"])
+    dre_data.append(['    Custo dos produtos vendidos', f"-{format_val(resultados['custo_produtos_vendidos'])}", f"-{calc_percent(resultados['custo_produtos_vendidos'], base_receita):.2f}%"])
+    dre_data.append(['', '', ''])  # Linha vazia
+    
+    # RESULTADO OPERACIONAL BRUTO
+    dre_data.append(['= RESULTADO OPERACIONAL BRUTO', format_val(resultados['lucro_bruto']), f"{calc_percent(resultados['lucro_bruto'], base_receita):.2f}%"])
+    dre_data.append(['', '', ''])  # Linha vazia
+    
+    # DESPESAS OPERACIONAIS
+    dre_data.append(['(-) DESPESAS OPERACIONAIS', f"-{format_val(resultados['total_despesas_operacionais'])}", f"-{calc_percent(resultados['total_despesas_operacionais'], base_receita):.2f}%"])
+    dre_data.append(['    Despesas com pessoal', f"-{format_val(resultados['despesas_com_pessoal'])}", f"-{calc_percent(resultados['despesas_com_pessoal'], base_receita):.2f}%"])
+    dre_data.append(['    Serviços contábeis', f"-{format_val(resultados['despesas_contabeis'])}", f"-{calc_percent(resultados['despesas_contabeis'], base_receita):.2f}%"])
+    dre_data.append(['', '', ''])  # Linha vazia
+    
+    # RESULTADO OPERACIONAL LÍQUIDO
+    dre_data.append(['= RESULTADO OPERACIONAL LÍQUIDO', format_val(resultados['lucro_operacional']), f"{calc_percent(resultados['lucro_operacional'], base_receita):.2f}%"])
+    dre_data.append(['', '', ''])  # Linha vazia
+    
+    # RESULTADO ANTES IR E CSLL
+    dre_data.append(['= RESULTADO ANTES IR E CSLL', format_val(resultados['lucro_antes_ir']), f"{calc_percent(resultados['lucro_antes_ir'], base_receita):.2f}%"])
+    dre_data.append(['    (-) IR e CSLL (Simples Nacional)', '0,00', '0,00%'])
+    dre_data.append(['', '', ''])  # Linha vazia
+    
+    # RESULTADO LÍQUIDO DO EXERCÍCIO
+    dre_data.append(['= RESULTADO LÍQUIDO DO EXERCÍCIO', format_val(resultados['lucro_liquido']), f"{calc_percent(resultados['lucro_liquido'], base_receita):.2f}%"])
+    
+    # Converter para DataFrame
+    df_dre = pd.DataFrame(dre_data, columns=['Descrição', 'Valor', '%V'])
+    
+    # Função para aplicar estilos
+    def highlight_rows(row):
+        if row['Descrição'].startswith('RECEITA OPERACIONAL BRUTA') or \
+           row['Descrição'].startswith('(-) DEDUÇÕES') or \
+           row['Descrição'].startswith('= RECEITA OPERACIONAL LÍQUIDA') or \
+           row['Descrição'].startswith('(-) CUSTOS') or \
+           row['Descrição'].startswith('= RESULTADO OPERACIONAL BRUTO') or \
+           row['Descrição'].startswith('(-) DESPESAS OPERACIONAIS') or \
+           row['Descrição'].startswith('= RESULTADO OPERACIONAL LÍQUIDO') or \
+           row['Descrição'].startswith('= RESULTADO ANTES') or \
+           row['Descrição'].startswith('= RESULTADO LÍQUIDO'):
+            return ['background-color: #ffcccb; font-weight: bold'] * len(row)
+        elif row['Descrição'].strip() == '':
+            return ['background-color: transparent'] * len(row)
+        else:
+            return ['background-color: #ffe6e6'] * len(row)
+    
+    # Aplicar estilos e exibir
+    styled_df = df_dre.style.apply(highlight_rows, axis=1)
+    
+    st.dataframe(
+        styled_df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            'Descrição': st.column_config.TextColumn(width="large"),
+            'Valor': st.column_config.TextColumn(width="medium"),
+            '%V': st.column_config.TextColumn(width="small")
+        },
+        height=600
+    )
 
 def create_financial_dashboard_altair(resultados):
     """Cria um dashboard financeiro usando gráficos de barras horizontais."""
@@ -797,7 +836,7 @@ def create_financial_dashboard_altair(resultados):
             ),
             legend=alt.Legend(
                 title="Tipo",
-                orient='bottom',
+                orient='right',  # Legenda à direita
                 titleFontSize=16,
                 labelFontSize=14
             )
@@ -885,14 +924,13 @@ def main():
         
         # Display do total em tempo real
         st.markdown(f"""
-<div style="text-align: center; padding: 0.7rem 1rem; background: linear-gradient(90deg, #4c78a8, #54a24b); border-radius: 10px; color: white; margin: 0.5rem 0; box-shadow: 0 4px 12px rgba(0,0,0,0.2); height: 5rem; display: flex; align-items: center; justify-content: center;">
-    <div>
-        <span style="font-size: 1.8rem; margin-right: 0.5rem; text-shadow: 1px 1px 3px rgba(0,0,0,0.3);">💰</span>
-        <span style="font-size: 2.2rem; font-weight: bold; text-shadow: 1px 1px 3px rgba(0,0,0,0.3);">Total: {format_brl(total_venda_form)}</span>
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
+        <div style="text-align: center; padding: 0.7rem 1rem; background: linear-gradient(90deg, #4c78a8, #54a24b); border-radius: 10px; color: white; margin: 0.5rem 0; box-shadow: 0 4px 12px rgba(0,0,0,0.2); height: 3rem; display: flex; align-items: center; justify-content: center;">
+            <div>
+                <span style="font-size: 1.8rem; margin-right: 0.5rem; text-shadow: 1px 1px 3px rgba(0,0,0,0.3);">💰</span>
+                <span style="font-size: 2.2rem; font-weight: bold; text-shadow: 1px 1px 3px rgba(0,0,0,0.3);">Total: {format_brl(total_venda_form)}</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
         
         # Botão de registrar (fora do form)
         if st.button("✅ Registrar Venda", type="primary", use_container_width=True):
@@ -909,7 +947,7 @@ def main():
             else: 
                 st.warning("⚠️ O valor total da venda deve ser maior que zero.")
 
-    # --- SIDEBAR COM FILTROS (SEM CONTAINER EXPANSÍVEL) ---
+    # --- SIDEBAR COM FILTROS ---
     selected_anos_filter, selected_meses_filter = [], []
     
     with st.sidebar:
@@ -970,12 +1008,6 @@ def main():
                 st.dataframe(df_filtered[cols_existentes_tab2], use_container_width=True, height=600, hide_index=True)
             else: 
                 st.info("Colunas necessárias para a tabela de dados filtrados não estão disponíveis.")
-            
-            pie_chart = create_enhanced_payment_pie_chart(df_filtered)
-            if pie_chart:
-                st.altair_chart(pie_chart, use_container_width=True)
-            else:
-                st.info("Sem dados de pagamento para exibir o gráfico de pizza nos filtros selecionados.")
 
             daily_chart = create_advanced_daily_sales_chart(df_filtered)
             if daily_chart:
@@ -1079,13 +1111,142 @@ def main():
 
             st.divider()
 
+            # Análise melhorada de dias da semana com percentuais
             weekday_chart, best_day = create_enhanced_weekday_analysis(df_filtered)
             if weekday_chart:
                 st.altair_chart(weekday_chart, use_container_width=True)
-                if best_day:
-                    st.success(f"🏆 **Melhor Dia da Semana:** {best_day}")
+                
+                # Análise detalhada dos dias da semana
+                if not df_filtered.empty and 'DiaSemana' in df_filtered.columns:
+                    df_weekday_analysis = df_filtered.copy()
+                    df_weekday_analysis['Total'] = pd.to_numeric(df_weekday_analysis['Total'], errors='coerce')
+                    df_weekday_analysis = df_weekday_analysis.dropna(subset=['Total', 'DiaSemana'])
+                    
+                    if not df_weekday_analysis.empty:
+                        # Calcular médias por dia da semana (excluindo domingo)
+                        dias_trabalho = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"]
+                        df_trabalho = df_weekday_analysis[df_weekday_analysis['DiaSemana'].isin(dias_trabalho)]
+                        
+                        if not df_trabalho.empty:
+                            medias_por_dia = df_trabalho.groupby('DiaSemana', observed=True)['Total'].agg(['mean', 'count']).round(2)
+                            medias_por_dia = medias_por_dia.reindex([d for d in dias_trabalho if d in medias_por_dia.index])
+                            medias_por_dia = medias_por_dia.sort_values('mean', ascending=False)
+                            
+                            st.subheader("📊 Ranking dos Dias da Semana")
+                            
+                            # Criar colunas para o ranking
+                            col_ranking1, col_ranking2 = st.columns(2)
+                            
+                            with col_ranking1:
+                                st.markdown("### 🏆 **Melhores Dias**")
+                                if len(medias_por_dia) >= 1:
+                                    primeiro = medias_por_dia.index[0]
+                                    st.success(f"🥇 **1º lugar:** {primeiro}")
+                                    st.write(f"   Média: {format_brl(medias_por_dia.loc[primeiro, 'mean'])}")
+                                    st.write(f"   Dias trabalhados: {int(medias_por_dia.loc[primeiro, 'count'])}")
+                                
+                                if len(medias_por_dia) >= 2:
+                                    segundo = medias_por_dia.index[1]
+                                    st.info(f"🥈 **2º lugar:** {segundo}")
+                                    st.write(f"   Média: {format_brl(medias_por_dia.loc[segundo, 'mean'])}")
+                                    st.write(f"   Dias trabalhados: {int(medias_por_dia.loc[segundo, 'count'])}")
+                            
+                            with col_ranking2:
+                                st.markdown("### 📉 **Piores Dias**")
+                                if len(medias_por_dia) >= 2:
+                                    penultimo = medias_por_dia.index[-2]
+                                    st.warning(f"📊 **Penúltimo:** {penultimo}")
+                                    st.write(f"   Média: {format_brl(medias_por_dia.loc[penultimo, 'mean'])}")
+                                    st.write(f"   Dias trabalhados: {int(medias_por_dia.loc[penultimo, 'count'])}")
+                                
+                                if len(medias_por_dia) >= 1:
+                                    ultimo = medias_por_dia.index[-1]
+                                    st.error(f"🔻 **Último lugar:** {ultimo}")
+                                    st.write(f"   Média: {format_brl(medias_por_dia.loc[ultimo, 'mean'])}")
+                                    st.write(f"   Dias trabalhados: {int(medias_por_dia.loc[ultimo, 'count'])}")
+                            
+                            st.divider()
+                            
+                            # Análise de frequência de trabalho
+                            st.subheader("📅 Análise de Frequência de Trabalho")
+                            
+                            # Calcular dias do período filtrado
+                            if not df_filtered.empty and 'Data' in df_filtered.columns:
+                                data_inicio = df_filtered['Data'].min()
+                                data_fim = df_filtered['Data'].max()
+                                
+                                # Calcular total de dias no período
+                                total_dias_periodo = (data_fim - data_inicio).days + 1
+                                
+                                # Calcular domingos no período
+                                domingos_periodo = 0
+                                data_atual = data_inicio
+                                while data_atual <= data_fim:
+                                    if data_atual.weekday() == 6:  # Domingo = 6
+                                        domingos_periodo += 1
+                                    data_atual += timedelta(days=1)
+                                
+                                # Dias úteis esperados (excluindo domingos)
+                                dias_uteis_esperados = total_dias_periodo - domingos_periodo
+                                
+                                # Dias efetivamente trabalhados
+                                dias_trabalhados = len(df_filtered)
+                                
+                                # Dias de falta
+                                dias_falta = dias_uteis_esperados - dias_trabalhados
+                                
+                                # Exibir métricas
+                                col_freq1, col_freq2, col_freq3, col_freq4 = st.columns(4)
+                                
+                                with col_freq1:
+                                    st.metric(
+                                        "📅 Período Analisado",
+                                        f"{total_dias_periodo} dias",
+                                        help=f"De {data_inicio.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')}"
+                                    )
+                                
+                                with col_freq2:
+                                    st.metric(
+                                        "🏢 Dias Trabalhados",
+                                        f"{dias_trabalhados} dias",
+                                        help="Dias com registro de vendas"
+                                    )
+                                
+                                with col_freq3:
+                                    st.metric(
+                                        "🏖️ Domingos (Folga)",
+                                        f"{domingos_periodo} dias",
+                                        help="Domingos no período (não trabalhamos)"
+                                    )
+                                
+                                with col_freq4:
+                                    if dias_falta > 0:
+                                        st.metric(
+                                            "❌ Dias de Falta",
+                                            f"{dias_falta} dias",
+                                            help="Dias úteis sem registro de vendas",
+                                            delta=f"-{dias_falta}"
+                                        )
+                                    else:
+                                        st.metric(
+                                            "✅ Frequência",
+                                            "100%",
+                                            help="Todos os dias úteis trabalhados!"
+                                        )
+                                
+                                # Calcular taxa de frequência
+                                if dias_uteis_esperados > 0:
+                                    taxa_frequencia = (dias_trabalhados / dias_uteis_esperados) * 100
+                                    
+                                    if taxa_frequencia >= 95:
+                                        st.success(f"🎯 **Excelente frequência:** {taxa_frequencia:.1f}% dos dias úteis trabalhados!")
+                                    elif taxa_frequencia >= 80:
+                                        st.info(f"👍 **Boa frequência:** {taxa_frequencia:.1f}% dos dias úteis trabalhados")
+                                    else:
+                                        st.warning(f"⚠️ **Atenção à frequência:** {taxa_frequencia:.1f}% dos dias úteis trabalhados")
             else:
                 st.info("📊 Dados insuficientes para calcular a análise por dia da semana.")
+            
             st.divider()
 
             sales_histogram_chart = create_sales_histogram(df_filtered)
@@ -1155,8 +1316,7 @@ def main():
 
             # === DRE TEXTUAL ===
             with st.container(border=True):
-                dre_html = create_dre_textual(resultados)
-                st.markdown(dre_html, unsafe_allow_html=True)
+                create_dre_textual(resultados)
 
             st.markdown("---")
 
