@@ -31,6 +31,7 @@ meses_ordem = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julh
 
 # CSS para melhorar a aparência
 def inject_css():
+def inject_css():
     st.markdown("""
     <style>
     /* TABS COM FONTE MAIOR */
@@ -106,8 +107,8 @@ def inject_css():
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        width: 168px;  /* 5% maior que a logo (160px * 1.05) */
-        height: 168px; /* 5% maior que a logo (160px * 1.05) */
+        width: 168px;
+        height: 168px;
         background: radial-gradient(circle, rgba(76, 120, 168, 0.4) 0%, rgba(76, 120, 168, 0.2) 40%, rgba(76, 120, 168, 0.1) 70%, transparent 100%);
         border-radius: 50%;
         animation: pulse-aura 3s ease-in-out infinite;
@@ -207,14 +208,15 @@ def inject_css():
         transform: translateY(-5px);
     }
     
-    /* Calendar container ANIMADO */
+    /* Calendar container CORRIGIDO - mais compacto */
     .calendar-container {
         background: rgba(255,255,255,0.05);
         border-radius: 15px;
         padding: 1rem;
         margin: 1rem 0;
         border: 1px solid rgba(255,255,255,0.1);
-        min-height: 400px;
+        min-height: 320px;
+        max-height: 400px;
         animation: fadeInScale 0.8s ease-out;
         transition: all 0.3s ease;
     }
@@ -250,7 +252,7 @@ def inject_css():
             height: 120px;
         }
         .logo-aura::before {
-            width: 126px; /* 5% maior que 120px */
+            width: 126px;
             height: 126px;
         }
         .logo-aura img {
@@ -267,6 +269,11 @@ def inject_css():
             padding: 0.5rem;
             margin: 0.5rem 0;
         }
+        
+        .calendar-container {
+            min-height: 280px;
+            max-height: 350px;
+        }
     }
     
     @media (max-width: 480px) {
@@ -277,8 +284,6 @@ def inject_css():
     }
     </style>
     """, unsafe_allow_html=True)
-
-inject_css()
 
 # Função auxiliar para converter imagem em base64
 def get_base64_of_image(path):
@@ -453,7 +458,7 @@ def process_data(df_input):
 
 # --- Função para criar gráfico de calendário ---
 def create_calendar_chart(df):
-    """Cria um gráfico de calendário com as vendas."""
+    """Cria um gráfico de calendário com as vendas - CORRIGIDO."""
     if df.empty or 'Data' not in df.columns:
         return None
     
@@ -485,8 +490,8 @@ def create_calendar_chart(df):
     
     calendar_html = f"""
     <div class="calendar-container">
-        <h3 style="color: white; text-align: center; margin-bottom: 20px;">📅 Calendário de Vendas</h3>
-        <div id="calendar-container" style="width: 100%; height: 400px;"></div>
+        <h3 style="color: white; text-align: center; margin-bottom: 15px; font-size: 1.25rem; font-weight: 600;">📅 Calendário de Vendas</h3>
+        <div id="calendar-container" style="width: 100%; height: 300px;"></div>
     </div>
     
     <script src="https://cdn.anychart.com/releases/v8/js/anychart-base.min.js"></script>
@@ -509,16 +514,27 @@ def create_calendar_chart(df):
 
             chart.background('#22282D');
 
+            // CORREÇÃO: Configurar meses com fonte consistente
             chart.months()
                 .stroke(false)
-                .noDataStroke(false);
+                .noDataStroke(false)
+                .labels().fontSize(12)
+                .labels().fontFamily('Arial, sans-serif')
+                .labels().fontColor('#ffffff');
 
+            // CORREÇÃO: Reduzir espaçamento entre dias
             chart.days()
-                .spacing(3)
+                .spacing(2)
                 .stroke(false)
                 .noDataStroke(false)
                 .noDataFill('#2d333b')
                 .noDataHatchFill(false);
+
+            // CORREÇÃO: Configurar semanas com fonte consistente
+            chart.weeks()
+                .labels().fontSize(11)
+                .labels().fontFamily('Arial, sans-serif')
+                .labels().fontColor('#ffffff');
 
             chart.colorRange(false);
 
@@ -534,10 +550,14 @@ def create_calendar_chart(df):
             chart.colorScale(customColorScale);
 
             chart.tooltip()
-                .format('R$ {{%count}} em vendas');
+                .format('R$ {{%count}} em vendas')
+                .fontSize(12)
+                .fontFamily('Arial, sans-serif');
 
+            // CORREÇÃO: Altura menor e mais compacta
             chart.listen('chartDraw', function() {{
-                document.getElementById('calendar-container').style.height = chart.getActualHeight() + 'px';
+                var actualHeight = Math.min(chart.getActualHeight(), 350);
+                document.getElementById('calendar-container').style.height = actualHeight + 'px';
             }});
 
             chart.container('calendar-container');
@@ -741,7 +761,7 @@ def create_interactive_radial_chart(df):
     return radial_chart
 
 def create_interactive_histogram(df, title="Distribuição dos Valores de Venda Diários"):
-    """Histograma interativo com valores exibidos acima das barras."""
+    """Histograma interativo SEM valores exibidos acima das barras."""
     if df.empty or 'Total' not in df.columns or df['Total'].isnull().all():
         return None
     
@@ -770,8 +790,8 @@ def create_interactive_histogram(df, title="Distribuição dos Valores de Venda 
     if hist_df.empty:
         return None
     
-    # Gráfico de barras interativo
-    bars = alt.Chart(hist_df).mark_bar(
+    # CORREÇÃO: Gráfico de barras SEM texto de valores
+    chart = alt.Chart(hist_df).mark_bar(
         color=CORES_MODO_ESCURO[0],
         opacity=0.8,
         cornerRadiusTopLeft=5,
@@ -794,23 +814,7 @@ def create_interactive_histogram(df, title="Distribuição dos Valores de Venda 
             alt.Tooltip('count:Q', title="Número de Dias"),
             alt.Tooltip('percentage:Q', title="Percentual (%)", format='.1f')
         ]
-    )
-
-    # Texto com valores acima das barras
-    text = alt.Chart(hist_df).mark_text(
-        dy=-8,
-        color='white',
-        fontSize=12,
-        fontWeight='bold',
-        stroke='black',
-        strokeWidth=1
-    ).encode(
-        x=alt.X('bin_center:Q'),
-        y=alt.Y('count:Q'),
-        text=alt.Text('count:Q')
-    )
-
-    chart = (bars + text).properties(
+    ).properties(
         title=alt.TitleParams(
             text=title,
             fontSize=20,
@@ -1986,7 +1990,7 @@ def main():
             💡 **Nota Importante:** Esta DRE segue a estrutura contábil brasileira oficial. 
             Para decisões estratégicas, consulte sempre um contador qualificado.
             """)
-
+            
     # --- TAB4: DASHBOARD PREMIUM OTIMIZADO ---
     with tab4:
         st.header("🚀 Dashboard Premium - Análise Completa")
@@ -2000,7 +2004,7 @@ def main():
             # === SEÇÃO 2: CALENDÁRIO DE VENDAS ===
             calendar_html = create_calendar_chart(df_filtered)
             if calendar_html:
-                st.components.v1.html(calendar_html, height=500)
+                st.components.v1.html(calendar_html, height=400)
             
             st.markdown("---")
             
@@ -2009,62 +2013,46 @@ def main():
             
             st.markdown("---")
             
-            # === SEÇÃO 4: GRÁFICOS PRINCIPAIS RESPONSIVOS ===
+            # === SEÇÃO 4: GRÁFICOS PRINCIPAIS ===
             st.subheader("📊 Análise Visual Avançada")
             
             # Layout responsivo: em telas menores, os gráficos vão para baixo
             col_chart1, col_chart2 = st.columns([2, 1], gap="large")
             
             with col_chart1:
-                with st.container():
-                    st.markdown('<div class="interactive-container">', unsafe_allow_html=True)
-                    daily_chart = create_advanced_daily_sales_chart(df_filtered)
-                    if daily_chart:
-                        st.altair_chart(daily_chart, use_container_width=True)
-                    st.markdown('</div>', unsafe_allow_html=True)
+                daily_chart = create_advanced_daily_sales_chart(df_filtered)
+                if daily_chart:
+                    st.altair_chart(daily_chart, use_container_width=True)
             
             with col_chart2:
-                with st.container():
-                    st.markdown('<div class="interactive-container">', unsafe_allow_html=True)
-                    # MUDANÇA: Usando gráfico radial em vez de pizza
-                    radial_chart = create_interactive_radial_chart(df_filtered)
-                    if radial_chart:
-                        st.altair_chart(radial_chart, use_container_width=True)
-                    st.markdown('</div>', unsafe_allow_html=True)
+                radial_chart = create_interactive_radial_chart(df_filtered)
+                if radial_chart:
+                    st.altair_chart(radial_chart, use_container_width=True)
             
             st.markdown("---")
             
             # === SEÇÃO 5: GRÁFICO DE PATRIMÔNIO ACUMULADO ===
-            with st.container():
-                st.markdown('<div class="interactive-container">', unsafe_allow_html=True)
-                accumulation_chart = create_interactive_accumulation_chart(df_filtered)
-                if accumulation_chart:
-                    st.altair_chart(accumulation_chart, use_container_width=True)
-                st.markdown('</div>', unsafe_allow_html=True)
+            accumulation_chart = create_interactive_accumulation_chart(df_filtered)
+            if accumulation_chart:
+                st.altair_chart(accumulation_chart, use_container_width=True)
             
             st.markdown("---")
             
             # === SEÇÃO 6: ANÁLISE POR DIA DA SEMANA ===
             st.subheader("📅 Performance por Dia da Semana")
             
-            with st.container():
-                st.markdown('<div class="interactive-container">', unsafe_allow_html=True)
-                weekday_chart, best_day = create_enhanced_weekday_analysis(df_filtered)
-                if weekday_chart:
-                    st.altair_chart(weekday_chart, use_container_width=True)
-                st.markdown('</div>', unsafe_allow_html=True)
+            weekday_chart, best_day = create_enhanced_weekday_analysis(df_filtered)
+            if weekday_chart:
+                st.altair_chart(weekday_chart, use_container_width=True)
             
             st.markdown("---")
             
-            # === SEÇÃO 7: HISTOGRAMA INTERATIVO ===
+            # === SEÇÃO 7: HISTOGRAMA SEM NÚMEROS ===
             st.subheader("📊 Distribuição de Valores de Vendas")
             
-            with st.container():
-                st.markdown('<div class="interactive-container">', unsafe_allow_html=True)
-                sales_histogram_chart = create_interactive_histogram(df_filtered)
-                if sales_histogram_chart: 
-                    st.altair_chart(sales_histogram_chart, use_container_width=True)
-                st.markdown('</div>', unsafe_allow_html=True)
+            sales_histogram_chart = create_interactive_histogram(df_filtered)
+            if sales_histogram_chart: 
+                st.altair_chart(sales_histogram_chart, use_container_width=True)
             
             st.markdown("---")
             
