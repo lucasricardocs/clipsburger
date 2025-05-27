@@ -885,11 +885,12 @@ def main():
         
         # Display do total em tempo real
         st.markdown(f"""
-        <div style="text-align: center; padding: 2rem; background: linear-gradient(90deg, #4c78a8, #54a24b); border-radius: 20px; color: white; margin: 2rem 0; box-shadow: 0 8px 25px rgba(0,0,0,0.3);">
-            <h2 style="margin: 0; font-size: 2.5rem; text-shadow: 2px 2px 4px rgba(0,0,0,0.3);">💰 Total da Venda</h2>
-            <h1 style="margin: 1rem 0; font-size: 3rem; font-weight: bold;">{format_brl(total_venda_form)}</h1>
-        </div>
-        """, unsafe_allow_html=True)
+<div style="text-align: center; padding: 1rem; background: linear-gradient(90deg, #4c78a8, #54a24b); border-radius: 15px; color: white; margin: 1rem 0; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
+    <h2 style="margin: 0; font-size: 1.8rem; text-shadow: 1px 1px 3px rgba(0,0,0,0.3);">💰 Total da Venda</h2>
+    <h1 style="margin: 0.5rem 0; font-size: 2.2rem; font-weight: bold;">{format_brl(total_venda_form)}</h1>
+</div>
+""", unsafe_allow_html=True)
+
         
         # Botão de registrar (fora do form)
         if st.button("✅ Registrar Venda", type="primary", use_container_width=True):
