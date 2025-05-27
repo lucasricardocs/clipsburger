@@ -31,6 +31,7 @@ meses_ordem = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julh
 
 # CSS para melhorar a aparência
 def inject_css():
+def inject_css():
     st.markdown("""
     <style>
     /* TABS COM FONTE MAIOR */
@@ -84,12 +85,17 @@ def inject_css():
         box-shadow: 0 8px 25px rgba(0,0,0,0.2);
     }
     
-    /* Dashboard Premium Styles */
+    /* Dashboard Premium Styles - BACKGROUND RESTAURADO */
     .stApp {
-        background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%);
+        background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%) !important;
     }
     
-    /* Logo com aura CORRIGIDA - tamanho 2 e aura 5% maior */
+    /* Garantir que o background não seja sobrescrito */
+    .main .block-container {
+        background: transparent !important;
+    }
+    
+    /* Logo com aura CORRIGIDA */
     .logo-aura {
         position: relative;
         display: flex;
@@ -189,33 +195,14 @@ def inject_css():
         border: 1px solid rgba(255,255,255,0.3);
     }
     
-    /* Container interativo para gráficos ANIMADO */
-    .interactive-container {
-        background: rgba(255,255,255,0.05);
-        border-radius: 15px;
-        padding: 1rem;
-        margin: 1rem 0;
-        border: 1px solid rgba(255,255,255,0.1);
-        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-        animation: slideInLeft 0.8s ease-out;
-    }
-    
-    .interactive-container:hover {
-        background: rgba(255,255,255,0.1);
-        border: 1px solid rgba(255,255,255,0.2);
-        box-shadow: 0 15px 30px rgba(0,0,0,0.2);
-        transform: translateY(-5px);
-    }
-    
-    /* Calendar container CORRIGIDO - mais compacto */
+    /* Calendar container CORRIGIDO */
     .calendar-container {
         background: rgba(255,255,255,0.05);
         border-radius: 15px;
-        padding: 1rem;
+        padding: 1.5rem;
         margin: 1rem 0;
         border: 1px solid rgba(255,255,255,0.1);
-        min-height: 320px;
-        max-height: 400px;
+        min-height: 350px;
         animation: fadeInScale 0.8s ease-out;
         transition: all 0.3s ease;
     }
@@ -223,6 +210,7 @@ def inject_css():
     .calendar-container:hover {
         transform: translateY(-3px);
         box-shadow: 0 12px 25px rgba(0,0,0,0.2);
+        background: rgba(255,255,255,0.08);
     }
     
     /* Responsividade MELHORADA */
@@ -264,14 +252,9 @@ def inject_css():
             margin: 0.5rem 0;
         }
         
-        .interactive-container {
-            padding: 0.5rem;
-            margin: 0.5rem 0;
-        }
-        
         .calendar-container {
-            min-height: 280px;
-            max-height: 350px;
+            min-height: 300px;
+            padding: 1rem;
         }
     }
     
@@ -457,7 +440,7 @@ def process_data(df_input):
 
 # --- Função para criar gráfico de calendário ---
 def create_calendar_chart(df):
-    """Cria um gráfico de calendário com as vendas - CORRIGIDO."""
+    """Cria um gráfico de calendário com as vendas - FUNCIONANDO."""
     if df.empty or 'Data' not in df.columns:
         return None
     
@@ -489,8 +472,8 @@ def create_calendar_chart(df):
     
     calendar_html = f"""
     <div class="calendar-container">
-        <h3 style="color: white; text-align: center; margin-bottom: 15px; font-size: 1.25rem; font-weight: 600;">📅 Calendário de Vendas</h3>
-        <div id="calendar-container" style="width: 100%; height: 300px;"></div>
+        <h3 style="color: white; text-align: center; margin-bottom: 20px; font-size: 1.25rem; font-weight: 600; font-family: Arial, sans-serif;">📅 Calendário de Vendas</h3>
+        <div id="calendar-container" style="width: 100%; height: 300px; background: transparent;"></div>
     </div>
     
     <script src="https://cdn.anychart.com/releases/v8/js/anychart-base.min.js"></script>
@@ -503,69 +486,88 @@ def create_calendar_chart(df):
     
     <script>
         anychart.onDocumentReady(function() {{
-            var data = {calendar_json};
-            var dataset = anychart.data.set(data);
-            var mapping = dataset.mapAs({{
-                x: 'date',
-                value: 'level'
-            }});
-            var chart = anychart.calendar(mapping);
+            try {{
+                var data = {calendar_json};
+                
+                if (!data || data.length === 0) {{
+                    document.getElementById('calendar-container').innerHTML = '<p style="color: white; text-align: center; padding: 50px;">Nenhum dado de vendas disponível para o calendário</p>';
+                    return;
+                }}
+                
+                var dataset = anychart.data.set(data);
+                var mapping = dataset.mapAs({{
+                    x: 'date',
+                    value: 'level'
+                }});
+                var chart = anychart.calendar(mapping);
 
-            chart.background('#22282D');
+                // Configurar background
+                chart.background().fill('#22282D');
 
-            // CORREÇÃO: Configurar meses com fonte consistente
-            chart.months()
-                .stroke(false)
-                .noDataStroke(false)
-                .labels().fontSize(12)
-                .labels().fontFamily('Arial, sans-serif')
-                .labels().fontColor('#ffffff');
+                // Configurar meses
+                chart.months()
+                    .stroke(false)
+                    .noDataStroke(false)
+                    .labels()
+                        .fontSize(12)
+                        .fontFamily('Arial, sans-serif')
+                        .fontColor('#ffffff');
 
-            // CORREÇÃO: Reduzir espaçamento entre dias
-            chart.days()
-                .spacing(2)
-                .stroke(false)
-                .noDataStroke(false)
-                .noDataFill('#2d333b')
-                .noDataHatchFill(false);
+                // Configurar dias
+                chart.days()
+                    .spacing(2)
+                    .stroke(false)
+                    .noDataStroke(false)
+                    .noDataFill('#2d333b')
+                    .noDataHatchFill(false);
 
-            // CORREÇÃO: Configurar semanas com fonte consistente
-            chart.weeks()
-                .labels().fontSize(11)
-                .labels().fontFamily('Arial, sans-serif')
-                .labels().fontColor('#ffffff');
+                // Configurar semanas
+                chart.weeks()
+                    .labels()
+                        .fontSize(11)
+                        .fontFamily('Arial, sans-serif')
+                        .fontColor('#ffffff');
 
-            chart.colorRange(false);
+                // Remover barra de cores
+                chart.colorRange(false);
 
-            var customColorScale = anychart.scales.ordinalColor();
-            customColorScale.ranges([
-                {{equal: 0, color: '#2d333b'}},
-                {{equal: 1, color: '#0D4428'}},
-                {{equal: 2, color: '#006D31'}},
-                {{equal: 3, color: '#37AB4B'}},
-                {{equal: 4, color: '#39D353'}}
-            ]);
+                // Configurar escala de cores
+                var customColorScale = anychart.scales.ordinalColor();
+                customColorScale.ranges([
+                    {{equal: 0, color: '#2d333b'}},
+                    {{equal: 1, color: '#0D4428'}},
+                    {{equal: 2, color: '#006D31'}},
+                    {{equal: 3, color: '#37AB4B'}},
+                    {{equal: 4, color: '#39D353'}}
+                ]);
 
-            chart.colorScale(customColorScale);
+                chart.colorScale(customColorScale);
 
-            chart.tooltip()
-                .format('R$ {{%count}} em vendas')
-                .fontSize(12)
-                .fontFamily('Arial, sans-serif');
+                // Configurar tooltip
+                chart.tooltip()
+                    .format('R$ {{%count}} em vendas')
+                    .fontSize(12)
+                    .fontFamily('Arial, sans-serif');
 
-            // CORREÇÃO: Altura menor e mais compacta
-            chart.listen('chartDraw', function() {{
-                var actualHeight = Math.min(chart.getActualHeight(), 350);
-                document.getElementById('calendar-container').style.height = actualHeight + 'px';
-            }});
+                // Ajustar altura
+                chart.listen('chartDraw', function() {{
+                    var actualHeight = Math.min(chart.getActualHeight(), 320);
+                    document.getElementById('calendar-container').style.height = actualHeight + 'px';
+                }});
 
-            chart.container('calendar-container');
-            chart.draw();
+                chart.container('calendar-container');
+                chart.draw();
+                
+            }} catch (error) {{
+                console.error('Erro ao criar calendário:', error);
+                document.getElementById('calendar-container').innerHTML = '<p style="color: white; text-align: center; padding: 50px;">Erro ao carregar o calendário</p>';
+            }}
         }});
     </script>
     """
     
     return calendar_html
+
 
 # --- Função para criar gráfico de frequência por dia ---
 def create_frequency_chart(attendance_data):
@@ -2001,9 +2003,12 @@ def main():
             st.markdown("---")
             
             # === SEÇÃO 2: CALENDÁRIO DE VENDAS ===
+            st.subheader("📅 Calendário de Atividades")
             calendar_html = create_calendar_chart(df_filtered)
             if calendar_html:
-                st.components.v1.html(calendar_html, height=400)
+                st.components.v1.html(calendar_html, height=450, scrolling=False)
+            else:
+                st.info("📅 Sem dados suficientes para exibir o calendário de vendas.")
             
             st.markdown("---")
             
@@ -2015,7 +2020,6 @@ def main():
             # === SEÇÃO 4: GRÁFICOS PRINCIPAIS ===
             st.subheader("📊 Análise Visual Avançada")
             
-            # Layout responsivo: em telas menores, os gráficos vão para baixo
             col_chart1, col_chart2 = st.columns([2, 1], gap="large")
             
             with col_chart1:
@@ -2060,6 +2064,7 @@ def main():
             
         else:
             st.warning("⚠️ Sem dados disponíveis. Ajuste os filtros na sidebar ou registre algumas vendas para visualizar o dashboard premium.")
+
 
 # --- Ponto de Entrada da Aplicação ---
 if __name__ == "__main__":
