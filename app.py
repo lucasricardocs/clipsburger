@@ -813,7 +813,9 @@ def create_dre_textual(resultados, df_filtered, selected_anos_filter):
         st.markdown(f"## **{format_val(resultados_ano['lucro_liquido'])}**")
     
     # Nota explicativa
-    st.info(f"📅 **Nota:** Este DRE apresenta os resultados consolidados do exercício {ano_dre}, independente do filtro de mês aplicado nas outras análises.")def create_financial_dashboard_altair(resultados):
+    st.info(f"📅 **Nota:** Este DRE apresenta os resultados consolidados do exercício {ano_dre}, independente do filtro de mês aplicado nas outras análises.")
+
+def create_financial_dashboard_altair(resultados):
     """Cria um dashboard financeiro usando gráficos de barras horizontais."""
     financial_data = pd.DataFrame({
         'Categoria': [
@@ -1295,64 +1297,64 @@ def main():
 
     # --- TAB4: ANÁLISE CONTÁBIL COMPLETA ---
     with tab4:
-    st.header("📊 Análise Contábil e Financeira Detalhada")
-    
-    st.markdown("""
-    ### 📋 **Sobre esta Análise**
-    
-    Esta análise segue as **normas contábeis brasileiras** com estrutura de DRE conforme:
-    - **Lei 6.404/76** (Lei das S.A.) | **NBC TG 26** (Apresentação das Demonstrações Contábeis)
-    - **Regime Tributário:** Simples Nacional (6% sobre receita tributável)
-    - **Metodologia de Margens:** Margem Bruta = (Lucro Bruto ÷ Receita Líquida) × 100
-    """)
-    
-    # Parâmetros Financeiros
-    with st.container(border=True):
-        st.subheader("⚙️ Parâmetros para Simulação Contábil")
+        st.header("📊 Análise Contábil e Financeira Detalhada")
         
-        col_param1, col_param2, col_param3 = st.columns(3)
-        with col_param1:
-            salario_minimo_input = st.number_input(
-                "💼 Salário Base Funcionário (R$)",
-                min_value=0.0, value=1550.0, format="%.2f",
-                help="Salário base do funcionário. Os encargos (55%) serão calculados automaticamente.",
-                key="salario_tab4"
-            )
-        with col_param2:
-            custo_contadora_input = st.number_input(
-                "📋 Honorários Contábeis (R$)",
-                min_value=0.0, value=316.0, format="%.2f",
-                help="Valor mensal pago pelos serviços contábeis.",
-                key="contadora_tab4"
-            )
-        with col_param3:
-            custo_fornecedores_percentual = st.number_input(
-                "📦 Custo dos Produtos (%)",
-                min_value=0.0, max_value=100.0, value=30.0, format="%.1f",
-                help="Percentual da receita bruta destinado à compra de produtos.",
-                key="fornecedores_tab4"
-            )
-
-    st.markdown("---")
-
-    if df_filtered.empty or 'Total' not in df_filtered.columns:
-        st.warning("📊 **Não há dados suficientes para análise contábil.** Ajuste os filtros ou registre vendas.")
-    else:
-        # Calcular resultados financeiros
-        resultados = calculate_financial_results(
-            df_filtered, salario_minimo_input, custo_contadora_input, custo_fornecedores_percentual
-        )
-
-        # === DRE TEXTUAL === (AQUI É ONDE VOCÊ COLOCA)
+        st.markdown("""
+        ### 📋 **Sobre esta Análise**
+        
+        Esta análise segue as **normas contábeis brasileiras** com estrutura de DRE conforme:
+        - **Lei 6.404/76** (Lei das S.A.) | **NBC TG 26** (Apresentação das Demonstrações Contábeis)
+        - **Regime Tributário:** Simples Nacional (6% sobre receita tributável)
+        - **Metodologia de Margens:** Margem Bruta = (Lucro Bruto ÷ Receita Líquida) × 100
+        """)
+        
+        # Parâmetros Financeiros
         with st.container(border=True):
-            create_dre_textual(resultados, df_processed, selected_anos_filter)
+            st.subheader("⚙️ Parâmetros para Simulação Contábil")
+            
+            col_param1, col_param2, col_param3 = st.columns(3)
+            with col_param1:
+                salario_minimo_input = st.number_input(
+                    "💼 Salário Base Funcionário (R$)",
+                    min_value=0.0, value=1550.0, format="%.2f",
+                    help="Salário base do funcionário. Os encargos (55%) serão calculados automaticamente.",
+                    key="salario_tab4"
+                )
+            with col_param2:
+                custo_contadora_input = st.number_input(
+                    "📋 Honorários Contábeis (R$)",
+                    min_value=0.0, value=316.0, format="%.2f",
+                    help="Valor mensal pago pelos serviços contábeis.",
+                    key="contadora_tab4"
+                )
+            with col_param3:
+                custo_fornecedores_percentual = st.number_input(
+                    "📦 Custo dos Produtos (%)",
+                    min_value=0.0, max_value=100.0, value=30.0, format="%.1f",
+                    help="Percentual da receita bruta destinado à compra de produtos.",
+                    key="fornecedores_tab4"
+                )
 
         st.markdown("---")
 
-        # === DASHBOARD VISUAL ===
-        financial_dashboard = create_financial_dashboard_altair(resultados)
-        if financial_dashboard:
-            st.altair_chart(financial_dashboard, use_container_width=True)
+        if df_filtered.empty or 'Total' not in df_filtered.columns:
+            st.warning("📊 **Não há dados suficientes para análise contábil.** Ajuste os filtros ou registre vendas.")
+        else:
+            # Calcular resultados financeiros
+            resultados = calculate_financial_results(
+                df_filtered, salario_minimo_input, custo_contadora_input, custo_fornecedores_percentual
+            )
+
+            # === DRE TEXTUAL ===
+            with st.container(border=True):
+                create_dre_textual(resultados, df_processed, selected_anos_filter)
+
+            st.markdown("---")
+
+            # === DASHBOARD VISUAL ===
+            financial_dashboard = create_financial_dashboard_altair(resultados)
+            if financial_dashboard:
+                st.altair_chart(financial_dashboard, use_container_width=True)
 
             st.markdown("---")
 
