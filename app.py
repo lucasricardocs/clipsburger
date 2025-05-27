@@ -31,7 +31,6 @@ meses_ordem = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julh
 
 # CSS para melhorar a aparência
 def inject_css():
-def inject_css():
     st.markdown("""
     <style>
     /* TABS COM FONTE MAIOR */
@@ -472,7 +471,7 @@ def create_calendar_chart(df):
     
     calendar_html = f"""
     <div class="calendar-container">
-        <h3 style="color: white; text-align: center; margin-bottom: 20px; font-size: 1.25rem; font-weight: 600; font-family: Arial, sans-serif;">📅 Calendário de Vendas</h3>
+        <h3 style="color: white; text-align: center; margin-bottom: 20px; font-size: 1.25rem; font-weight: 600; font-family: Arial, sans-serif;">📅</h3>
         <div id="calendar-container" style="width: 100%; height: 300px; background: transparent;"></div>
     </div>
     
