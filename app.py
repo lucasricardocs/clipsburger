@@ -678,184 +678,142 @@ def calculate_financial_results(df, salario_minimo, custo_contadora, custo_forne
     
     return results
 
-def create_dre_textual(resultados):
-    """Cria uma apresentação textual simples do DRE em 3 colunas."""
+def create_dre_textual(resultados, df_filtered, selected_anos_filter):
+    """Cria uma apresentação textual do DRE no estilo tradicional contábil usando dados anuais."""
     def format_val(value):
-        return f"R$ {value:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
+        return f"{value:,.0f}".replace(",", ".")
 
     def calc_percent(value, base):
         if base == 0:
             return 0
         return (value / base) * 100
 
-    # Base para cálculo percentual (Receita Bruta)
-    base_receita = resultados['receita_bruta']
-    ano_atual = datetime.now().year
+    # Determinar o ano para o DRE
+    if selected_anos_filter and len(selected_anos_filter) == 1:
+        ano_dre = selected_anos_filter[0]
+    else:
+        ano_dre = datetime.now().year
 
-    # Cabeçalho
-    st.markdown(f"## 📊 DEMONSTRAÇÃO DO RESULTADO DO EXERCÍCIO - {ano_atual}")
-    st.markdown("---")
+    # Filtrar dados APENAS por ano (ignorar filtro de mês)
+    if not df_filtered.empty and 'Ano' in df_filtered.columns:
+        df_ano = df_filtered[df_filtered['Ano'] == ano_dre].copy()
+        
+        # Recalcular resultados com dados do ano completo
+        if not df_ano.empty:
+            resultados_ano = calculate_financial_results(
+                df_ano, 
+                st.session_state.get('salario_tab4', 1550.0), 
+                st.session_state.get('contadora_tab4', 316.0) * 12,  # Anualizar
+                st.session_state.get('fornecedores_tab4', 30.0)
+            )
+        else:
+            resultados_ano = resultados
+    else:
+        resultados_ano = resultados
+
+    # Cabeçalho centralizado
+    st.markdown(f"""
+    <div style="text-align: center; margin-bottom: 30px;">
+        <h3 style="margin: 0; font-weight: normal;">DEMONSTRAÇÃO DO RESULTADO DO EXERCÍCIO</h3>
+        <p style="margin: 5px 0; font-style: italic;">Clips Burger - Exercício {ano_dre}</p>
+        <p style="margin: 0; text-align: right; font-size: 14px;">Em R$</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Criar 2 colunas - descrição e valor
+    col1, col2 = st.columns([6, 2])
     
-    # Criar 3 colunas
-    col1, col2, col3 = st.columns([4, 2, 1.5])
-    
+    # RECEITA BRUTA
     with col1:
-        st.markdown("**DESCRIÇÃO**")
+        st.markdown("**RECEITA BRUTA**")
     with col2:
-        st.markdown("**VALOR (R$)**")
-    with col3:
-        st.markdown("**%V**")
+        st.markdown(f"**{format_val(resultados_ano['receita_bruta'])}**")
     
-    st.markdown("---")
-    
-    # RECEITA OPERACIONAL BRUTA
-    col1, col2, col3 = st.columns([4, 2, 1.5])
+    # DEDUÇÕES
+    col1, col2 = st.columns([6, 2])
     with col1:
-        st.markdown("**RECEITA OPERACIONAL BRUTA**")
+        st.markdown("**(-) DEDUÇÕES**")
     with col2:
-        st.markdown(f"**{format_val(resultados['receita_bruta'])}**")
-    with col3:
-        st.markdown("**100,00%**")
+        st.markdown("")
     
-    col1, col2, col3 = st.columns([4, 2, 1.5])
+    col1, col2 = st.columns([6, 2])
     with col1:
-        st.markdown("    Vendas de produtos")
+        st.markdown("&nbsp;&nbsp;&nbsp;&nbsp;Simples Nacional")
     with col2:
-        st.markdown(f"{format_val(resultados['receita_bruta'])}")
-    with col3:
-        st.markdown("100,00%")
+        st.markdown(f"({format_val(resultados_ano['impostos_sobre_vendas'])})")
     
-    st.markdown("")
-    
-    # DEDUÇÕES DA RECEITA BRUTA
-    col1, col2, col3 = st.columns([4, 2, 1.5])
+    # RECEITA LÍQUIDA
+    col1, col2 = st.columns([6, 2])
     with col1:
-        st.markdown("**(-) DEDUÇÕES DA RECEITA BRUTA**")
+        st.markdown("**RECEITA LÍQUIDA**")
     with col2:
-        st.markdown(f"**-{format_val(resultados['impostos_sobre_vendas'])}**")
-    with col3:
-        st.markdown(f"**-{calc_percent(resultados['impostos_sobre_vendas'], base_receita):.2f}%**")
+        st.markdown(f"**{format_val(resultados_ano['receita_liquida'])}**")
     
-    col1, col2, col3 = st.columns([4, 2, 1.5])
+    # CUSTO DOS PRODUTOS VENDIDOS
+    col1, col2 = st.columns([6, 2])
     with col1:
-        st.markdown("    Impostos sobre vendas")
+        st.markdown("**(-) CUSTO DOS PRODUTOS VENDIDOS**")
     with col2:
-        st.markdown(f"-{format_val(resultados['impostos_sobre_vendas'])}")
-    with col3:
-        st.markdown(f"-{calc_percent(resultados['impostos_sobre_vendas'], base_receita):.2f}%")
+        st.markdown(f"**({format_val(resultados_ano['custo_produtos_vendidos'])})**")
     
-    st.markdown("")
-    
-    # RECEITA OPERACIONAL LÍQUIDA
-    col1, col2, col3 = st.columns([4, 2, 1.5])
+    # LUCRO BRUTO
+    col1, col2 = st.columns([6, 2])
     with col1:
-        st.markdown("**= RECEITA OPERACIONAL LÍQUIDA**")
+        st.markdown("**LUCRO BRUTO**")
     with col2:
-        st.markdown(f"**{format_val(resultados['receita_liquida'])}**")
-    with col3:
-        st.markdown(f"**{calc_percent(resultados['receita_liquida'], base_receita):.2f}%**")
-    
-    st.markdown("")
-    
-    # CUSTOS DOS PRODUTOS VENDIDOS
-    col1, col2, col3 = st.columns([4, 2, 1.5])
-    with col1:
-        st.markdown("**(-) CUSTOS DOS PRODUTOS VENDIDOS**")
-    with col2:
-        st.markdown(f"**-{format_val(resultados['custo_produtos_vendidos'])}**")
-    with col3:
-        st.markdown(f"**-{calc_percent(resultados['custo_produtos_vendidos'], base_receita):.2f}%**")
-    
-    col1, col2, col3 = st.columns([4, 2, 1.5])
-    with col1:
-        st.markdown("    Custo dos produtos vendidos")
-    with col2:
-        st.markdown(f"-{format_val(resultados['custo_produtos_vendidos'])}")
-    with col3:
-        st.markdown(f"-{calc_percent(resultados['custo_produtos_vendidos'], base_receita):.2f}%")
-    
-    st.markdown("")
-    
-    # RESULTADO OPERACIONAL BRUTO
-    col1, col2, col3 = st.columns([4, 2, 1.5])
-    with col1:
-        st.markdown("**= RESULTADO OPERACIONAL BRUTO**")
-    with col2:
-        st.markdown(f"**{format_val(resultados['lucro_bruto'])}**")
-    with col3:
-        st.markdown(f"**{calc_percent(resultados['lucro_bruto'], base_receita):.2f}%**")
-    
-    st.markdown("")
+        st.markdown(f"**{format_val(resultados_ano['lucro_bruto'])}**")
     
     # DESPESAS OPERACIONAIS
-    col1, col2, col3 = st.columns([4, 2, 1.5])
+    col1, col2 = st.columns([6, 2])
     with col1:
         st.markdown("**(-) DESPESAS OPERACIONAIS**")
     with col2:
-        st.markdown(f"**-{format_val(resultados['total_despesas_operacionais'])}**")
-    with col3:
-        st.markdown(f"**-{calc_percent(resultados['total_despesas_operacionais'], base_receita):.2f}%**")
+        st.markdown("")
     
-    col1, col2, col3 = st.columns([4, 2, 1.5])
+    col1, col2 = st.columns([6, 2])
     with col1:
-        st.markdown("    Despesas com pessoal")
+        st.markdown("&nbsp;&nbsp;&nbsp;&nbsp;Despesas com Pessoal")
     with col2:
-        st.markdown(f"-{format_val(resultados['despesas_com_pessoal'])}")
-    with col3:
-        st.markdown(f"-{calc_percent(resultados['despesas_com_pessoal'], base_receita):.2f}%")
+        st.markdown(f"({format_val(resultados_ano['despesas_com_pessoal'] * 12)})")  # Anualizar
     
-    col1, col2, col3 = st.columns([4, 2, 1.5])
+    col1, col2 = st.columns([6, 2])
     with col1:
-        st.markdown("    Serviços contábeis")
+        st.markdown("&nbsp;&nbsp;&nbsp;&nbsp;Serviços Contábeis")
     with col2:
-        st.markdown(f"-{format_val(resultados['despesas_contabeis'])}")
-    with col3:
-        st.markdown(f"-{calc_percent(resultados['despesas_contabeis'], base_receita):.2f}%")
+        st.markdown(f"({format_val(resultados_ano['despesas_contabeis'] * 12)})")  # Anualizar
     
-    st.markdown("")
-    
-    # RESULTADO OPERACIONAL LÍQUIDO
-    col1, col2, col3 = st.columns([4, 2, 1.5])
+    # LUCRO OPERACIONAL
+    col1, col2 = st.columns([6, 2])
     with col1:
-        st.markdown("**= RESULTADO OPERACIONAL LÍQUIDO**")
+        st.markdown("**LUCRO OPERACIONAL**")
     with col2:
-        st.markdown(f"**{format_val(resultados['lucro_operacional'])}**")
-    with col3:
-        st.markdown(f"**{calc_percent(resultados['lucro_operacional'], base_receita):.2f}%**")
+        st.markdown(f"**{format_val(resultados_ano['lucro_operacional'])}**")
     
-    st.markdown("")
-    
-    # RESULTADO ANTES IR E CSLL
-    col1, col2, col3 = st.columns([4, 2, 1.5])
+    # RESULTADO ANTES DO IMPOSTO DE RENDA
+    col1, col2 = st.columns([6, 2])
     with col1:
-        st.markdown("= RESULTADO ANTES IR E CSLL")
+        st.markdown("**LUCRO ANTES DO IMPOSTO DE RENDA**")
     with col2:
-        st.markdown(f"{format_val(resultados['lucro_antes_ir'])}")
-    with col3:
-        st.markdown(f"{calc_percent(resultados['lucro_antes_ir'], base_receita):.2f}%")
+        st.markdown(f"**{format_val(resultados_ano['lucro_antes_ir'])}**")
     
-    col1, col2, col3 = st.columns([4, 2, 1.5])
+    col1, col2 = st.columns([6, 2])
     with col1:
-        st.markdown("    (-) IR e CSLL (Simples Nacional)")
+        st.markdown("**(-) Provisão para Imposto de Renda**")
     with col2:
-        st.markdown("0,00")
-    with col3:
-        st.markdown("0,00%")
+        st.markdown("**-**")
     
-    st.markdown("")
+    # Linha de separação
     st.markdown("---")
     
-    # RESULTADO LÍQUIDO DO EXERCÍCIO
-    col1, col2, col3 = st.columns([4, 2, 1.5])
+    # RESULTADO LÍQUIDO - destacado
+    col1, col2 = st.columns([6, 2])
     with col1:
-        st.markdown("## **= RESULTADO LÍQUIDO DO EXERCÍCIO**")
+        st.markdown("## **RESULTADO LÍQUIDO DO EXERCÍCIO**")
     with col2:
-        st.markdown(f"## **{format_val(resultados['lucro_liquido'])}**")
-    with col3:
-        st.markdown(f"## **{calc_percent(resultados['lucro_liquido'], base_receita):.2f}%**")
-
-
-def create_financial_dashboard_altair(resultados):
+        st.markdown(f"## **{format_val(resultados_ano['lucro_liquido'])}**")
+    
+    # Nota explicativa
+    st.info(f"📅 **Nota:** Este DRE apresenta os resultados consolidados do exercício {ano_dre}, independente do filtro de mês aplicado nas outras análises.")def create_financial_dashboard_altair(resultados):
     """Cria um dashboard financeiro usando gráficos de barras horizontais."""
     financial_data = pd.DataFrame({
         'Categoria': [
@@ -1337,64 +1295,64 @@ def main():
 
     # --- TAB4: ANÁLISE CONTÁBIL COMPLETA ---
     with tab4:
-        st.header("📊 Análise Contábil e Financeira Detalhada")
+    st.header("📊 Análise Contábil e Financeira Detalhada")
+    
+    st.markdown("""
+    ### 📋 **Sobre esta Análise**
+    
+    Esta análise segue as **normas contábeis brasileiras** com estrutura de DRE conforme:
+    - **Lei 6.404/76** (Lei das S.A.) | **NBC TG 26** (Apresentação das Demonstrações Contábeis)
+    - **Regime Tributário:** Simples Nacional (6% sobre receita tributável)
+    - **Metodologia de Margens:** Margem Bruta = (Lucro Bruto ÷ Receita Líquida) × 100
+    """)
+    
+    # Parâmetros Financeiros
+    with st.container(border=True):
+        st.subheader("⚙️ Parâmetros para Simulação Contábil")
         
-        st.markdown("""
-        ### 📋 **Sobre esta Análise**
-        
-        Esta análise segue as **normas contábeis brasileiras** com estrutura de DRE conforme:
-        - **Lei 6.404/76** (Lei das S.A.) | **NBC TG 26** (Apresentação das Demonstrações Contábeis)
-        - **Regime Tributário:** Simples Nacional (6% sobre receita tributável)
-        - **Metodologia de Margens:** Margem Bruta = (Lucro Bruto ÷ Receita Líquida) × 100
-        """)
-        
-        # Parâmetros Financeiros
+        col_param1, col_param2, col_param3 = st.columns(3)
+        with col_param1:
+            salario_minimo_input = st.number_input(
+                "💼 Salário Base Funcionário (R$)",
+                min_value=0.0, value=1550.0, format="%.2f",
+                help="Salário base do funcionário. Os encargos (55%) serão calculados automaticamente.",
+                key="salario_tab4"
+            )
+        with col_param2:
+            custo_contadora_input = st.number_input(
+                "📋 Honorários Contábeis (R$)",
+                min_value=0.0, value=316.0, format="%.2f",
+                help="Valor mensal pago pelos serviços contábeis.",
+                key="contadora_tab4"
+            )
+        with col_param3:
+            custo_fornecedores_percentual = st.number_input(
+                "📦 Custo dos Produtos (%)",
+                min_value=0.0, max_value=100.0, value=30.0, format="%.1f",
+                help="Percentual da receita bruta destinado à compra de produtos.",
+                key="fornecedores_tab4"
+            )
+
+    st.markdown("---")
+
+    if df_filtered.empty or 'Total' not in df_filtered.columns:
+        st.warning("📊 **Não há dados suficientes para análise contábil.** Ajuste os filtros ou registre vendas.")
+    else:
+        # Calcular resultados financeiros
+        resultados = calculate_financial_results(
+            df_filtered, salario_minimo_input, custo_contadora_input, custo_fornecedores_percentual
+        )
+
+        # === DRE TEXTUAL === (AQUI É ONDE VOCÊ COLOCA)
         with st.container(border=True):
-            st.subheader("⚙️ Parâmetros para Simulação Contábil")
-            
-            col_param1, col_param2, col_param3 = st.columns(3)
-            with col_param1:
-                salario_minimo_input = st.number_input(
-                    "💼 Salário Base Funcionário (R$)",
-                    min_value=0.0, value=1550.0, format="%.2f",
-                    help="Salário base do funcionário. Os encargos (55%) serão calculados automaticamente.",
-                    key="salario_tab4"
-                )
-            with col_param2:
-                custo_contadora_input = st.number_input(
-                    "📋 Honorários Contábeis (R$)",
-                    min_value=0.0, value=316.0, format="%.2f",
-                    help="Valor mensal pago pelos serviços contábeis.",
-                    key="contadora_tab4"
-                )
-            with col_param3:
-                custo_fornecedores_percentual = st.number_input(
-                    "📦 Custo dos Produtos (%)",
-                    min_value=0.0, max_value=100.0, value=30.0, format="%.1f",
-                    help="Percentual da receita bruta destinado à compra de produtos.",
-                    key="fornecedores_tab4"
-                )
+            create_dre_textual(resultados, df_processed, selected_anos_filter)
 
         st.markdown("---")
 
-        if df_filtered.empty or 'Total' not in df_filtered.columns:
-            st.warning("📊 **Não há dados suficientes para análise contábil.** Ajuste os filtros ou registre vendas.")
-        else:
-            # Calcular resultados financeiros
-            resultados = calculate_financial_results(
-                df_filtered, salario_minimo_input, custo_contadora_input, custo_fornecedores_percentual
-            )
-
-            # === DRE TEXTUAL ===
-            with st.container(border=True):
-                create_dre_textual(resultados)
-
-            st.markdown("---")
-
-            # === DASHBOARD VISUAL ===
-            financial_dashboard = create_financial_dashboard_altair(resultados)
-            if financial_dashboard:
-                st.altair_chart(financial_dashboard, use_container_width=True)
+        # === DASHBOARD VISUAL ===
+        financial_dashboard = create_financial_dashboard_altair(resultados)
+        if financial_dashboard:
+            st.altair_chart(financial_dashboard, use_container_width=True)
 
             st.markdown("---")
 
