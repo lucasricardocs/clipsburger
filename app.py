@@ -110,6 +110,25 @@ def inject_css():
         grid-column: 1 / -1;
         margin: 2rem 0;
     }
+    
+    /* Cards uniformes */
+    .uniform-card {
+        background: rgba(255,255,255,0.1);
+        padding: 1.5rem;
+        border-radius: 10px;
+        margin: 1rem 0;
+        min-height: 180px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        transition: all 0.3s ease;
+    }
+    
+    .uniform-card:hover {
+        transform: translateY(-3px);
+        background: rgba(255,255,255,0.15);
+        box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -1281,11 +1300,10 @@ def main():
     df_raw = read_sales_data()
     df_processed = process_data(df_raw)
 
-    # Criar 5 tabs incluindo o Dashboard Premium
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    # Criar 4 tabs (removendo Estatísticas)
+    tab1, tab2, tab3, tab4 = st.tabs([
         "📝 Registrar Venda", 
         "📈 Análise Detalhada", 
-        "💡 Estatísticas", 
         "💰 Análise Contábil",
         "🚀 Dashboard Premium"
     ])
@@ -1341,6 +1359,7 @@ def main():
         </div>
         """, unsafe_allow_html=True)
         
+        # Botão de registrar (fora do form)
         # Botão de registrar (fora do form)
         if st.button("✅ Registrar Venda", type="primary", use_container_width=True):
             if total_venda_form > 0:
@@ -1440,113 +1459,8 @@ def main():
              else: 
                  st.info("Não há dados para exibir na Análise Detalhada. Pode ser um problema no processamento.")
 
+    # --- TAB3: ANÁLISE CONTÁBIL COMPLETA ---
     with tab3:
-        st.header("💡 Estatísticas e Tendências de Vendas")
-        if not df_filtered.empty and 'Total' in df_filtered.columns and not df_filtered['Total'].isnull().all():
-            st.subheader("💰 Resumo Financeiro Agregado")
-            total_registros = len(df_filtered)
-            total_faturamento = df_filtered['Total'].sum()
-            media_por_registro = df_filtered['Total'].mean() if total_registros > 0 else 0
-            maior_venda_diaria = df_filtered['Total'].max() if total_registros > 0 else 0
-            menor_venda_diaria = df_filtered[df_filtered['Total'] > 0]['Total'].min() if not df_filtered[df_filtered['Total'] > 0].empty else 0
-            
-            # Layout em colunas para melhor aproveitamento do espaço
-            col_metrics1, col_metrics2, col_metrics3 = st.columns(3)
-
-            with col_metrics1:
-                st.metric("🔢 Total de Registros", f"{total_registros}")
-                st.metric("⬆️ Maior Venda Diária", format_brl(maior_venda_diaria))
-
-            with col_metrics2:
-                st.metric("💵 Faturamento Total", format_brl(total_faturamento))
-                st.metric("⬇️ Menor Venda Diária (>0)", format_brl(menor_venda_diaria))
-
-            with col_metrics3:
-                st.metric("📈 Média por Registro", format_brl(media_por_registro))
-            
-            st.divider()
-
-            # Seção de métodos de pagamento com cards lado a lado
-            st.subheader("💳 Métodos de Pagamento (Visão Geral)")
-            cartao_total = df_filtered['Cartão'].sum() if 'Cartão' in df_filtered else 0
-            dinheiro_total = df_filtered['Dinheiro'].sum() if 'Dinheiro' in df_filtered else 0
-            pix_total = df_filtered['Pix'].sum() if 'Pix' in df_filtered else 0
-            total_pagamentos_geral = cartao_total + dinheiro_total + pix_total
-
-            if total_pagamentos_geral > 0:
-                cartao_pct = (cartao_total / total_pagamentos_geral * 100)
-                dinheiro_pct = (dinheiro_total / total_pagamentos_geral * 100)
-                pix_pct = (pix_total / total_pagamentos_geral * 100)
-                
-                # Layout sempre em 3 colunas lado a lado
-                payment_cols = st.columns(3)
-                
-                with payment_cols[0]:
-                    st.markdown(f"""
-                    <div style="text-align: center; padding: 1rem; background: linear-gradient(135deg, #4c78a8, #5a8bb8); border-radius: 10px; color: white; margin-bottom: 1rem;">
-                        <h3 style="margin: 0; font-size: 1.5rem;">💳 Cartão</h3>
-                        <h2 style="margin: 0.5rem 0; font-size: 1.8rem;">{format_brl(cartao_total)}</h2>
-                        <p style="margin: 0; font-size: 1.2rem; opacity: 0.9;">{cartao_pct:.1f}% do total</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                with payment_cols[1]:
-                    st.markdown(f"""
-                    <div style="text-align: center; padding: 1rem; background: linear-gradient(135deg, #54a24b, #64b25b); border-radius: 10px; color: white; margin-bottom: 1rem;">
-                        <h3 style="margin: 0; font-size: 1.5rem;">💵 Dinheiro</h3>
-                        <h2 style="margin: 0.5rem 0; font-size: 1.8rem;">{format_brl(dinheiro_total)}</h2>
-                        <p style="margin: 0; font-size: 1.2rem; opacity: 0.9;">{dinheiro_pct:.1f}% do total</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                with payment_cols[2]:
-                    st.markdown(f"""
-                    <div style="text-align: center; padding: 1rem; background: linear-gradient(135deg, #f58518, #ff9528); border-radius: 10px; color: white; margin-bottom: 1rem;">
-                        <h3 style="margin: 0; font-size: 1.5rem;">📱 PIX</h3>
-                        <h2 style="margin: 0.5rem 0; font-size: 1.8rem;">{format_brl(pix_total)}</h2>
-                        <p style="margin: 0; font-size: 1.2rem; opacity: 0.9;">{pix_pct:.1f}% do total</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-            else: 
-                st.info("Sem dados de pagamento para exibir o resumo nesta seção.")
-            
-            st.divider()
-
-            # Gráfico radial em vez de pizza
-            radial_chart = create_radial_plot(df_filtered)
-            if radial_chart:
-                st.altair_chart(radial_chart, use_container_width=True)
-            else:
-                st.info("Sem dados de pagamento para exibir o gráfico radial nos filtros selecionados.")
-
-            st.divider()
-
-            # Análise melhorada de dias da semana com percentuais
-            weekday_chart, best_day = create_enhanced_weekday_analysis(df_filtered)
-            if weekday_chart:
-                st.altair_chart(weekday_chart, use_container_width=True)
-            else:
-                st.info("📊 Dados insuficientes para calcular a análise por dia da semana.")
-            
-            st.divider()
-
-            sales_histogram_chart = create_sales_histogram(df_filtered)
-            if sales_histogram_chart: 
-                st.altair_chart(sales_histogram_chart, use_container_width=True)
-            else: 
-                st.info("Dados insuficientes para o Histograma de Vendas.")
-        else:
-            if df_processed.empty and df_raw.empty and get_worksheet() is None: 
-                st.warning("Não foi possível carregar os dados da planilha.")
-            elif df_processed.empty: 
-                st.info("Não há dados processados para exibir estatísticas.")
-            elif df_filtered.empty: 
-                st.info("Nenhum dado corresponde aos filtros para exibir estatísticas.")
-            else: 
-                st.info("Não há dados de 'Total' para exibir nas Estatísticas.")
-
-    # --- TAB4: ANÁLISE CONTÁBIL COMPLETA ---
-    with tab4:
         st.header("📊 Análise Contábil e Financeira Detalhada")
         
         st.markdown("""
@@ -1696,41 +1610,183 @@ def main():
             Para decisões estratégicas, consulte sempre um contador qualificado.
             """)
 
-    # --- TAB5: DASHBOARD PREMIUM ---
-    with tab5:
-        st.header("🚀 Dashboard Premium")
+    # --- TAB4: DASHBOARD PREMIUM (AGORA COM TODAS AS ESTATÍSTICAS) ---
+    with tab4:
+        st.header("🚀 Dashboard Premium - Análise Completa")
         
         if not df_filtered.empty:
-            # KPIs Premium usando st.columns (sem HTML complexo)
+            # === SEÇÃO 1: KPIs PRINCIPAIS ===
             create_premium_kpi_cards(df_filtered)
             
             st.markdown("---")
+            
+            # === SEÇÃO 2: RESUMO FINANCEIRO AGREGADO ===
+            st.subheader("💰 Resumo Financeiro Detalhado")
+            
+            total_registros = len(df_filtered)
+            total_faturamento = df_filtered['Total'].sum()
+            media_por_registro = df_filtered['Total'].mean() if total_registros > 0 else 0
+            maior_venda_diaria = df_filtered['Total'].max() if total_registros > 0 else 0
+            menor_venda_diaria = df_filtered[df_filtered['Total'] > 0]['Total'].min() if not df_filtered[df_filtered['Total'] > 0].empty else 0
+            
+            # Métricas financeiras em cards uniformes
+            col_metrics1, col_metrics2, col_metrics3, col_metrics4, col_metrics5 = st.columns(5)
+
+            with col_metrics1:
+                st.metric("🔢 Total de Registros", f"{total_registros}")
+            with col_metrics2:
+                st.metric("💵 Faturamento Total", format_brl(total_faturamento))
+            with col_metrics3:
+                st.metric("📈 Média por Registro", format_brl(media_por_registro))
+            with col_metrics4:
+                st.metric("⬆️ Maior Venda Diária", format_brl(maior_venda_diaria))
+            with col_metrics5:
+                st.metric("⬇️ Menor Venda (>0)", format_brl(menor_venda_diaria))
+            
+            st.markdown("---")
+            
+            # === SEÇÃO 3: MÉTODOS DE PAGAMENTO ===
+            st.subheader("💳 Análise de Métodos de Pagamento")
+            
+            cartao_total = df_filtered['Cartão'].sum() if 'Cartão' in df_filtered else 0
+            dinheiro_total = df_filtered['Dinheiro'].sum() if 'Dinheiro' in df_filtered else 0
+            pix_total = df_filtered['Pix'].sum() if 'Pix' in df_filtered else 0
+            total_pagamentos_geral = cartao_total + dinheiro_total + pix_total
+
+            if total_pagamentos_geral > 0:
+                cartao_pct = (cartao_total / total_pagamentos_geral * 100)
+                dinheiro_pct = (dinheiro_total / total_pagamentos_geral * 100)
+                pix_pct = (pix_total / total_pagamentos_geral * 100)
+                
+                # Cards de métodos de pagamento
+                payment_cols = st.columns(3)
+                
+                with payment_cols[0]:
+                    st.markdown(f"""
+                    <div class="uniform-card" style="border-left: 4px solid #4c78a8;">
+                        <div style="text-align: center;">
+                            <h3 style="margin: 0; font-size: 1.5rem; color: #4c78a8;">💳 Cartão</h3>
+                            <h2 style="margin: 0.5rem 0; font-size: 1.8rem; color: white;">{format_brl(cartao_total)}</h2>
+                            <p style="margin: 0; font-size: 1.2rem; opacity: 0.9; color: white;">{cartao_pct:.1f}% do total</p>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                with payment_cols[1]:
+                    st.markdown(f"""
+                    <div class="uniform-card" style="border-left: 4px solid #54a24b;">
+                        <div style="text-align: center;">
+                            <h3 style="margin: 0; font-size: 1.5rem; color: #54a24b;">💵 Dinheiro</h3>
+                            <h2 style="margin: 0.5rem 0; font-size: 1.8rem; color: white;">{format_brl(dinheiro_total)}</h2>
+                            <p style="margin: 0; font-size: 1.2rem; opacity: 0.9; color: white;">{dinheiro_pct:.1f}% do total</p>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                with payment_cols[2]:
+                    st.markdown(f"""
+                    <div class="uniform-card" style="border-left: 4px solid #f58518;">
+                        <div style="text-align: center;">
+                            <h3 style="margin: 0; font-size: 1.5rem; color: #f58518;">📱 PIX</h3>
+                            <h2 style="margin: 0.5rem 0; font-size: 1.8rem; color: white;">{format_brl(pix_total)}</h2>
+                            <p style="margin: 0; font-size: 1.2rem; opacity: 0.9; color: white;">{pix_pct:.1f}% do total</p>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            st.markdown("---")
+            
+            # === SEÇÃO 4: GRÁFICOS PRINCIPAIS ===
+            st.subheader("📊 Análise Visual Avançada")
             
             # Gráficos lado a lado - 2/3 para vendas diárias, 1/3 para radial
             col_chart1, col_chart2 = st.columns([2, 1])
             
             with col_chart1:
-                # Gráfico de vendas diárias (2/3 do espaço)
                 daily_chart = create_advanced_daily_sales_chart(df_filtered)
                 if daily_chart:
                     st.altair_chart(daily_chart, use_container_width=True)
             
             with col_chart2:
-                # Gráfico radial (1/3 do espaço)
                 radial_chart = create_radial_plot(df_filtered)
                 if radial_chart:
                     st.altair_chart(radial_chart, use_container_width=True)
             
             st.markdown("---")
             
-            # Gráfico de patrimônio acumulado em tela cheia
+            # === SEÇÃO 5: GRÁFICO DE PATRIMÔNIO ACUMULADO ===
             accumulation_chart = create_interactive_accumulation_chart(df_filtered)
             if accumulation_chart:
                 st.altair_chart(accumulation_chart, use_container_width=True)
             
             st.markdown("---")
             
-            # Insights Inteligentes usando st.columns (sem HTML complexo)
+            # === SEÇÃO 6: ANÁLISE POR DIA DA SEMANA ===
+            st.subheader("📅 Análise Detalhada por Dia da Semana")
+            
+            weekday_chart, best_day = create_enhanced_weekday_analysis(df_filtered)
+            if weekday_chart:
+                st.altair_chart(weekday_chart, use_container_width=True)
+                
+                # Ranking dos dias da semana
+                if not df_filtered.empty and 'DiaSemana' in df_filtered.columns:
+                    df_weekday_analysis = df_filtered.copy()
+                    df_weekday_analysis['Total'] = pd.to_numeric(df_weekday_analysis['Total'], errors='coerce')
+                    df_weekday_analysis = df_weekday_analysis.dropna(subset=['Total', 'DiaSemana'])
+                    
+                    if not df_weekday_analysis.empty:
+                        dias_trabalho = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"]
+                        df_trabalho = df_weekday_analysis[df_weekday_analysis['DiaSemana'].isin(dias_trabalho)]
+                        
+                        if not df_trabalho.empty:
+                            medias_por_dia = df_trabalho.groupby('DiaSemana', observed=True)['Total'].agg(['mean', 'count']).round(2)
+                            medias_por_dia = medias_por_dia.reindex([d for d in dias_trabalho if d in medias_por_dia.index])
+                            medias_por_dia = medias_por_dia.sort_values('mean', ascending=False)
+                            
+                            st.subheader("🏆 Ranking dos Dias da Semana")
+                            
+                            col_ranking1, col_ranking2 = st.columns(2)
+                            
+                            with col_ranking1:
+                                st.markdown("### 🥇 **Melhores Dias**")
+                                if len(medias_por_dia) >= 1:
+                                    primeiro = medias_por_dia.index[0]
+                                    st.success(f"🥇 **1º lugar:** {primeiro}")
+                                    st.write(f"   Média: {format_brl(medias_por_dia.loc[primeiro, 'mean'])}")
+                                    st.write(f"   Dias trabalhados: {int(medias_por_dia.loc[primeiro, 'count'])}")
+                                
+                                if len(medias_por_dia) >= 2:
+                                    segundo = medias_por_dia.index[1]
+                                    st.info(f"🥈 **2º lugar:** {segundo}")
+                                    st.write(f"   Média: {format_brl(medias_por_dia.loc[segundo, 'mean'])}")
+                                    st.write(f"   Dias trabalhados: {int(medias_por_dia.loc[segundo, 'count'])}")
+                            
+                            with col_ranking2:
+                                st.markdown("### 📉 **Piores Dias**")
+                                if len(medias_por_dia) >= 2:
+                                    penultimo = medias_por_dia.index[-2]
+                                    st.warning(f"📊 **Penúltimo:** {penultimo}")
+                                    st.write(f"   Média: {format_brl(medias_por_dia.loc[penultimo, 'mean'])}")
+                                    st.write(f"   Dias trabalhados: {int(medias_por_dia.loc[penultimo, 'count'])}")
+                                
+                                if len(medias_por_dia) >= 1:
+                                    ultimo = medias_por_dia.index[-1]
+                                    st.error(f"🔻 **Último lugar:** {ultimo}")
+                                    st.write(f"   Média: {format_brl(medias_por_dia.loc[ultimo, 'mean'])}")
+                                    st.write(f"   Dias trabalhados: {int(medias_por_dia.loc[ultimo, 'count'])}")
+            
+            st.markdown("---")
+            
+            # === SEÇÃO 7: HISTOGRAMA DE DISTRIBUIÇÃO ===
+            st.subheader("📊 Distribuição de Valores de Vendas")
+            
+            sales_histogram_chart = create_sales_histogram(df_filtered)
+            if sales_histogram_chart: 
+                st.altair_chart(sales_histogram_chart, use_container_width=True)
+            
+            st.markdown("---")
+            
+            # === SEÇÃO 8: INSIGHTS INTELIGENTES ===
             create_premium_insights(df_filtered)
             
         else:
