@@ -33,6 +33,17 @@ meses_ordem = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julh
 def inject_css():
     st.markdown("""
     <style>
+    /* TABS COM FONTE MAIOR */
+    .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {
+        font-size: 1.25rem !important;
+        font-weight: 600 !important;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        height: 60px !important;
+        padding: 0 24px !important;
+    }
+    
     .stSelectbox label, .stNumberInput label {
         font-weight: bold;
         color: #4c78a8;
@@ -87,25 +98,25 @@ def inject_css():
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        width: 110px;
-        height: 110px;
-        background: radial-gradient(circle, rgba(76, 120, 168, 0.4) 0%, rgba(76, 120, 168, 0.2) 40%, rgba(76, 120, 168, 0.1) 50%, transparent 100%);
-        border-radius: 90%;
-        animation: pulse-aura 8s ease-in-out infinite;
+        width: 200px;
+        height: 200px;
+        background: radial-gradient(circle, rgba(76, 120, 168, 0.4) 0%, rgba(76, 120, 168, 0.2) 40%, rgba(76, 120, 168, 0.1) 70%, transparent 100%);
+        border-radius: 50%;
+        animation: pulse-aura 3s ease-in-out infinite;
         z-index: 1;
     }
     
     .logo-aura img {
         position: relative;
         z-index: 2;
-        border-radius: 6px;
-        filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.3));
+        border-radius: 15px;
+        filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.3));
     }
     
     @keyframes pulse-aura {
         0%, 100% { 
             transform: translate(-50%, -50%) scale(1);
-            opacity: 0.8;
+            opacity: 0.6;
         }
         50% { 
             transform: translate(-50%, -50%) scale(1.1);
@@ -113,7 +124,7 @@ def inject_css():
         }
     }
     
-    /* Cards uniformes */
+    /* Cards uniformes INTERATIVOS */
     .uniform-card {
         background: rgba(255,255,255,0.1);
         padding: 1.5rem;
@@ -124,11 +135,30 @@ def inject_css():
         flex-direction: column;
         justify-content: center;
         transition: all 0.3s ease;
+        cursor: pointer;
+        border: 1px solid rgba(255,255,255,0.1);
     }
     
     .uniform-card:hover {
-        transform: translateY(-3px);
-        background: rgba(255,255,255,0.15);
+        transform: translateY(-5px) scale(1.02);
+        background: rgba(255,255,255,0.2);
+        box-shadow: 0 15px 35px rgba(0,0,0,0.3);
+        border: 1px solid rgba(255,255,255,0.3);
+    }
+    
+    /* Container interativo para gráficos */
+    .interactive-container {
+        background: rgba(255,255,255,0.05);
+        border-radius: 15px;
+        padding: 1rem;
+        margin: 1rem 0;
+        border: 1px solid rgba(255,255,255,0.1);
+        transition: all 0.3s ease;
+    }
+    
+    .interactive-container:hover {
+        background: rgba(255,255,255,0.1);
+        border: 1px solid rgba(255,255,255,0.2);
         box-shadow: 0 10px 25px rgba(0,0,0,0.2);
     }
     
@@ -333,9 +363,74 @@ def process_data(df_input):
             
     return df
 
+# --- Funções de Análise de Frequência ---
+def calculate_attendance_analysis(df):
+    """Calcula análise detalhada de frequência e faltas."""
+    if df.empty or 'Data' not in df.columns:
+        return {}
+    
+    data_inicio = df['Data'].min()
+    data_fim = df['Data'].max()
+    
+    # Calcular total de dias no período
+    total_dias_periodo = (data_fim - data_inicio).days + 1
+    
+    # Calcular domingos (folgas) no período
+    domingos_periodo = 0
+    data_atual = data_inicio
+    while data_atual <= data_fim:
+        if data_atual.weekday() == 6:  # Domingo = 6
+            domingos_periodo += 1
+        data_atual += timedelta(days=1)
+    
+    # Dias úteis esperados (excluindo domingos)
+    dias_uteis_esperados = total_dias_periodo - domingos_periodo
+    
+    # Dias efetivamente trabalhados
+    dias_trabalhados = len(df)
+    
+    # Dias de falta
+    dias_falta = max(0, dias_uteis_esperados - dias_trabalhados)
+    
+    # Taxa de frequência
+    taxa_frequencia = (dias_trabalhados / dias_uteis_esperados * 100) if dias_uteis_esperados > 0 else 0
+    
+    # Análise por dia da semana
+    dias_trabalho = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"]
+    frequencia_por_dia = {}
+    
+    for dia in dias_trabalho:
+        total_dias_esperados = 0
+        data_atual = data_inicio
+        while data_atual <= data_fim:
+            day_name_map = {0: "Segunda-feira", 1: "Terça-feira", 2: "Quarta-feira", 3: "Quinta-feira", 4: "Sexta-feira", 5: "Sábado"}
+            if data_atual.weekday() in day_name_map and day_name_map[data_atual.weekday()] == dia:
+                total_dias_esperados += 1
+            data_atual += timedelta(days=1)
+        
+        dias_trabalhados_dia = len(df[df['DiaSemana'] == dia]) if 'DiaSemana' in df.columns else 0
+        frequencia_por_dia[dia] = {
+            'esperados': total_dias_esperados,
+            'trabalhados': dias_trabalhados_dia,
+            'faltas': max(0, total_dias_esperados - dias_trabalhados_dia),
+            'frequencia': (dias_trabalhados_dia / total_dias_esperados * 100) if total_dias_esperados > 0 else 0
+        }
+    
+    return {
+        'periodo_inicio': data_inicio,
+        'periodo_fim': data_fim,
+        'total_dias_periodo': total_dias_periodo,
+        'domingos_folga': domingos_periodo,
+        'dias_uteis_esperados': dias_uteis_esperados,
+        'dias_trabalhados': dias_trabalhados,
+        'dias_falta': dias_falta,
+        'taxa_frequencia': taxa_frequencia,
+        'frequencia_por_dia': frequencia_por_dia
+    }
+
 # --- Funções de Gráficos Interativos em Altair ---
-def create_simple_pie_chart(df):
-    """Cria um gráfico de pizza simples e funcional."""
+def create_interactive_pie_chart(df):
+    """Cria um gráfico de pizza interativo com valores exibidos."""
     if df.empty or not any(col in df.columns for col in ['Cartão', 'Dinheiro', 'Pix']):
         return None
     
@@ -351,8 +446,10 @@ def create_simple_pie_chart(df):
     # Calcular percentuais
     total_geral = payment_data['Valor'].sum()
     payment_data['Percentual'] = (payment_data['Valor'] / total_geral * 100).round(1)
+    payment_data['Valor_Formatado'] = payment_data['Valor'].apply(lambda x: f"R$ {x:,.0f}".replace(",", "."))
 
-    chart = alt.Chart(payment_data).mark_arc(
+    # Gráfico de pizza base
+    pie_chart = alt.Chart(payment_data).mark_arc(
         innerRadius=50,
         outerRadius=150,
         stroke='white',
@@ -378,7 +475,25 @@ def create_simple_pie_chart(df):
             alt.Tooltip('Valor:Q', title='Valor (R$)', format=',.2f'),
             alt.Tooltip('Percentual:Q', title='Percentual (%)', format='.1f')
         ]
-    ).properties(
+    )
+
+    # Texto com valores
+    text_chart = alt.Chart(payment_data).mark_text(
+        fontSize=14,
+        fontWeight='bold',
+        color='white',
+        stroke='black',
+        strokeWidth=1,
+        radius=100
+    ).encode(
+        theta=alt.Theta('Valor:Q'),
+        text=alt.Text('Percentual:Q', format='.1f'),
+        color=alt.value('white')
+    ).transform_calculate(
+        text_display="datum.Percentual + '%'"
+    )
+
+    chart = (pie_chart + text_chart).properties(
         title="🎯 Distribuição por Método de Pagamento",
         width=600,
         height=600,
@@ -391,24 +506,112 @@ def create_simple_pie_chart(df):
 
     return chart
 
+def create_interactive_histogram(df, title="Distribuição dos Valores de Venda Diários"):
+    """Histograma interativo com valores exibidos acima das barras."""
+    if df.empty or 'Total' not in df.columns or df['Total'].isnull().all():
+        return None
+    
+    df_filtered_hist = df[df['Total'] > 0].copy()
+    if df_filtered_hist.empty:
+        return None
+    
+    # Criar dados agregados para o histograma
+    hist_data = []
+    bins = pd.cut(df_filtered_hist['Total'], bins=15, include_lowest=True)
+    for interval in bins.cat.categories:
+        count = len(df_filtered_hist[(df_filtered_hist['Total'] >= interval.left) & 
+                                   (df_filtered_hist['Total'] <= interval.right)])
+        if count > 0:
+            hist_data.append({
+                'bin_start': interval.left,
+                'bin_end': interval.right,
+                'bin_center': (interval.left + interval.right) / 2,
+                'count': count,
+                'range_label': f"R$ {interval.left:,.0f} - R$ {interval.right:,.0f}".replace(",", "."),
+                'percentage': (count / len(df_filtered_hist) * 100)
+            })
+    
+    hist_df = pd.DataFrame(hist_data)
+    
+    if hist_df.empty:
+        return None
+    
+    # Gráfico de barras interativo
+    bars = alt.Chart(hist_df).mark_bar(
+        color=CORES_MODO_ESCURO[0],
+        opacity=0.8,
+        cornerRadiusTopLeft=5,
+        cornerRadiusTopRight=5,
+        stroke='white',
+        strokeWidth=1
+    ).encode(
+        x=alt.X(
+            'bin_center:Q',
+            title="Faixa de Valor da Venda Diária (R$)",
+            axis=alt.Axis(labelFontSize=12, format=',.0f')
+        ),
+        y=alt.Y(
+            'count:Q',
+            title='Número de Dias (Frequência)',
+            axis=alt.Axis(labelFontSize=12)
+        ),
+        tooltip=[
+            alt.Tooltip('range_label:N', title="Faixa de Valor"),
+            alt.Tooltip('count:Q', title="Número de Dias"),
+            alt.Tooltip('percentage:Q', title="Percentual (%)", format='.1f')
+        ]
+    )
+
+    # Texto com valores acima das barras
+    text = alt.Chart(hist_df).mark_text(
+        dy=-8,
+        color='white',
+        fontSize=12,
+        fontWeight='bold',
+        stroke='black',
+        strokeWidth=1
+    ).encode(
+        x=alt.X('bin_center:Q'),
+        y=alt.Y('count:Q'),
+        text=alt.Text('count:Q')
+    )
+
+    chart = (bars + text).properties(
+        title=alt.TitleParams(
+            text=title,
+            fontSize=20,
+            anchor='start'
+        ),
+        height=600,
+        width='container',
+        padding={'bottom': 100}
+    ).configure_view(
+        stroke=None
+    ).configure(
+        background='transparent'
+    )
+
+    return chart
+
 def create_area_chart_with_gradient(df):
-    """Cria gráfico de área com gradiente."""
+    """Cria gráfico de área ACUMULADO com gradiente melhorado para Tab2."""
     if df.empty or 'Data' not in df.columns or 'Total' not in df.columns:
         return None
     
     df_sorted = df.sort_values('Data').copy()
+    df_sorted['Total_Acumulado'] = df_sorted['Total'].cumsum()  # MUDANÇA: Agora é acumulado
     
     if df_sorted.empty:
         return None
     
     area_chart = alt.Chart(df_sorted).mark_area(
         interpolate='monotone',
-        line={'color': CORES_MODO_ESCURO[0], 'strokeWidth': 3},
+        line={'color': '#2a9d8f', 'strokeWidth': 3},  # Verde-azulado elegante
         color=alt.Gradient(
             gradient='linear',
             stops=[
-                alt.GradientStop(color=CORES_MODO_ESCURO[0], offset=0),
-                alt.GradientStop(color=CORES_MODO_ESCURO[4], offset=1)
+                alt.GradientStop(color='#2a9d8f', offset=0),    # Verde-azulado
+                alt.GradientStop(color='#98c1d9', offset=1)     # Azul claro
             ],
             x1=1, x2=1, y1=1, y2=0
         )
@@ -419,17 +622,18 @@ def create_area_chart_with_gradient(df):
             axis=alt.Axis(format='%d/%m', labelAngle=-45, labelFontSize=12)
         ),
         y=alt.Y(
-            'Total:Q', 
-            title='Total de Vendas (R$)', 
+            'Total_Acumulado:Q',  # MUDANÇA: Usando valor acumulado
+            title='Vendas Acumuladas (R$)',  # MUDANÇA: Título atualizado
             axis=alt.Axis(labelFontSize=12)
         ),
         tooltip=[
             alt.Tooltip('DataFormatada:N', title='Data'),
-            alt.Tooltip('Total:Q', title='Total de Vendas (R$)', format=',.2f')
+            alt.Tooltip('Total:Q', title='Venda do Dia (R$)', format=',.2f'),
+            alt.Tooltip('Total_Acumulado:Q', title='Total Acumulado (R$)', format=',.2f')  # MUDANÇA: Tooltip melhorado
         ]
     ).properties(
         title=alt.TitleParams(
-            text='📈 Evolução das Vendas com Gradiente', 
+            text='📈 Evolução Acumulada das Vendas',  # MUDANÇA: Título atualizado
             fontSize=18,
             anchor='start'
         ),
@@ -444,7 +648,7 @@ def create_area_chart_with_gradient(df):
     return area_chart
 
 def create_interactive_accumulation_chart(df):
-    """Cria gráfico de acumulação de patrimônio."""
+    """Cria gráfico de patrimônio acumulado com cores melhoradas."""
     if df.empty or 'Data' not in df.columns or 'Total' not in df.columns:
         return None
     
@@ -457,16 +661,16 @@ def create_interactive_accumulation_chart(df):
     max_value = df_accumulated['Patrimonio_Acumulado'].max()
     max_date = df_accumulated[df_accumulated['Patrimonio_Acumulado'] == max_value]['Data'].iloc[0]
     
-    # Gráfico de área para acumulação
+    # Gráfico de área com cores melhoradas
     area_chart = alt.Chart(df_accumulated).mark_area(
         opacity=0.7,
         interpolate='monotone',
-        line={'color': CORES_MODO_ESCURO[0], 'strokeWidth': 3},
+        line={'color': '#e76f51', 'strokeWidth': 3},  # Laranja elegante
         color=alt.Gradient(
             gradient='linear',
             stops=[
-                alt.GradientStop(color=CORES_MODO_ESCURO[0], offset=0),
-                alt.GradientStop(color=CORES_MODO_ESCURO[4], offset=1)
+                alt.GradientStop(color='#e76f51', offset=0),    # Laranja
+                alt.GradientStop(color='#f4a261', offset=1)     # Amarelo-laranja
             ],
             x1=1, x2=1, y1=1, y2=0
         )
@@ -489,11 +693,11 @@ def create_interactive_accumulation_chart(df):
         ]
     )
     
-    # Linha de tendência
+    # Linha de tendência com cor harmoniosa
     line_chart = alt.Chart(df_accumulated).mark_line(
-        color=CORES_MODO_ESCURO[0],
+        color='#e76f51',  # Mesma cor da área
         strokeWidth=4,
-        point=alt.OverlayMarkDef(color=CORES_MODO_ESCURO[3], size=100)
+        point=alt.OverlayMarkDef(color='#264653', size=100)  # Pontos em verde escuro
     ).encode(
         x='Data:T',
         y='Patrimonio_Acumulado:Q',
@@ -503,7 +707,7 @@ def create_interactive_accumulation_chart(df):
         ]
     )
     
-    # Ponto do pico
+    # Ponto do pico com cor destacada
     peak_data = pd.DataFrame({
         'Data': [max_date],
         'Patrimonio_Acumulado': [max_value],
@@ -512,7 +716,7 @@ def create_interactive_accumulation_chart(df):
     
     peak_point = alt.Chart(peak_data).mark_circle(
         size=300,
-        color=CORES_MODO_ESCURO[3],
+        color='#264653',  # Verde escuro para destaque
         stroke='white',
         strokeWidth=3
     ).encode(
@@ -526,7 +730,7 @@ def create_interactive_accumulation_chart(df):
         baseline='bottom',
         fontSize=14,
         fontWeight='bold',
-        color=CORES_MODO_ESCURO[3],
+        color='#264653',  # Verde escuro
         dy=-15
     ).encode(
         x='Data:T',
@@ -696,89 +900,6 @@ def create_enhanced_weekday_analysis(df):
     best_day = weekday_stats.loc[weekday_stats['Média'].idxmax(), 'DiaSemana'] if not weekday_stats.empty else "N/A"
     
     return chart, best_day
-
-def create_sales_histogram(df, title="Distribuição dos Valores de Venda Diários"):
-    """Histograma com valores exibidos acima das barras."""
-    if df.empty or 'Total' not in df.columns or df['Total'].isnull().all():
-        return None
-    
-    df_filtered_hist = df[df['Total'] > 0].copy()
-    if df_filtered_hist.empty:
-        return None
-    
-    # Criar dados agregados para o histograma
-    hist_data = []
-    bins = pd.cut(df_filtered_hist['Total'], bins=20, include_lowest=True)
-    for interval in bins.cat.categories:
-        count = len(df_filtered_hist[(df_filtered_hist['Total'] >= interval.left) & 
-                                   (df_filtered_hist['Total'] <= interval.right)])
-        if count > 0:
-            hist_data.append({
-                'bin_start': interval.left,
-                'bin_end': interval.right,
-                'bin_center': (interval.left + interval.right) / 2,
-                'count': count,
-                'range_label': f"R$ {interval.left:,.0f} - R$ {interval.right:,.0f}".replace(",", ".")
-            })
-    
-    hist_df = pd.DataFrame(hist_data)
-    
-    if hist_df.empty:
-        return None
-    
-    # Gráfico de barras
-    histogram = alt.Chart(hist_df).mark_bar(
-        color=CORES_MODO_ESCURO[0],
-        opacity=0.8,
-        cornerRadiusTopLeft=5,
-        cornerRadiusTopRight=5
-    ).encode(
-        x=alt.X(
-            'bin_center:Q',
-            title="Faixa de Valor da Venda Diária (R$)",
-            axis=alt.Axis(labelFontSize=12, format=',.0f')
-        ),
-        y=alt.Y(
-            'count:Q',
-            title='Número de Dias (Frequência)',
-            axis=alt.Axis(labelFontSize=12)
-        ),
-        tooltip=[
-            alt.Tooltip('range_label:N', title="Faixa de Valor"),
-            alt.Tooltip('count:Q', title="Número de Dias")
-        ]
-    )
-
-    # Adicionar texto com valores acima das barras
-    text = alt.Chart(hist_df).mark_text(
-        dy=-8,
-        color='white',
-        fontSize=12,
-        fontWeight='bold',
-        stroke='black',
-        strokeWidth=1
-    ).encode(
-        x=alt.X('bin_center:Q'),
-        y=alt.Y('count:Q'),
-        text=alt.Text('count:Q')
-    )
-
-    chart = (histogram + text).properties(
-        title=alt.TitleParams(
-            text=title,
-            fontSize=20,
-            anchor='start'
-        ),
-        height=600,
-        width='container',
-        padding={'bottom': 100}
-    ).configure_view(
-        stroke=None
-    ).configure(
-        background='transparent'
-    )
-
-    return chart
 
 # --- Funções de Cálculos Financeiros ---
 def calculate_financial_results(df, salario_minimo, custo_contadora, custo_fornecedores_percentual):
@@ -1094,8 +1215,114 @@ def create_premium_kpi_cards(df):
                 delta="Crescimento sustentado"
             )
 
+def create_attendance_insights(df):
+    """Cria seção de insights de frequência e assiduidade."""
+    if df.empty:
+        return
+    
+    attendance_data = calculate_attendance_analysis(df)
+    
+    if not attendance_data:
+        st.info("Dados insuficientes para análise de frequência.")
+        return
+    
+    st.subheader("📅 Análise de Frequência e Assiduidade")
+    
+    # Métricas principais de frequência
+    col_freq1, col_freq2, col_freq3, col_freq4 = st.columns(4)
+    
+    with col_freq1:
+        st.metric(
+            "📊 Taxa de Frequência",
+            f"{attendance_data['taxa_frequencia']:.1f}%",
+            help="Percentual de dias úteis trabalhados"
+        )
+    
+    with col_freq2:
+        st.metric(
+            "✅ Dias Trabalhados",
+            f"{attendance_data['dias_trabalhados']}",
+            help="Total de dias com vendas registradas"
+        )
+    
+    with col_freq3:
+        st.metric(
+            "❌ Dias de Falta",
+            f"{attendance_data['dias_falta']}",
+            delta=f"-{attendance_data['dias_falta']}" if attendance_data['dias_falta'] > 0 else "Perfeito!",
+            help="Dias úteis sem vendas registradas"
+        )
+    
+    with col_freq4:
+        st.metric(
+            "🏖️ Domingos (Folga)",
+            f"{attendance_data['domingos_folga']}",
+            help="Domingos no período (folgas programadas)"
+        )
+    
+    # Análise detalhada por dia da semana
+    st.subheader("📊 Frequência por Dia da Semana")
+    
+    freq_data = []
+    for dia, dados in attendance_data['frequencia_por_dia'].items():
+        freq_data.append({
+            'Dia': dia,
+            'Esperados': dados['esperados'],
+            'Trabalhados': dados['trabalhados'],
+            'Faltas': dados['faltas'],
+            'Frequência (%)': dados['frequencia']
+        })
+    
+    freq_df = pd.DataFrame(freq_data)
+    
+    if not freq_df.empty:
+        # Tabela de frequência
+        st.dataframe(freq_df, use_container_width=True, hide_index=True)
+        
+        # Gráfico de frequência por dia
+        freq_chart = alt.Chart(freq_df).mark_bar(
+            color=CORES_MODO_ESCURO[1],
+            cornerRadiusTopLeft=5,
+            cornerRadiusTopRight=5
+        ).encode(
+            x=alt.X('Dia:O', title='Dia da Semana', sort=["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"]),
+            y=alt.Y('Frequência (%):Q', title='Taxa de Frequência (%)', scale=alt.Scale(domain=[0, 100])),
+            tooltip=[
+                alt.Tooltip('Dia:N', title='Dia'),
+                alt.Tooltip('Trabalhados:Q', title='Dias Trabalhados'),
+                alt.Tooltip('Esperados:Q', title='Dias Esperados'),
+                alt.Tooltip('Faltas:Q', title='Faltas'),
+                alt.Tooltip('Frequência (%):Q', title='Frequência (%)', format='.1f')
+            ]
+        ).properties(
+            title="Taxa de Frequência por Dia da Semana",
+            height=400,
+            width='container'
+        ).configure_view(
+            stroke=None
+        ).configure(
+            background='transparent'
+        )
+        
+        st.altair_chart(freq_chart, use_container_width=True)
+        
+        # Insights sobre frequência
+        melhor_freq_dia = freq_df.loc[freq_df['Frequência (%)'].idxmax(), 'Dia']
+        pior_freq_dia = freq_df.loc[freq_df['Frequência (%)'].idxmin(), 'Dia']
+        
+        col_insight1, col_insight2 = st.columns(2)
+        
+        with col_insight1:
+            st.success(f"🏆 **Melhor Frequência:** {melhor_freq_dia} ({freq_df.loc[freq_df['Dia'] == melhor_freq_dia, 'Frequência (%)'].iloc[0]:.1f}%)")
+        
+        with col_insight2:
+            if freq_df.loc[freq_df['Dia'] == pior_freq_dia, 'Frequência (%)'].iloc[0] < 80:
+                st.warning(f"⚠️ **Atenção:** {pior_freq_dia} ({freq_df.loc[freq_df['Dia'] == pior_freq_dia, 'Frequência (%)'].iloc[0]:.1f}%)")
+            else:
+                st.info(f"📊 **Menor Frequência:** {pior_freq_dia} ({freq_df.loc[freq_df['Dia'] == pior_freq_dia, 'Frequência (%)'].iloc[0]:.1f}%)")
+
 def create_premium_insights(df):
-    """Insights com bordas coloridas na lateral esquerda."""
+    """Insights otimizados com informações relevantes."""
     if df.empty:
         return
     
@@ -1129,7 +1356,19 @@ def create_premium_insights(df):
         melhor_metodo = "N/A"
         percentual_melhor = 0
     
-    st.subheader("🧠 Insights Inteligentes Automáticos")
+    # Análise de sazonalidade
+    # Análise de sazonalidade
+    if 'Data' in df.columns and len(df) >= 30:
+        df_sazonal = df.copy()
+        df_sazonal['Semana'] = df_sazonal['Data'].dt.isocalendar().week
+        vendas_por_semana = df_sazonal.groupby('Semana')['Total'].mean()
+        variacao_semanal = vendas_por_semana.std() / vendas_por_semana.mean() * 100 if vendas_por_semana.mean() > 0 else 0
+        sazonalidade_texto = "alta" if variacao_semanal > 20 else "baixa"
+    else:
+        variacao_semanal = 0
+        sazonalidade_texto = "estável"
+    
+    st.subheader("🧠 Insights Estratégicos Avançados")
     
     col1, col2, col3 = st.columns(3)
     
@@ -1220,7 +1459,7 @@ def main():
             else:
                 st.markdown("""
                 <div class="logo-aura">
-                    <div style="width: 200px; height: 200px; background: #4c78a8; border-radius: 15px; display: flex; align-items: center; justify-content: center; font-size: 2rem; color: white; position: relative; z-index: 2;">🍔</div>
+                    <div style="width: 120px; height: 120px; background: #4c78a8; border-radius: 15px; display: flex; align-items: center; justify-content: center; font-size: 2rem; color: white; position: relative; z-index: 2;">🍔</div>
                 </div>
                 """, unsafe_allow_html=True)
         
@@ -1242,7 +1481,7 @@ def main():
     df_raw = read_sales_data()
     df_processed = process_data(df_raw)
 
-    # Criar 4 tabs (removendo Estatísticas)
+    # Criar 4 tabs com fontes maiores
     tab1, tab2, tab3, tab4 = st.tabs([
         "📝 Registrar Venda", 
         "📈 Análise Detalhada", 
@@ -1378,18 +1617,23 @@ def main():
             else: 
                 st.info("Colunas necessárias para a tabela de dados filtrados não estão disponíveis.")
 
+            # Container interativo para gráfico de vendas diárias
+            st.markdown('<div class="interactive-container">', unsafe_allow_html=True)
             daily_chart = create_advanced_daily_sales_chart(df_filtered)
             if daily_chart:
                 st.altair_chart(daily_chart, use_container_width=True)
             else:
                 st.info("Sem dados de vendas diárias para exibir o gráfico nos filtros selecionados.")
+            st.markdown('</div>', unsafe_allow_html=True)
 
-            # Gráfico de área com gradiente
+            # Container interativo para gráfico de área ACUMULADO
+            st.markdown('<div class="interactive-container">', unsafe_allow_html=True)
             area_chart = create_area_chart_with_gradient(df_filtered)
             if area_chart:
                 st.altair_chart(area_chart, use_container_width=True)
             else:
                 st.info("Não foi possível gerar o gráfico de área.")
+            st.markdown('</div>', unsafe_allow_html=True)
         else:
              if df_processed.empty and df_raw.empty and get_worksheet() is None: 
                  st.warning("Não foi possível carregar os dados. Verifique configurações e credenciais.")
@@ -1551,7 +1795,7 @@ def main():
             Para decisões estratégicas, consulte sempre um contador qualificado.
             """)
 
-    # --- TAB4: DASHBOARD PREMIUM (AGORA COM TODAS AS ESTATÍSTICAS) ---
+    # --- TAB4: DASHBOARD PREMIUM OTIMIZADO ---
     with tab4:
         st.header("🚀 Dashboard Premium - Análise Completa")
         
@@ -1561,173 +1805,65 @@ def main():
             
             st.markdown("---")
             
-            # === SEÇÃO 2: RESUMO FINANCEIRO AGREGADO ===
-            st.subheader("💰 Resumo Financeiro Detalhado")
-            
-            total_registros = len(df_filtered)
-            total_faturamento = df_filtered['Total'].sum()
-            media_por_registro = df_filtered['Total'].mean() if total_registros > 0 else 0
-            maior_venda_diaria = df_filtered['Total'].max() if total_registros > 0 else 0
-            menor_venda_diaria = df_filtered[df_filtered['Total'] > 0]['Total'].min() if not df_filtered[df_filtered['Total'] > 0].empty else 0
-            
-            # Métricas financeiras em cards uniformes
-            col_metrics1, col_metrics2, col_metrics3, col_metrics4, col_metrics5 = st.columns(5)
-
-            with col_metrics1:
-                st.metric("🔢 Total de Registros", f"{total_registros}")
-            with col_metrics2:
-                st.metric("💵 Faturamento Total", format_brl(total_faturamento))
-            with col_metrics3:
-                st.metric("📈 Média por Registro", format_brl(media_por_registro))
-            with col_metrics4:
-                st.metric("⬆️ Maior Venda Diária", format_brl(maior_venda_diaria))
-            with col_metrics5:
-                st.metric("⬇️ Menor Venda (>0)", format_brl(menor_venda_diaria))
+            # === SEÇÃO 2: ANÁLISE DE FREQUÊNCIA E ASSIDUIDADE ===
+            create_attendance_insights(df_filtered)
             
             st.markdown("---")
             
-            # === SEÇÃO 3: MÉTODOS DE PAGAMENTO ===
-            st.subheader("💳 Análise de Métodos de Pagamento")
-            
-            cartao_total = df_filtered['Cartão'].sum() if 'Cartão' in df_filtered else 0
-            dinheiro_total = df_filtered['Dinheiro'].sum() if 'Dinheiro' in df_filtered else 0
-            pix_total = df_filtered['Pix'].sum() if 'Pix' in df_filtered else 0
-            total_pagamentos_geral = cartao_total + dinheiro_total + pix_total
-
-            if total_pagamentos_geral > 0:
-                cartao_pct = (cartao_total / total_pagamentos_geral * 100)
-                dinheiro_pct = (dinheiro_total / total_pagamentos_geral * 100)
-                pix_pct = (pix_total / total_pagamentos_geral * 100)
-                
-                # Cards de métodos de pagamento
-                payment_cols = st.columns(3)
-                
-                with payment_cols[0]:
-                    st.markdown(f"""
-                    <div class="uniform-card" style="border-left: 4px solid #4c78a8;">
-                        <div style="text-align: center;">
-                            <h3 style="margin: 0; font-size: 1.5rem; color: #4c78a8;">💳 Cartão</h3>
-                            <h2 style="margin: 0.5rem 0; font-size: 1.8rem; color: white;">{format_brl(cartao_total)}</h2>
-                            <p style="margin: 0; font-size: 1.2rem; opacity: 0.9; color: white;">{cartao_pct:.1f}% do total</p>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                with payment_cols[1]:
-                    st.markdown(f"""
-                    <div class="uniform-card" style="border-left: 4px solid #54a24b;">
-                        <div style="text-align: center;">
-                            <h3 style="margin: 0; font-size: 1.5rem; color: #54a24b;">💵 Dinheiro</h3>
-                            <h2 style="margin: 0.5rem 0; font-size: 1.8rem; color: white;">{format_brl(dinheiro_total)}</h2>
-                            <p style="margin: 0; font-size: 1.2rem; opacity: 0.9; color: white;">{dinheiro_pct:.1f}% do total</p>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                with payment_cols[2]:
-                    st.markdown(f"""
-                    <div class="uniform-card" style="border-left: 4px solid #f58518;">
-                        <div style="text-align: center;">
-                            <h3 style="margin: 0; font-size: 1.5rem; color: #f58518;">📱 PIX</h3>
-                            <h2 style="margin: 0.5rem 0; font-size: 1.8rem; color: white;">{format_brl(pix_total)}</h2>
-                            <p style="margin: 0; font-size: 1.2rem; opacity: 0.9; color: white;">{pix_pct:.1f}% do total</p>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-            
-            st.markdown("---")
-            
-            # === SEÇÃO 4: GRÁFICOS PRINCIPAIS ===
+            # === SEÇÃO 3: GRÁFICOS PRINCIPAIS INTERATIVOS ===
             st.subheader("📊 Análise Visual Avançada")
             
             # Gráficos lado a lado - 2/3 para vendas diárias, 1/3 para pizza
             col_chart1, col_chart2 = st.columns([2, 1])
             
             with col_chart1:
+                st.markdown('<div class="interactive-container">', unsafe_allow_html=True)
                 daily_chart = create_advanced_daily_sales_chart(df_filtered)
                 if daily_chart:
                     st.altair_chart(daily_chart, use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
             
             with col_chart2:
-                pie_chart = create_simple_pie_chart(df_filtered)
+                st.markdown('<div class="interactive-container">', unsafe_allow_html=True)
+                pie_chart = create_interactive_pie_chart(df_filtered)
                 if pie_chart:
                     st.altair_chart(pie_chart, use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
             
             st.markdown("---")
             
-            # === SEÇÃO 5: GRÁFICO DE PATRIMÔNIO ACUMULADO ===
+            # === SEÇÃO 4: GRÁFICO DE PATRIMÔNIO ACUMULADO ===
+            st.markdown('<div class="interactive-container">', unsafe_allow_html=True)
             accumulation_chart = create_interactive_accumulation_chart(df_filtered)
             if accumulation_chart:
                 st.altair_chart(accumulation_chart, use_container_width=True)
+            st.markdown('</div>', unsafe_allow_html=True)
             
             st.markdown("---")
             
-            # === SEÇÃO 6: ANÁLISE POR DIA DA SEMANA ===
-            st.subheader("📅 Análise Detalhada por Dia da Semana")
+            # === SEÇÃO 5: ANÁLISE POR DIA DA SEMANA ===
+            st.subheader("📅 Performance por Dia da Semana")
             
+            st.markdown('<div class="interactive-container">', unsafe_allow_html=True)
             weekday_chart, best_day = create_enhanced_weekday_analysis(df_filtered)
             if weekday_chart:
                 st.altair_chart(weekday_chart, use_container_width=True)
-                
-                # Ranking dos dias da semana
-                if not df_filtered.empty and 'DiaSemana' in df_filtered.columns:
-                    df_weekday_analysis = df_filtered.copy()
-                    df_weekday_analysis['Total'] = pd.to_numeric(df_weekday_analysis['Total'], errors='coerce')
-                    df_weekday_analysis = df_weekday_analysis.dropna(subset=['Total', 'DiaSemana'])
-                    
-                    if not df_weekday_analysis.empty:
-                        dias_trabalho = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"]
-                        df_trabalho = df_weekday_analysis[df_weekday_analysis['DiaSemana'].isin(dias_trabalho)]
-                        
-                        if not df_trabalho.empty:
-                            medias_por_dia = df_trabalho.groupby('DiaSemana', observed=True)['Total'].agg(['mean', 'count']).round(2)
-                            medias_por_dia = medias_por_dia.reindex([d for d in dias_trabalho if d in medias_por_dia.index])
-                            medias_por_dia = medias_por_dia.sort_values('mean', ascending=False)
-                            
-                            st.subheader("🏆 Ranking dos Dias da Semana")
-                            
-                            col_ranking1, col_ranking2 = st.columns(2)
-                            
-                            with col_ranking1:
-                                st.markdown("### 🥇 **Melhores Dias**")
-                                if len(medias_por_dia) >= 1:
-                                    primeiro = medias_por_dia.index[0]
-                                    st.success(f"🥇 **1º lugar:** {primeiro}")
-                                    st.write(f"   Média: {format_brl(medias_por_dia.loc[primeiro, 'mean'])}")
-                                    st.write(f"   Dias trabalhados: {int(medias_por_dia.loc[primeiro, 'count'])}")
-                                
-                                if len(medias_por_dia) >= 2:
-                                    segundo = medias_por_dia.index[1]
-                                    st.info(f"🥈 **2º lugar:** {segundo}")
-                                    st.write(f"   Média: {format_brl(medias_por_dia.loc[segundo, 'mean'])}")
-                                    st.write(f"   Dias trabalhados: {int(medias_por_dia.loc[segundo, 'count'])}")
-                            
-                            with col_ranking2:
-                                st.markdown("### 📉 **Piores Dias**")
-                                if len(medias_por_dia) >= 2:
-                                    penultimo = medias_por_dia.index[-2]
-                                    st.warning(f"📊 **Penúltimo:** {penultimo}")
-                                    st.write(f"   Média: {format_brl(medias_por_dia.loc[penultimo, 'mean'])}")
-                                    st.write(f"   Dias trabalhados: {int(medias_por_dia.loc[penultimo, 'count'])}")
-                                
-                                if len(medias_por_dia) >= 1:
-                                    ultimo = medias_por_dia.index[-1]
-                                    st.error(f"🔻 **Último lugar:** {ultimo}")
-                                    st.write(f"   Média: {format_brl(medias_por_dia.loc[ultimo, 'mean'])}")
-                                    st.write(f"   Dias trabalhados: {int(medias_por_dia.loc[ultimo, 'count'])}")
+            st.markdown('</div>', unsafe_allow_html=True)
             
             st.markdown("---")
             
-            # === SEÇÃO 7: HISTOGRAMA DE DISTRIBUIÇÃO ===
+            # === SEÇÃO 6: HISTOGRAMA INTERATIVO ===
             st.subheader("📊 Distribuição de Valores de Vendas")
             
-            sales_histogram_chart = create_sales_histogram(df_filtered)
+            st.markdown('<div class="interactive-container">', unsafe_allow_html=True)
+            sales_histogram_chart = create_interactive_histogram(df_filtered)
             if sales_histogram_chart: 
                 st.altair_chart(sales_histogram_chart, use_container_width=True)
+            st.markdown('</div>', unsafe_allow_html=True)
             
             st.markdown("---")
             
-            # === SEÇÃO 8: INSIGHTS INTELIGENTES ===
+            # === SEÇÃO 7: INSIGHTS ESTRATÉGICOS ===
             create_premium_insights(df_filtered)
             
         else:
