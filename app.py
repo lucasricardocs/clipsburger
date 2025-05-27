@@ -110,7 +110,7 @@ def create_responsive_chart_config(is_mobile=False):
         }
 
 # --- Configuração da página Streamlit ---
-st.set_page_config(page_title="Sistema Financeiro - Clips Burger", layout="wide", page_icon="🍔")
+st.set_page_config(page_title="Sistema Financeiro - Clips Burger", layout="centered", page_icon="🍔")
 
 # Configuração de tema para gráficos
 alt.data_transformers.enable('json')
