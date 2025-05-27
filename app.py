@@ -679,7 +679,6 @@ def calculate_financial_results(df, salario_minimo, custo_contadora, custo_forne
     return results
 
 def create_dre_textual(resultados):
-def create_dre_textual(resultados):
     """Cria uma apresentação textual simples do DRE em 3 colunas."""
     def format_val(value):
         return f"R$ {value:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
