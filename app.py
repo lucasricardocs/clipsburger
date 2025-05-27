@@ -1220,7 +1220,7 @@ def main():
             else:
                 st.markdown("""
                 <div class="logo-aura">
-                    <div style="width: 120px; height: 120px; background: #4c78a8; border-radius: 15px; display: flex; align-items: center; justify-content: center; font-size: 2rem; color: white; position: relative; z-index: 2;">🍔</div>
+                    <div style="width: 200px; height: 200px; background: #4c78a8; border-radius: 15px; display: flex; align-items: center; justify-content: center; font-size: 2rem; color: white; position: relative; z-index: 2;">🍔</div>
                 </div>
                 """, unsafe_allow_html=True)
         
