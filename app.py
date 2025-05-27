@@ -885,9 +885,11 @@ def main():
         
         # Display do total em tempo real
         st.markdown(f"""
-<div style="text-align: center; padding: 1rem; background: linear-gradient(90deg, #4c78a8, #54a24b); border-radius: 15px; color: white; margin: 1rem 0; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
-    <h2 style="margin: 0; font-size: 1.8rem; text-shadow: 1px 1px 3px rgba(0,0,0,0.3);">💰 Total da Venda</h2>
-    <h1 style="margin: 0.5rem 0; font-size: 2.2rem; font-weight: bold;">{format_brl(total_venda_form)}</h1>
+<div style="text-align: center; padding: 0.7rem 1rem; background: linear-gradient(90deg, #4c78a8, #54a24b); border-radius: 10px; color: white; margin: 0.5rem 0; box-shadow: 0 4px 12px rgba(0,0,0,0.2); height: 3rem; display: flex; align-items: center; justify-content: center;">
+    <div>
+        <span style="font-size: 1.8rem; margin-right: 0.5rem; text-shadow: 1px 1px 3px rgba(0,0,0,0.3);">💰</span>
+        <span style="font-size: 2.2rem; font-weight: bold; text-shadow: 1px 1px 3px rgba(0,0,0,0.3);">Total: {format_brl(total_venda_form)}</span>
+    </div>
 </div>
 """, unsafe_allow_html=True)
 
