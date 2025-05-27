@@ -5,3 +5,4 @@ altair
 numpy
 google-auth
 python-dateutil
+plotly
