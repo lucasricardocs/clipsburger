@@ -677,7 +677,7 @@ def calculate_financial_results(df, salario_minimo, custo_contadora, custo_forne
     results['diferenca_tributavel_nao_tributavel'] = results['receita_nao_tributavel']
     
     return results
-
+    
 def create_dre_textual(resultados, df_filtered, selected_anos_filter):
     """Cria uma apresentação textual do DRE no estilo tradicional contábil usando dados anuais."""
     def format_val(value):
