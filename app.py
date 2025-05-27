@@ -31,7 +31,6 @@ meses_ordem = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julh
 
 # CSS para melhorar a aparência
 def inject_css():
-def inject_css():
     st.markdown("""
     <style>
     /* Container interativo para gráficos MELHORADO */
