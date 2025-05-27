@@ -679,9 +679,10 @@ def calculate_financial_results(df, salario_minimo, custo_contadora, custo_forne
     return results
 
 def create_dre_textual(resultados):
-    """Cria uma apresentação textual do DRE em 3 colunas sem tabela, otimizada para modo escuro."""
+def create_dre_textual(resultados):
+    """Cria uma apresentação textual simples do DRE em 3 colunas."""
     def format_val(value):
-        return f"{value:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
+        return f"R$ {value:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
 
     def calc_percent(value, base):
         if base == 0:
@@ -692,354 +693,168 @@ def create_dre_textual(resultados):
     base_receita = resultados['receita_bruta']
     ano_atual = datetime.now().year
 
-    # Cabeçalho personalizado
-    st.markdown(f"""
-    <div style="background: linear-gradient(135deg, #ff6b35, #f7931e); color: white; padding: 20px; border-radius: 15px; margin-bottom: 20px; box-shadow: 0 8px 25px rgba(255, 107, 53, 0.3);">
-        <h2 style="margin: 0; text-align: center; font-size: 28px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3);">📊 DEMONSTRAÇÃO DO RESULTADO DO EXERCÍCIO - {ano_atual}</h2>
-    </div>
-    """, unsafe_allow_html=True)
+    # Cabeçalho
+    st.markdown(f"## 📊 DEMONSTRAÇÃO DO RESULTADO DO EXERCÍCIO - {ano_atual}")
+    st.markdown("---")
     
     # Criar 3 colunas
     col1, col2, col3 = st.columns([4, 2, 1.5])
     
     with col1:
-        st.markdown("### 📋 **DESCRIÇÃO**")
+        st.markdown("**DESCRIÇÃO**")
     with col2:
-        st.markdown("### 💰 **VALOR (R$)**")
+        st.markdown("**VALOR (R$)**")
     with col3:
-        st.markdown("### 📊 **%V**")
+        st.markdown("**%V**")
     
     st.markdown("---")
     
     # RECEITA OPERACIONAL BRUTA
     col1, col2, col3 = st.columns([4, 2, 1.5])
     with col1:
-        st.markdown("""
-        <div style="background: linear-gradient(135deg, #4a90e2, #357abd); color: white; padding: 12px; border-radius: 8px; margin: 5px 0;">
-            <strong style="font-size: 16px;">RECEITA OPERACIONAL BRUTA</strong>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown("**RECEITA OPERACIONAL BRUTA**")
     with col2:
-        st.markdown(f"""
-        <div style="background: linear-gradient(135deg, #4a90e2, #357abd); color: white; padding: 12px; border-radius: 8px; margin: 5px 0; text-align: right;">
-            <strong style="font-size: 16px;">{format_val(resultados['receita_bruta'])}</strong>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"**{format_val(resultados['receita_bruta'])}**")
     with col3:
-        st.markdown(f"""
-        <div style="background: linear-gradient(135deg, #4a90e2, #357abd); color: white; padding: 12px; border-radius: 8px; margin: 5px 0; text-align: right;">
-            <strong style="font-size: 16px;">100,00%</strong>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown("**100,00%**")
     
-    # Subitem
     col1, col2, col3 = st.columns([4, 2, 1.5])
     with col1:
-        st.markdown("""
-        <div style="background: rgba(74, 144, 226, 0.3); color: #e0e0e0; padding: 8px 8px 8px 25px; border-radius: 5px; margin: 2px 0;">
-            Vendas de produtos
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown("    Vendas de produtos")
     with col2:
-        st.markdown(f"""
-        <div style="background: rgba(74, 144, 226, 0.3); color: #e0e0e0; padding: 8px; border-radius: 5px; margin: 2px 0; text-align: right;">
-            {format_val(resultados['receita_bruta'])}
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"{format_val(resultados['receita_bruta'])}")
     with col3:
-        st.markdown(f"""
-        <div style="background: rgba(74, 144, 226, 0.3); color: #e0e0e0; padding: 8px; border-radius: 5px; margin: 2px 0; text-align: right;">
-            100,00%
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown("100,00%")
     
-    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("")
     
     # DEDUÇÕES DA RECEITA BRUTA
     col1, col2, col3 = st.columns([4, 2, 1.5])
     with col1:
-        st.markdown("""
-        <div style="background: linear-gradient(135deg, #e74c3c, #c0392b); color: white; padding: 12px; border-radius: 8px; margin: 5px 0;">
-            <strong style="font-size: 16px;">(-) DEDUÇÕES DA RECEITA BRUTA</strong>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown("**(-) DEDUÇÕES DA RECEITA BRUTA**")
     with col2:
-        st.markdown(f"""
-        <div style="background: linear-gradient(135deg, #e74c3c, #c0392b); color: white; padding: 12px; border-radius: 8px; margin: 5px 0; text-align: right;">
-            <strong style="font-size: 16px;">-{format_val(resultados['impostos_sobre_vendas'])}</strong>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"**-{format_val(resultados['impostos_sobre_vendas'])}**")
     with col3:
-        st.markdown(f"""
-        <div style="background: linear-gradient(135deg, #e74c3c, #c0392b); color: white; padding: 12px; border-radius: 8px; margin: 5px 0; text-align: right;">
-            <strong style="font-size: 16px;">-{calc_percent(resultados['impostos_sobre_vendas'], base_receita):.2f}%</strong>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"**-{calc_percent(resultados['impostos_sobre_vendas'], base_receita):.2f}%**")
     
-    # Subitem
     col1, col2, col3 = st.columns([4, 2, 1.5])
     with col1:
-        st.markdown("""
-        <div style="background: rgba(231, 76, 60, 0.3); color: #ffcccc; padding: 8px 8px 8px 25px; border-radius: 5px; margin: 2px 0;">
-            Impostos sobre vendas
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown("    Impostos sobre vendas")
     with col2:
-        st.markdown(f"""
-        <div style="background: rgba(231, 76, 60, 0.3); color: #ffcccc; padding: 8px; border-radius: 5px; margin: 2px 0; text-align: right;">
-            -{format_val(resultados['impostos_sobre_vendas'])}
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"-{format_val(resultados['impostos_sobre_vendas'])}")
     with col3:
-        st.markdown(f"""
-        <div style="background: rgba(231, 76, 60, 0.3); color: #ffcccc; padding: 8px; border-radius: 5px; margin: 2px 0; text-align: right;">
-            -{calc_percent(resultados['impostos_sobre_vendas'], base_receita):.2f}%
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"-{calc_percent(resultados['impostos_sobre_vendas'], base_receita):.2f}%")
     
-    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("")
     
     # RECEITA OPERACIONAL LÍQUIDA
     col1, col2, col3 = st.columns([4, 2, 1.5])
     with col1:
-        st.markdown("""
-        <div style="background: linear-gradient(135deg, #27ae60, #229954); color: white; padding: 15px; border-radius: 8px; margin: 5px 0; border: 2px solid #2ecc71;">
-            <strong style="font-size: 18px;">= RECEITA OPERACIONAL LÍQUIDA</strong>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown("**= RECEITA OPERACIONAL LÍQUIDA**")
     with col2:
-        st.markdown(f"""
-        <div style="background: linear-gradient(135deg, #27ae60, #229954); color: white; padding: 15px; border-radius: 8px; margin: 5px 0; text-align: right; border: 2px solid #2ecc71;">
-            <strong style="font-size: 18px;">{format_val(resultados['receita_liquida'])}</strong>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"**{format_val(resultados['receita_liquida'])}**")
     with col3:
-        st.markdown(f"""
-        <div style="background: linear-gradient(135deg, #27ae60, #229954); color: white; padding: 15px; border-radius: 8px; margin: 5px 0; text-align: right; border: 2px solid #2ecc71;">
-            <strong style="font-size: 18px;">{calc_percent(resultados['receita_liquida'], base_receita):.2f}%</strong>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"**{calc_percent(resultados['receita_liquida'], base_receita):.2f}%**")
     
-    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("")
     
     # CUSTOS DOS PRODUTOS VENDIDOS
     col1, col2, col3 = st.columns([4, 2, 1.5])
     with col1:
-        st.markdown("""
-        <div style="background: linear-gradient(135deg, #8e44ad, #7d3c98); color: white; padding: 12px; border-radius: 8px; margin: 5px 0;">
-            <strong style="font-size: 16px;">(-) CUSTOS DOS PRODUTOS VENDIDOS</strong>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown("**(-) CUSTOS DOS PRODUTOS VENDIDOS**")
     with col2:
-        st.markdown(f"""
-        <div style="background: linear-gradient(135deg, #8e44ad, #7d3c98); color: white; padding: 12px; border-radius: 8px; margin: 5px 0; text-align: right;">
-            <strong style="font-size: 16px;">-{format_val(resultados['custo_produtos_vendidos'])}</strong>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"**-{format_val(resultados['custo_produtos_vendidos'])}**")
     with col3:
-        st.markdown(f"""
-        <div style="background: linear-gradient(135deg, #8e44ad, #7d3c98); color: white; padding: 12px; border-radius: 8px; margin: 5px 0; text-align: right;">
-            <strong style="font-size: 16px;">-{calc_percent(resultados['custo_produtos_vendidos'], base_receita):.2f}%</strong>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"**-{calc_percent(resultados['custo_produtos_vendidos'], base_receita):.2f}%**")
     
-    # Subitem
     col1, col2, col3 = st.columns([4, 2, 1.5])
     with col1:
-        st.markdown("""
-        <div style="background: rgba(142, 68, 173, 0.3); color: #e8d5f0; padding: 8px 8px 8px 25px; border-radius: 5px; margin: 2px 0;">
-            Custo dos produtos vendidos
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown("    Custo dos produtos vendidos")
     with col2:
-        st.markdown(f"""
-        <div style="background: rgba(142, 68, 173, 0.3); color: #e8d5f0; padding: 8px; border-radius: 5px; margin: 2px 0; text-align: right;">
-            -{format_val(resultados['custo_produtos_vendidos'])}
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"-{format_val(resultados['custo_produtos_vendidos'])}")
     with col3:
-        st.markdown(f"""
-        <div style="background: rgba(142, 68, 173, 0.3); color: #e8d5f0; padding: 8px; border-radius: 5px; margin: 2px 0; text-align: right;">
-            -{calc_percent(resultados['custo_produtos_vendidos'], base_receita):.2f}%
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"-{calc_percent(resultados['custo_produtos_vendidos'], base_receita):.2f}%")
     
-    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("")
     
     # RESULTADO OPERACIONAL BRUTO
     col1, col2, col3 = st.columns([4, 2, 1.5])
     with col1:
-        st.markdown("""
-        <div style="background: linear-gradient(135deg, #f39c12, #e67e22); color: white; padding: 15px; border-radius: 8px; margin: 5px 0; border: 2px solid #f1c40f;">
-            <strong style="font-size: 18px;">= RESULTADO OPERACIONAL BRUTO</strong>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown("**= RESULTADO OPERACIONAL BRUTO**")
     with col2:
-        st.markdown(f"""
-        <div style="background: linear-gradient(135deg, #f39c12, #e67e22); color: white; padding: 15px; border-radius: 8px; margin: 5px 0; text-align: right; border: 2px solid #f1c40f;">
-            <strong style="font-size: 18px;">{format_val(resultados['lucro_bruto'])}</strong>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"**{format_val(resultados['lucro_bruto'])}**")
     with col3:
-        st.markdown(f"""
-        <div style="background: linear-gradient(135deg, #f39c12, #e67e22); color: white; padding: 15px; border-radius: 8px; margin: 5px 0; text-align: right; border: 2px solid #f1c40f;">
-            <strong style="font-size: 18px;">{calc_percent(resultados['lucro_bruto'], base_receita):.2f}%</strong>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"**{calc_percent(resultados['lucro_bruto'], base_receita):.2f}%**")
     
-    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("")
     
     # DESPESAS OPERACIONAIS
     col1, col2, col3 = st.columns([4, 2, 1.5])
     with col1:
-        st.markdown("""
-        <div style="background: linear-gradient(135deg, #34495e, #2c3e50); color: white; padding: 12px; border-radius: 8px; margin: 5px 0;">
-            <strong style="font-size: 16px;">(-) DESPESAS OPERACIONAIS</strong>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown("**(-) DESPESAS OPERACIONAIS**")
     with col2:
-        st.markdown(f"""
-        <div style="background: linear-gradient(135deg, #34495e, #2c3e50); color: white; padding: 12px; border-radius: 8px; margin: 5px 0; text-align: right;">
-            <strong style="font-size: 16px;">-{format_val(resultados['total_despesas_operacionais'])}</strong>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"**-{format_val(resultados['total_despesas_operacionais'])}**")
     with col3:
-        st.markdown(f"""
-        <div style="background: linear-gradient(135deg, #34495e, #2c3e50); color: white; padding: 12px; border-radius: 8px; margin: 5px 0; text-align: right;">
-            <strong style="font-size: 16px;">-{calc_percent(resultados['total_despesas_operacionais'], base_receita):.2f}%</strong>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    # Subitens das despesas
-    col1, col2, col3 = st.columns([4, 2, 1.5])
-    with col1:
-        st.markdown("""
-        <div style="background: rgba(52, 73, 94, 0.3); color: #bdc3c7; padding: 8px 8px 8px 25px; border-radius: 5px; margin: 2px 0;">
-            Despesas com pessoal
-        </div>
-        """, unsafe_allow_html=True)
-    with col2:
-        st.markdown(f"""
-        <div style="background: rgba(52, 73, 94, 0.3); color: #bdc3c7; padding: 8px; border-radius: 5px; margin: 2px 0; text-align: right;">
-            -{format_val(resultados['despesas_com_pessoal'])}
-        </div>
-        """, unsafe_allow_html=True)
-    with col3:
-        st.markdown(f"""
-        <div style="background: rgba(52, 73, 94, 0.3); color: #bdc3c7; padding: 8px; border-radius: 5px; margin: 2px 0; text-align: right;">
-            -{calc_percent(resultados['despesas_com_pessoal'], base_receita):.2f}%
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"**-{calc_percent(resultados['total_despesas_operacionais'], base_receita):.2f}%**")
     
     col1, col2, col3 = st.columns([4, 2, 1.5])
     with col1:
-        st.markdown("""
-        <div style="background: rgba(52, 73, 94, 0.3); color: #bdc3c7; padding: 8px 8px 8px 25px; border-radius: 5px; margin: 2px 0;">
-            Serviços contábeis
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown("    Despesas com pessoal")
     with col2:
-        st.markdown(f"""
-        <div style="background: rgba(52, 73, 94, 0.3); color: #bdc3c7; padding: 8px; border-radius: 5px; margin: 2px 0; text-align: right;">
-            -{format_val(resultados['despesas_contabeis'])}
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"-{format_val(resultados['despesas_com_pessoal'])}")
     with col3:
-        st.markdown(f"""
-        <div style="background: rgba(52, 73, 94, 0.3); color: #bdc3c7; padding: 8px; border-radius: 5px; margin: 2px 0; text-align: right;">
-            -{calc_percent(resultados['despesas_contabeis'], base_receita):.2f}%
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"-{calc_percent(resultados['despesas_com_pessoal'], base_receita):.2f}%")
     
-    st.markdown("<br>", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([4, 2, 1.5])
+    with col1:
+        st.markdown("    Serviços contábeis")
+    with col2:
+        st.markdown(f"-{format_val(resultados['despesas_contabeis'])}")
+    with col3:
+        st.markdown(f"-{calc_percent(resultados['despesas_contabeis'], base_receita):.2f}%")
+    
+    st.markdown("")
     
     # RESULTADO OPERACIONAL LÍQUIDO
     col1, col2, col3 = st.columns([4, 2, 1.5])
     with col1:
-        st.markdown("""
-        <div style="background: linear-gradient(135deg, #16a085, #138d75); color: white; padding: 15px; border-radius: 8px; margin: 5px 0; border: 2px solid #1abc9c;">
-            <strong style="font-size: 18px;">= RESULTADO OPERACIONAL LÍQUIDO</strong>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown("**= RESULTADO OPERACIONAL LÍQUIDO**")
     with col2:
-        st.markdown(f"""
-        <div style="background: linear-gradient(135deg, #16a085, #138d75); color: white; padding: 15px; border-radius: 8px; margin: 5px 0; text-align: right; border: 2px solid #1abc9c;">
-            <strong style="font-size: 18px;">{format_val(resultados['lucro_operacional'])}</strong>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"**{format_val(resultados['lucro_operacional'])}**")
     with col3:
-        st.markdown(f"""
-        <div style="background: linear-gradient(135deg, #16a085, #138d75); color: white; padding: 15px; border-radius: 8px; margin: 5px 0; text-align: right; border: 2px solid #1abc9c;">
-            <strong style="font-size: 18px;">{calc_percent(resultados['lucro_operacional'], base_receita):.2f}%</strong>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"**{calc_percent(resultados['lucro_operacional'], base_receita):.2f}%**")
     
-    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("")
     
     # RESULTADO ANTES IR E CSLL
     col1, col2, col3 = st.columns([4, 2, 1.5])
     with col1:
-        st.markdown("""
-        <div style="background: rgba(255, 255, 255, 0.1); color: #ecf0f1; padding: 10px; border-radius: 5px; margin: 2px 0; border-left: 4px solid #3498db;">
-            = RESULTADO ANTES IR E CSLL
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown("= RESULTADO ANTES IR E CSLL")
     with col2:
-        st.markdown(f"""
-        <div style="background: rgba(255, 255, 255, 0.1); color: #ecf0f1; padding: 10px; border-radius: 5px; margin: 2px 0; text-align: right; border-left: 4px solid #3498db;">
-            {format_val(resultados['lucro_antes_ir'])}
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"{format_val(resultados['lucro_antes_ir'])}")
     with col3:
-        st.markdown(f"""
-        <div style="background: rgba(255, 255, 255, 0.1); color: #ecf0f1; padding: 10px; border-radius: 5px; margin: 2px 0; text-align: right; border-left: 4px solid #3498db;">
-            {calc_percent(resultados['lucro_antes_ir'], base_receita):.2f}%
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"{calc_percent(resultados['lucro_antes_ir'], base_receita):.2f}%")
     
-    # IR e CSLL
     col1, col2, col3 = st.columns([4, 2, 1.5])
     with col1:
-        st.markdown("""
-        <div style="background: rgba(255, 255, 255, 0.05); color: #95a5a6; padding: 8px 8px 8px 25px; border-radius: 5px; margin: 2px 0; font-style: italic;">
-            (-) IR e CSLL (Simples Nacional)
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown("    (-) IR e CSLL (Simples Nacional)")
     with col2:
-        st.markdown("""
-        <div style="background: rgba(255, 255, 255, 0.05); color: #95a5a6; padding: 8px; border-radius: 5px; margin: 2px 0; text-align: right; font-style: italic;">
-            0,00
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown("0,00")
     with col3:
-        st.markdown("""
-        <div style="background: rgba(255, 255, 255, 0.05); color: #95a5a6; padding: 8px; border-radius: 5px; margin: 2px 0; text-align: right; font-style: italic;">
-            0,00%
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown("0,00%")
     
-    st.markdown("<br><br>", unsafe_allow_html=True)
+    st.markdown("")
+    st.markdown("---")
     
-    # RESULTADO LÍQUIDO DO EXERCÍCIO - DESTAQUE FINAL
+    # RESULTADO LÍQUIDO DO EXERCÍCIO
     col1, col2, col3 = st.columns([4, 2, 1.5])
     with col1:
-        st.markdown("""
-        <div style="background: linear-gradient(135deg, #2c3e50, #34495e); color: #ecf0f1; padding: 20px; border-radius: 12px; margin: 5px 0; border: 3px solid #3498db; box-shadow: 0 8px 25px rgba(52, 152, 219, 0.3);">
-            <strong style="font-size: 22px;">🎯 RESULTADO LÍQUIDO DO EXERCÍCIO</strong>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown("## **= RESULTADO LÍQUIDO DO EXERCÍCIO**")
     with col2:
-        st.markdown(f"""
-        <div style="background: linear-gradient(135deg, #2c3e50, #34495e); color: #ecf0f1; padding: 20px; border-radius: 12px; margin: 5px 0; text-align: right; border: 3px solid #3498db; box-shadow: 0 8px 25px rgba(52, 152, 219, 0.3);">
-            <strong style="font-size: 22px;">{format_val(resultados['lucro_liquido'])}</strong>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"## **{format_val(resultados['lucro_liquido'])}**")
     with col3:
-        st.markdown(f"""
-        <div style="background: linear-gradient(135deg, #2c3e50, #34495e); color: #ecf0f1; padding: 20px; border-radius: 12px; margin: 5px 0; text-align: right; border: 3px solid #3498db; box-shadow: 0 8px 25px rgba(52, 152, 219, 0.3);">
-            <strong style="font-size: 22px;">{calc_percent(resultados['lucro_liquido'], base_receita):.2f}%</strong>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"## **{calc_percent(resultados['lucro_liquido'], base_receita):.2f}%**")
+
 
 def create_financial_dashboard_altair(resultados):
     """Cria um dashboard financeiro usando gráficos de barras horizontais."""
