@@ -76,21 +76,21 @@ def inject_css():
         display: flex;
         justify-content: center;
         align-items: center;
-        width: 240px;
-        height: 240px;
+        width: 160px;
+        height: 160px;
         margin: 0 auto;
     }
     
     .logo-aura::before {
         content: '';
         position: absolute;
-        top: 25%;
-        left: 25%;
+        top: 50%;
+        left: 50%;
         transform: translate(-50%, -50%);
-        width: 150px;
-        height: 150px;
-        background: radial-gradient(circle, rgba(76, 120, 168, 0.4) 0%, rgba(76, 120, 168, 0.2) 40%, rgba(76, 120, 168, 0.1) 70%, transparent 100%);
-        border-radius: 50%;
+        width: 100px;
+        height: 100px;
+        background: radial-gradient(circle, rgba(76, 120, 168, 0.4) 0%, rgba(76, 120, 168, 0.2) 40%, rgba(76, 120, 168, 0.1) 50%, transparent 100%);
+        border-radius: 80%;
         animation: pulse-aura 5s ease-in-out infinite;
         z-index: 1;
     }
@@ -99,7 +99,7 @@ def inject_css():
         position: relative;
         z-index: 2;
         border-radius: 6px;
-        filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.3));
+        filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.3));
     }
     
     @keyframes pulse-aura {
