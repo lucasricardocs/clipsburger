@@ -87,11 +87,11 @@ def inject_css():
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        width: 150px;
-        height: 150px;
+        width: 110px;
+        height: 110px;
         background: radial-gradient(circle, rgba(76, 120, 168, 0.4) 0%, rgba(76, 120, 168, 0.2) 40%, rgba(76, 120, 168, 0.1) 50%, transparent 100%);
-        border-radius: 80%;
-        animation: pulse-aura 5s ease-in-out infinite;
+        border-radius: 90%;
+        animation: pulse-aura 8s ease-in-out infinite;
         z-index: 1;
     }
     
