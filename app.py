@@ -95,10 +95,9 @@ def inject_css():
         margin-bottom: 20px;
     }
     .logo-image {
-        width: 60px; /* Tamanho da logo */
+        width: 80px; /* Tamanho aumentado */
         height: auto;
-        filter: drop-shadow(0 0 10px rgba(76, 120, 168, 0.8)); /* Aura azul vibrante */
-        animation: pulse 2s infinite;
+        filter: drop-shadow(0 0 15px rgba(255, 255, 255, 0.7)); /* Aura branca estática */
     }
 
     @keyframes pulse {
@@ -404,55 +403,67 @@ def create_radial_plot(df):
     return radial_plot
 
 def create_area_chart_with_gradient(df):
-    """Cria gráfico de área com gradiente substituindo o gráfico de montanha."""
+    """Cria gráfico de área ACUMULADA com gradiente e cores vibrantes."""
     if df.empty or 'Data' not in df.columns or 'Total' not in df.columns:
+        st.warning("Dados insuficientes para o gráfico de evolução acumulada.")
         return None
-    
+
     df_sorted = df.sort_values('Data').copy()
-    
+    df_sorted.dropna(subset=['Data', 'Total'], inplace=True) # Garantir que não há NaNs
+
     if df_sorted.empty:
+        st.warning("Dados insuficientes após limpeza para o gráfico de evolução acumulada.")
         return None
-    
+
+    # Calcular o total acumulado
+    df_sorted['Total_Acumulado'] = df_sorted['Total'].cumsum()
+
+    # Cores vibrantes para o gradiente
+    cor_inicio = "#72b7b2" # Turquesa
+    cor_fim = "#4c78a8"    # Azul
+
     area_chart = alt.Chart(df_sorted).mark_area(
         interpolate='monotone',
-        line={'color': CORES_MODO_ESCURO[0], 'strokeWidth': 3},
+        line={'color': cor_fim, 'strokeWidth': 3.5}, # Linha mais grossa e cor final
         color=alt.Gradient(
             gradient='linear',
             stops=[
-                alt.GradientStop(color=CORES_MODO_ESCURO[0], offset=0),
-                alt.GradientStop(color=CORES_MODO_ESCURO[4], offset=1)
+                alt.GradientStop(color=cor_inicio, offset=0), # Cor inicial vibrante
+                alt.GradientStop(color=cor_fim, offset=1)     # Cor final vibrante
             ],
             x1=1, x2=1, y1=1, y2=0
         )
     ).encode(
         x=alt.X(
-            'Data:T', 
-            title='Data', 
-            axis=alt.Axis(format='%d/%m', labelAngle=-45, labelFontSize=12)
+            'Data:T',
+            title='Data',
+            axis=alt.Axis(format='%d/%m/%Y', labelAngle=-45, labelFontSize=12, titleFontSize=14) # Formato completo da data
         ),
         y=alt.Y(
-            'Total:Q', 
-            title='Total de Vendas (R$)', 
-            axis=alt.Axis(labelFontSize=12)
+            'Total_Acumulado:Q',
+            title='Receita Acumulada (R$)', # Título atualizado
+            axis=alt.Axis(labelFontSize=12, titleFontSize=14, format=',.0f') # Formato sem decimais para valores grandes
         ),
         tooltip=[
             alt.Tooltip('DataFormatada:N', title='Data'),
-            alt.Tooltip('Total:Q', title='Total de Vendas (R$)', format=',.2f')
+            alt.Tooltip('Total:Q', title='Venda do Dia (R$)', format=',.2f'), # Adiciona venda do dia
+            alt.Tooltip('Total_Acumulado:Q', title='Total Acumulado (R$)', format=',.2f') # Tooltip atualizado
         ]
     ).properties(
         title=alt.TitleParams(
-            text='Evolução das Vendas com Gradiente', 
-            fontSize=18,
-            anchor='start'
+            text='📈 Evolução Acumulada da Receita', # Título atualizado
+            fontSize=20, # Fonte maior
+            anchor='middle', # Centralizado
+            color='#f58518' # Cor de destaque laranja
         ),
         height=500,
-        width=1000
+        width=1000 # Mantém largura
     ).configure_view(
         stroke=None
     ).configure(
         background='transparent'
-    )
-    
+    ).interactive() # Tornar interativo (zoom/pan)
+
     return area_chart
 
 def create_advanced_daily_sales_chart(df):
@@ -1150,7 +1161,7 @@ def create_sales_heatmap_calplot(df, filename):
                                 colorbar=True,
                                 suptitle="Heatmap de Vendas Diárias (Total R$)",
                                 yearlabel_kws={'color': 'white', 'fontsize': 14},
-                                monthlabel_kws={'color': 'white', 'fontsize': 10},
+                                monthlabels_kws={'color': 'white', 'fontsize': 10},
                                 daylabel_kws={'color': 'grey', 'fontsize': 8},
                                 dayticks=True # Mostra os dias da semana
                                )
