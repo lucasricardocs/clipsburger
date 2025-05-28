@@ -1246,4 +1246,3 @@ def main():    # --- Título com Logo e Aura (usando URL remoto) ---
 # --- Ponto de Entrada Principal ---
 if __name__ == "__main__":
     main()
-
