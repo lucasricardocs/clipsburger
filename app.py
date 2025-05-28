@@ -516,67 +516,80 @@ def create_radial_plot(df):
     return radial_plot
 
 # Gráfico de Vendas Diárias (Stacked Bar Chart with Rounded Corners)
-def create_stacked_daily_sales_chart(df):
-    """Cria gráfico de barras empilhadas arredondadas de vendas diárias por método."""
-    if df.empty or "Data" not in df.columns or not any(col in df.columns for col in ["Cartão", "Dinheiro", "Pix"]):
+
+def create_advanced_daily_sales_chart(df):
+    """Cria um gráfico de vendas diárias sem animação."""
+    if df.empty or 'Data' not in df.columns:
         return None
     
-    df_chart = df.copy()
-    df_chart.dropna(subset=["Data", "Cartão", "Dinheiro", "Pix"], inplace=True)
-    if df_chart.empty:
+    df_sorted = df.sort_values('Data').copy()
+    
+    if df_sorted.empty:
         return None
-
-    # Agrupar por dia caso haja múltiplas entradas
-    df_daily = df_chart.groupby(df_chart["Data"].dt.date)[["Cartão", "Dinheiro", "Pix"]].sum().reset_index()
-    df_daily = df_daily[(df_daily["Cartão"] > 0) | (df_daily["Dinheiro"] > 0) | (df_daily["Pix"] > 0)]
-
-    if df_daily.empty:
+    
+    df_melted = df_sorted.melt(
+        id_vars=['Data', 'DataFormatada', 'Total'],
+        value_vars=['Cartão', 'Dinheiro', 'Pix'],
+        var_name='Método',
+        value_name='Valor'
+    )
+    
+    df_melted = df_melted[df_melted['Valor'] > 0]
+    
+    if df_melted.empty:
         return None
-
-    # Transformar dados para formato longo
-    df_long = df_daily.melt(id_vars=["Data"], value_vars=["Cartão", "Dinheiro", "Pix"], var_name="Método", value_name="Valor")
-    df_long = df_long[df_long["Valor"] > 0]
-
-    if df_long.empty:
-        return None
-
-    # Cores específicas para cada método
-    color_scale = alt.Scale(domain=["Cartão", "Dinheiro", "Pix"], range=[CORES_MODO_ESCURO[0], CORES_MODO_ESCURO[1], CORES_MODO_ESCURO[2]])
-
-    # Barras empilhadas arredondadas
-    bars = alt.Chart(df_long).mark_bar(
-        cornerRadiusTopLeft=8,
-        cornerRadiusTopRight=8,
-        opacity=0.9,
-        stroke="white",  # ADICIONADO: borda branca
-        strokeWidth=1    # ADICIONADO: espessura da borda
+    
+    bars = alt.Chart(df_melted).mark_bar(
+        size=20
     ).encode(
-        x=alt.X("Data:T", title="Data", axis=alt.Axis(
-            format="%d/%m", 
-            labelAngle=-45, 
-            labelColor=COR_TEXTO_SECUNDARIO, 
-            titleColor=COR_TEXTO_PRINCIPAL,
-            grid=False
-        )),
-        y=alt.Y("sum(Valor):Q", title="Vendas Diárias (R$)", axis=alt.Axis(
-            labelColor=COR_TEXTO_SECUNDARIO, 
-            titleColor=COR_TEXTO_PRINCIPAL,
-            grid=False
-        )),
-        color=alt.Color("Método:N", scale=color_scale, legend=alt.Legend(title="Método", orient="bottom", titleColor=COR_TEXTO_PRINCIPAL, labelColor=COR_TEXTO_SECUNDARIO)),
-        order=alt.Order("Método", sort="descending"),
+        x=alt.X(
+            'Data:T',
+            title='Data',
+            axis=alt.Axis(format='%d/%m', labelAngle=-45, labelFontSize=12)
+        ),
+        y=alt.Y(
+            'Valor:Q',
+            title='Valor (R$)',
+            stack='zero',
+            axis=alt.Axis(labelFontSize=12)
+        ),
+        color=alt.Color(
+            'Método:N',
+            scale=alt.Scale(range=CORES_MODO_ESCURO[:3]),
+            legend=alt.Legend(
+                title="Método de Pagamento",
+                orient='bottom',
+                direction='horizontal',
+                titleFontSize=14,
+                labelFontSize=12,
+                symbolSize=100,
+                symbolStrokeWidth=2,
+                titlePadding=10,
+                padding=10,
+                rowPadding=5,
+                columnPadding=15
+            )
+        ),
         tooltip=[
-            alt.Tooltip("Data:T", title="Data", format="%d/%m/%Y"),
-            alt.Tooltip("Método:N", title="Método"),
-            alt.Tooltip("Valor:Q", title="Valor", format=",.2f")
+            alt.Tooltip('DataFormatada:N', title='Data'),
+            alt.Tooltip('Método:N', title='Método'),
+            alt.Tooltip('Valor:Q', title='Valor (R$)', format=',.2f')
         ]
     ).properties(
+        title=alt.TitleParams(
+            text="Vendas Diárias por Método de Pagamento",
+            fontSize=16,
+            anchor='start'
+        ),
         height=500,
-        background="transparent"
+        width=1000,
+        padding={'bottom': 100}
     ).configure_view(
-        strokeOpacity=0
-    ).interactive()
-
+        stroke=None
+    ).configure(
+        background='transparent'
+    )
+    
     return bars
 
 
