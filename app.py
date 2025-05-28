@@ -715,10 +715,10 @@ def create_cumulative_evolution_chart(df):
 
     return chart
 
-# Função para criar o Heatmap de Calendário (CORRIGIDA)
+# Função para criar o Heatmap de Calendário (ADAPTADA DO EXEMPLO)
 def create_calendar_heatmap(df, year):
     """Cria um heatmap de calendário de vendas para um ano específico usando Plotly.
-       Utiliza os dados do DataFrame processado e o estilo do exemplo.
+       Adaptado do exemplo fornecido, usando apenas a parte gráfica.
     """
     if df.empty or "Data" not in df.columns or "Total" not in df.columns:
         st.warning(f"Dados insuficientes para gerar o heatmap de calendário para {year}.")
@@ -740,7 +740,7 @@ def create_calendar_heatmap(df, year):
     # Reindexar para incluir todos os dias, preenchendo dias sem vendas com 0
     daily_sales = daily_sales.reindex(all_dates.date, fill_value=0)
 
-    # Preparar dados para Plotly Heatmap (similar ao exemplo)
+    # Preparar dados para Plotly Heatmap
     dates_list = daily_sales.index
     values = daily_sales.values
 
@@ -761,8 +761,7 @@ def create_calendar_heatmap(df, year):
 
     # Calcular posições x (semana do ano) e y (dia da semana)
     weekdays = [d.weekday() for d in dates_list] # 0=Segunda ... 6=Domingo
-    weeknumbers = [d.isocalendar().week for d in dates_list]
-
+    
     # Ajuste para semanas que começam no ano anterior ou terminam no próximo
     first_day_weekday = start_date.weekday()
     x_positions = [(d.toordinal() - start_date.toordinal() + first_day_weekday) // 7 for d in dates_list]
@@ -833,42 +832,42 @@ def create_calendar_heatmap(df, year):
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         font=dict(color=COR_TEXTO_PRINCIPAL, family="Arial, sans-serif", size=14), # Fonte maior
-        xaxis=dict(
-            title="",
-            showgrid=False,
-            zeroline=False,
-            tickmode="array",
-            tickvals=month_positions,
-            ticktext=month_names,
-            tickfont=dict(color=COR_TEXTO_SECUNDARIO, size=14),
-            side="top",
-            tickangle=0,
-            showline=False,
-        ),
-        yaxis=dict(
-            title="",
-            showgrid=False,
-            zeroline=False,
-            tickmode="array",
-            tickvals=[0, 1, 2, 3, 4, 5, 6],
-            ticktext=["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"],
-            tickfont=dict(color=COR_TEXTO_SECUNDARIO, size=14),
-            autorange="reversed", # Domingo no topo se y=6 for domingo
-            showline=False,
-            ticklen=0,
-            ticklabelposition="outside right", # Coloca dias da semana à direita
-            ticklabelstandoff=10 # Afasta os labels
-        ),
         height=350, # Altura menor para calendário
         margin=dict(l=20, r=80, t=50, b=20) # Ajustar margens
     )
     
-    # Criar heatmap mensal (CORRIGIDO)
-    # Agrupar dados por mês
+    # Configurar eixos separadamente para evitar erros
+    fig_anual.update_xaxes(
+        title="",
+        showgrid=False,
+        zeroline=False,
+        tickmode="array",
+        tickvals=month_positions,
+        ticktext=month_names,
+        tickfont=dict(color=COR_TEXTO_SECUNDARIO, size=14),
+        side="top",
+        tickangle=0,
+        showline=False
+    )
+    
+    fig_anual.update_yaxes(
+        title="",
+        showgrid=False,
+        zeroline=False,
+        tickmode="array",
+        tickvals=[0, 1, 2, 3, 4, 5, 6],
+        ticktext=["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"],
+        tickfont=dict(color=COR_TEXTO_SECUNDARIO, size=14),
+        autorange="reversed", # Domingo no topo se y=6 for domingo
+        showline=False,
+        ticklen=0
+    )
+    
+    # Criar dados para o gráfico mensal
     monthly_data = df_year.groupby(df_year["Data"].dt.month)["Total"].sum()
     monthly_data = monthly_data.reindex(range(1, 13), fill_value=0)
     
-    # Criar figura para o heatmap mensal
+    # Criar figura para o gráfico mensal
     fig_mensal = go.Figure()
     
     # Adicionar barras para cada mês
@@ -898,44 +897,35 @@ def create_calendar_heatmap(df, year):
             name=calendar.month_name[mes]
         ))
     
-    # Configurar layout do gráfico mensal (SIMPLIFICADO para evitar erros)
-    try:
-        fig_mensal.update_layout(
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            height=250,
-            margin=dict(l=20, r=20, t=20, b=20),
-            showlegend=False
-        )
-        
-        # Configurar eixos separadamente para evitar erros
-        fig_mensal.update_xaxes(
-            title="",
-            tickmode="array",
-            tickvals=list(range(1, 13)),
-            ticktext=[calendar.month_abbr[i] for i in range(1, 13)],
-            tickfont=dict(color=COR_TEXTO_SECUNDARIO, size=14),
-            showgrid=False,
-            zeroline=False,
-            showline=False
-        )
-        
-        fig_mensal.update_yaxes(
-            title="Vendas Mensais (R$)",
-            titlefont=dict(color=COR_TEXTO_PRINCIPAL, size=14),
-            tickfont=dict(color=COR_TEXTO_SECUNDARIO, size=14),
-            showgrid=False,
-            zeroline=False,
-            showline=False
-        )
-    except Exception as e:
-        st.warning(f"Aviso: Configuração simplificada do gráfico mensal devido a erro: {e}")
-        # Configuração mínima em caso de erro
-        fig_mensal.update_layout(
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            height=250
-        )
+    # Configuração básica do layout mensal
+    fig_mensal.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        height=250,
+        margin=dict(l=20, r=20, t=20, b=20),
+        showlegend=False
+    )
+    
+    # Configurar eixos separadamente
+    fig_mensal.update_xaxes(
+        title="",
+        tickmode="array",
+        tickvals=list(range(1, 13)),
+        ticktext=[calendar.month_abbr[i] for i in range(1, 13)],
+        tickfont=dict(color=COR_TEXTO_SECUNDARIO, size=14),
+        showgrid=False,
+        zeroline=False,
+        showline=False
+    )
+    
+    fig_mensal.update_yaxes(
+        title="Vendas Mensais (R$)",
+        titlefont=dict(color=COR_TEXTO_PRINCIPAL, size=14),
+        tickfont=dict(color=COR_TEXTO_SECUNDARIO, size=14),
+        showgrid=False,
+        zeroline=False,
+        showline=False
+    )
 
     return fig_anual, fig_mensal
 
