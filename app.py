@@ -95,7 +95,7 @@ def inject_css():
         margin-bottom: 20px;
     }
     .logo-image {
-        width: 80px; /* Tamanho aumentado */
+        width: 150px; /* Tamanho aumentado */
         height: auto;
         filter: drop-shadow(0 0 15px rgba(255, 255, 255, 0.7)); /* Aura branca estática */
     }
