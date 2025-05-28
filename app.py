@@ -1,4 +1,4 @@
-import streamlit as st
+import stream lit as st
 import gspread
 import pandas as pd
 import altair as alt
@@ -12,9 +12,11 @@ import datetime as dt # Usado para datetime.date
 
 # Suprimir warnings específicos do pandas
 warnings.filterwarnings("ignore", category=FutureWarning, message=".*observed=False.*")
+warnings.filterwarnings("ignore", category=UserWarning, message=".*Converting to PeriodDtype.*")
+
 
 # --- Configurações Globais e Constantes ---
-SPREADSHEET_ID = "1NTScbiIna-iE7roQ9XBdjUOssRihTFFby4INAAQNXTg" # MANTENHA O SEU ID CORRETO
+SPREADSHEET_ID = "1NTScbiIna-iE7roQ9XBdjUOssRihTFFby4INAAQNXTg" # SUBSTITUA PELO SEU ID REAL
 WORKSHEET_NAME = "Vendas"
 LOGO_URL = "https://raw.githubusercontent.com/lucasricardocs/clipsburger/main/logo.png"
 
@@ -262,9 +264,10 @@ def inject_css():
         .logo-container h1 {{ font-size: 2rem; }}
         .stMetric {{ padding: 1rem; min-height: 100px; }}
         .insight-container {{ padding: 1.2rem; min-height: 140px; }}
-        .st-emotion-cache-1l269bu > div {{ 
-             flex-direction: column;
-        }}
+        /* Correção para colunas em métricas se necessário */
+        /* .st-emotion-cache-1l269bu > div {{  */
+        /*      flex-direction: column; */
+        /* }} */
     }}
 
     @media (max-width: 768px) {{ 
@@ -295,7 +298,7 @@ def inject_css():
 inject_css()
 
 # --- Funções de Cache para Acesso ao Google Sheets ---
-@st.cache_resource
+@st.cache_resource(ttl=3600) # Cache de 1 hora para o cliente gspread
 def get_google_auth():
     """Autoriza o acesso ao Google Sheets e retorna o cliente gspread."""
     SCOPES = ["https://www.googleapis.com/auth/spreadsheets",
@@ -307,7 +310,7 @@ def get_google_auth():
             return None
 
         credentials_dict = st.secrets["google_credentials"]
-        if not credentials_dict:
+        if not credentials_dict: # Verifica se o dicionário não está vazio
             st.error("As credenciais do Google em st.secrets estão vazias.")
             return None
 
@@ -318,7 +321,7 @@ def get_google_auth():
         st.error(f"Erro de autenticação com Google: {e}")
         return None
 
-@st.cache_resource
+@st.cache_resource(ttl=3600) # Cache de 1 hora para o objeto worksheet
 def get_worksheet():
     """Retorna o objeto worksheet da planilha especificada."""
     gc = get_google_auth()
@@ -328,7 +331,7 @@ def get_worksheet():
             worksheet = spreadsheet.worksheet(WORKSHEET_NAME)
             return worksheet
         except SpreadsheetNotFound:
-            st.error(f"Planilha com ID \'{SPREADSHEET_ID}\' não encontrada.")
+            st.error(f"Planilha com ID \'{SPREADSHEET_ID}\' não encontrada. Verifique o ID e as permissões.")
             return None
         except Exception as e:
             st.error(f"Erro ao acessar a planilha \'{WORKSHEET_NAME}\': {e}")
@@ -336,15 +339,15 @@ def get_worksheet():
     return None
 
 # --- Funções de Manipulação de Dados ---
-@st.cache_data(ttl=600) # Cache de 10 minutos
+@st.cache_data(ttl=600) # Cache de 10 minutos para os dados lidos
 def read_sales_data():
     """Lê todos os registros da planilha de vendas e retorna como DataFrame."""
     worksheet = get_worksheet()
     if worksheet:
         try:
-            rows = worksheet.get_all_records()
+            rows = worksheet.get_all_records(numericise_ignore=['all']) # Ler tudo como string inicialmente
             if not rows:
-                st.info("A planilha de vendas está vazia.")
+                # st.info("A planilha de vendas está vazia.")
                 return pd.DataFrame(columns=["Data", "Cartão", "Dinheiro", "Pix"])
 
             df = pd.DataFrame(rows)
@@ -352,20 +355,20 @@ def read_sales_data():
             # Garantir que as colunas de valor existam e sejam numéricas
             for col in ["Cartão", "Dinheiro", "Pix"]:
                 if col in df.columns:
+                    # Tenta converter para numérico, substituindo vírgula por ponto
+                    df[col] = df[col].astype(str).str.replace(',', '.', regex=False)
                     df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
                 else:
-                    df[col] = 0 # Adiciona a coluna com zeros se não existir
+                    df[col] = 0.0 # Adiciona a coluna com zeros se não existir
 
             # Tratar coluna 'Data'
             if "Data" not in df.columns:
-                 st.warning("Coluna \'Data\' não encontrada na planilha. Criando coluna vazia.")
+                 # st.warning("Coluna \'Data\' não encontrada na planilha. Criando coluna vazia.")
                  df["Data"] = pd.NaT # Cria coluna de data vazia
             else:
-                # Tentar múltiplos formatos de data
-                try:
-                    df["Data"] = pd.to_datetime(df["Data"], format="%d/%m/%Y", errors="coerce")
-                except ValueError: # Se o formato acima falhar, tenta inferir
-                    df["Data"] = pd.to_datetime(df["Data"], errors="coerce")
+                # Tenta converter para datetime, tratando diversos formatos comuns
+                df["Data"] = pd.to_datetime(df["Data"], errors="coerce", dayfirst=True)
+
 
             # Remover linhas onde a data não pôde ser convertida
             df.dropna(subset=["Data"], inplace=True)
@@ -376,24 +379,25 @@ def read_sales_data():
             return pd.DataFrame(columns=["Data", "Cartão", "Dinheiro", "Pix"]) # Retorna DF vazio em caso de erro
     return pd.DataFrame(columns=["Data", "Cartão", "Dinheiro", "Pix"]) # Retorna DF vazio se worksheet for None
 
-def add_data_to_sheet(date, cartao, dinheiro, pix, worksheet_obj):
+def add_data_to_sheet(date_obj, cartao_val, dinheiro_val, pix_val, worksheet_obj):
     """Adiciona uma nova linha de dados à planilha Google Sheets."""
     if worksheet_obj is None:
         st.error("Não foi possível acessar a planilha para adicionar dados.")
         return False
     try:
         # Garantir que os valores são float
-        cartao_val = float(cartao) if cartao else 0.0
-        dinheiro_val = float(dinheiro) if dinheiro else 0.0
-        pix_val = float(pix) if pix else 0.0
+        cartao_float = float(cartao_val) if cartao_val else 0.0
+        dinheiro_float = float(dinheiro_val) if dinheiro_val else 0.0
+        pix_float = float(pix_val) if pix_val else 0.0
 
         # Formata a data como string DD/MM/YYYY para consistência na planilha
-        formatted_date_str = date.strftime("%d/%m/%Y")
+        formatted_date_str = date_obj.strftime("%d/%m/%Y")
 
-        new_row = [formatted_date_str, cartao_val, dinheiro_val, pix_val]
-        worksheet_obj.append_row(new_row)
+        new_row = [formatted_date_str, cartao_float, dinheiro_float, pix_float]
+        worksheet_obj.append_row(new_row, value_input_option='USER_ENTERED') # USER_ENTERED para formatar como número
         # Limpar caches relevantes após adicionar dados
         st.cache_data.clear() # Limpa cache de dados (read_sales_data, process_data)
+        st.cache_resource.clear() # Limpa cache de get_worksheet e get_google_auth se precisar forçar re-autenticação
         return True # Indica sucesso
     except ValueError as ve:
         st.error(f"Erro ao converter valores para número: {ve}. Verifique os dados de entrada.")
@@ -406,38 +410,40 @@ def add_data_to_sheet(date, cartao, dinheiro, pix, worksheet_obj):
 def process_data(df_input):
     """Processa e prepara os dados de vendas para análise."""
     if df_input.empty or "Data" not in df_input.columns:
-        st.warning("DataFrame de entrada vazio ou sem coluna \'Data\' para processamento.")
+        # st.warning("DataFrame de entrada vazio ou sem coluna \'Data\' para processamento.")
         # Define colunas esperadas para um DataFrame vazio estruturado
         cols = ["Data", "Cartão", "Dinheiro", "Pix", "Total", "Ano", "Mês", "MêsNome", "AnoMês", "DataFormatada", "DiaSemana", "DiaDoMes"]
         empty_df = pd.DataFrame(columns=cols)
         # Define tipos para colunas numéricas e de data para evitar erros posteriores
-        for col in ["Cartão", "Dinheiro", "Pix", "Total", "Ano", "Mês", "DiaDoMes"]:
-             empty_df[col] = pd.Series(dtype="float")
+        for col_num in ["Cartão", "Dinheiro", "Pix", "Total", "Ano", "Mês", "DiaDoMes"]:
+             empty_df[col_num] = pd.Series(dtype="float64")
         empty_df["Data"] = pd.Series(dtype="datetime64[ns]")
-        for col in ["MêsNome", "AnoMês", "DataFormatada", "DiaSemana"]:
-             empty_df[col] = pd.Series(dtype="object")
+        for col_obj in ["MêsNome", "AnoMês", "DataFormatada", "DiaSemana"]:
+             empty_df[col_obj] = pd.Series(dtype="object")
         return empty_df
 
     df = df_input.copy()
 
     # Garantir que 'Data' é datetime
     if not pd.api.types.is_datetime64_any_dtype(df["Data"]):
-        df["Data"] = pd.to_datetime(df["Data"], errors="coerce")
+        df["Data"] = pd.to_datetime(df["Data"], errors="coerce", dayfirst=True)
         df.dropna(subset=["Data"], inplace=True) # Remove linhas onde Data não pôde ser convertida
 
+    if df.empty: return df # Retorna se ficou vazio após tratamento de data
+
     # Garantir que colunas de valor são numéricas
-    for col in ["Cartão", "Dinheiro", "Pix"]:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+    for col_val in ["Cartão", "Dinheiro", "Pix"]:
+        if col_val in df.columns:
+            df[col_val] = pd.to_numeric(df[col_val], errors="coerce").fillna(0.0)
         else:
-            df[col] = 0 # Adiciona coluna com zeros se não existir
+            df[col_val] = 0.0 # Adiciona coluna com zeros se não existir
 
     df["Total"] = df["Cartão"] + df["Dinheiro"] + df["Pix"]
 
     # Extrair informações de data
     df["Ano"] = df["Data"].dt.year
     df["Mês"] = df["Data"].dt.month
-    df["MêsNome"] = df["Mês"].apply(lambda x: meses_ordem[x-1] if pd.notna(x) and 1 <= x <= 12 else None)
+    df["MêsNome"] = df["Mês"].apply(lambda x: meses_ordem[int(x)-1] if pd.notna(x) and 1 <= int(x) <= 12 else None)
     df["AnoMês"] = df["Data"].dt.strftime("%Y-%m") # Para agrupamentos
     df["DataFormatada"] = df["Data"].dt.strftime("%d/%m/%Y")
     day_map = {0: "Segunda-feira", 1: "Terça-feira", 2: "Quarta-feira", 3: "Quinta-feira", 4: "Sexta-feira", 5: "Sábado", 6: "Domingo"}
@@ -456,7 +462,10 @@ def process_data(df_input):
 def format_brl(value):
     """Formata valor numérico como moeda brasileira (R$)."""
     try:
-        return f"R$ {value:,.2f}".replace(",", "#").replace(".", ",").replace("#", ".")
+        # Assegura que value é um número antes de formatar
+        if pd.isna(value): return "R$ -"
+        numeric_value = float(value)
+        return f"R$ {numeric_value:,.2f}".replace(",", "#").replace(".", ",").replace("#", ".")
     except (ValueError, TypeError):
         return "R$ -" # Retorna um placeholder se a formatação falhar
 
@@ -507,136 +516,112 @@ def create_radial_plot(df):
     return radial_plot
 
 def create_advanced_daily_sales_chart(df):
-    """Cria um gráfico de vendas diárias empilhadas com visual limpo e profissional."""
+    """Cria um gráfico de vendas diárias empilhadas - versão corrigida para evitar SchemaValidationError."""
+    # Validações iniciais
     if df.empty or 'Data' not in df.columns:
-        st.info("DataFrame vazio ou sem coluna 'Data' para gráfico de vendas diárias.")
+        # st.info("DataFrame vazio ou sem coluna 'Data' para gráfico de vendas diárias.") # Adicionado para depuração
         return None
-    
+
     required_cols = ['Cartão', 'Dinheiro', 'Pix']
     if not all(col in df.columns for col in required_cols):
         missing = [col for col in required_cols if col not in df.columns]
-        st.info(f"Colunas ausentes para gráfico de vendas diárias: {missing}")
+        # st.info(f"Colunas ausentes para gráfico de vendas diárias: {missing}") # Adicionado para depuração
         return None
-    
+
+    # Preparar dados
     df_sorted = df.sort_values('Data').copy()
     df_sorted.dropna(subset=['Data'] + required_cols, inplace=True) # Remove NAs nas colunas relevantes
-    
+
     if df_sorted.empty:
-        st.info("Sem dados válidos após limpeza para gráfico de vendas diárias.")
+        # st.info("Sem dados válidos após limpeza para gráfico de vendas diárias.") # Adicionado para depuração
         return None
-    
+
     # Agrupar por data para evitar duplicatas e somar valores diários
     df_grouped = df_sorted.groupby('Data')[required_cols].sum().reset_index()
-    
-    # Criar DataFormatada para labels do eixo X
+
+    # Verificar se ainda temos dados após agrupamento
+    if df_grouped.empty:
+        # st.info("DataFrame vazio após agrupamento por data.") # Adicionado para depuração
+        return None
+
+    # Criar coluna de data formatada (para tooltip)
     df_grouped['DataFormatada'] = df_grouped['Data'].dt.strftime('%d/%m')
-    
-    # Transformar dados para formato longo (ideal para empilhamento no Altair)
+
+    # Transformar para formato longo
     df_melted = df_grouped.melt(
-        id_vars=['Data', 'DataFormatada'],
+        id_vars=['Data', 'DataFormatada'], # Manter Data para o eixo X temporal
         value_vars=required_cols,
         var_name='Método',
         value_name='Valor'
     )
-    
-    # Filtrar apenas valores positivos para não poluir o gráfico
+
+    # Filtrar valores positivos
     df_melted = df_melted[df_melted['Valor'] > 0]
-    
+
     if df_melted.empty:
-        st.info("Sem valores de venda positivos para exibir no gráfico diário.")
+        # st.info("Sem valores de venda positivos para exibir no gráfico diário.") # Adicionado para depuração
         return None
-    
-    # Cores específicas para os métodos (pode ajustar conforme preferência)
-    cores_metodos = {
-        'Dinheiro': '#FF8C00', # Laranja escuro
-        'Pix': '#70AD47',      # Verde
-        'Cartão': '#5B9BD5'    # Azul acinzentado
-    }
-    
-    # Ordem dos métodos para empilhamento (de baixo para cima no gráfico)
-    ordem_metodos = ['Dinheiro', 'Pix', 'Cartão']
-    
-    # Criar o gráfico de barras empilhadas
+
+    # Garantir que os tipos estão corretos
+    df_melted['Valor'] = pd.to_numeric(df_melted['Valor'], errors='coerce')
+    df_melted = df_melted.dropna(subset=['Valor'])
+
+    if df_melted.empty:
+        # st.info("DataFrame vazio após conversão numérica e remoção de NaNs em 'Valor'.") # Adicionado para depuração
+        return None
+
+    # Configuração do gráfico Altair
     chart = alt.Chart(df_melted).mark_bar(
-        size=30,                # Largura das barras
-        stroke='white',         # Linha de separação entre segmentos da barra
-        strokeWidth=1.5         # Espessura da linha de separação
+        size=25 # Tamanho da barra
     ).encode(
         x=alt.X(
-            'DataFormatada:O',    # 'O' para ordinal (categórico ordenado)
-            title='Data',         # Título do eixo X
+            'Data:T',  # Usar a coluna 'Data' original que é datetime, 'T' para temporal
+            title='Data',
             axis=alt.Axis(
-                labelAngle=0,     # Labels do eixo X retos
-                labelFontSize=10,
-                labelColor='#666666', # Cor dos labels
-                grid=False,       # Sem grid vertical
-                ticks=False,      # Sem marcas de tick
-                domain=False      # Sem linha do eixo X
+                format='%d/%m', # Formato do label do eixo X
+                labelAngle=-45,
+                labelColor=COR_TEXTO_SECUNDARIO, # Usar constantes globais se definidas
+                titleColor=COR_TEXTO_PRINCIPAL
             )
         ),
         y=alt.Y(
-            'Valor:Q',            # 'Q' para quantitativo
-            title='Vendas (R$)',  # Título do eixo Y
-            stack='zero',         # Empilhamento a partir do zero
+            'Valor:Q', # 'Q' para quantitativo
+            title='Vendas (R$)',
+            stack='zero', # Empilhar barras
             axis=alt.Axis(
-                labelFontSize=10,
-                labelColor='#666666',
-                grid=True,        # Grid horizontal
-                gridColor='#E0E0E0', # Cor do grid (mais suave)
-                gridOpacity=0.7,  # Opacidade do grid
-                ticks=False,      # Sem marcas de tick
-                domain=False      # Sem linha do eixo Y
+                labelColor=COR_TEXTO_SECUNDARIO,
+                titleColor=COR_TEXTO_PRINCIPAL
             )
         ),
         color=alt.Color(
-            'Método:N',           # 'N' para nominal (categórico não ordenado)
-            scale=alt.Scale(
-                domain=ordem_metodos, # Garante a ordem das cores na legenda e barras
-                range=[cores_metodos.get(m, "#CCCCCC") for m in ordem_metodos] # Mapeia cores
-            ),
+            'Método:N', # 'N' para nominal
+            scale=alt.Scale(domain=required_cols, range=['#4c78a8', '#54a24b', '#f58518']), # Cores padrão ou do tema
             legend=alt.Legend(
-                title=None,       # Sem título na legenda
-                orient='bottom',  # Posição da legenda
-                direction='horizontal',
-                labelFontSize=11,
-                labelColor=COR_TEXTO_PRINCIPAL if st.get_option("theme.base") == "dark" else "#333333", # Adapta cor da legenda ao tema
-                symbolSize=100,   # Tamanho dos símbolos na legenda
-                symbolType='square' # Formato dos símbolos
-            )
+                title="Método de Pagamento",
+                orient='bottom',
+                labelColor=COR_TEXTO_SECUNDARIO,
+                titleColor=COR_TEXTO_PRINCIPAL
+                )
         ),
-        order=alt.Order( # Controla a ordem de empilhamento dos segmentos
-            'Método:N',
-            sort=ordem_metodos 
-        ),
-        tooltip=[ # Informações ao passar o mouse
-            alt.Tooltip('DataFormatada:O', title='Data'),
+        tooltip=[
+            alt.Tooltip('DataFormatada:N', title='Data'), # Usar DataFormatada para tooltip
             alt.Tooltip('Método:N', title='Método'),
             alt.Tooltip('Valor:Q', title='Valor (R$)', format=',.2f')
         ]
     ).properties(
-        height=350,
         title=alt.TitleParams(
             text='Vendas Diárias por Método de Pagamento',
-            color=COR_TEXTO_PRINCIPAL if st.get_option("theme.base") == "dark" else "#333333",
+            color=COR_TEXTO_PRINCIPAL,
             fontSize=16,
             anchor='middle'
-        )
-    ).configure_view( # Configurações da área de plotagem
-        stroke=None # Remove qualquer borda da área de plotagem
-    ).configure_axis( # Configurações globais dos eixos
-        labelColor=COR_TEXTO_SECUNDARIO,
-        titleColor=COR_TEXTO_PRINCIPAL
-    ).configure_title( # Configurações globais do título do gráfico
-         color=COR_TEXTO_PRINCIPAL,
-         fontSize=16
-    ).configure_legend( # Configurações globais da legenda
-        titleColor=COR_TEXTO_PRINCIPAL,
-        labelColor=COR_TEXTO_SECUNDARIO
-    ).resolve_scale( # Garante que a escala de cores é independente se houver múltiplas camadas (boa prática)
-        color='independent'
+        ),
+        height=400,
+        background="transparent"
+    ).configure_view(
+        strokeOpacity=0
     )
-    
     return chart
+
 
 def create_weekday_sales_chart(df):
     """Cria gráfico de barras da média de vendas por dia da semana."""
@@ -719,8 +704,6 @@ def create_cumulative_evolution_chart(df):
             x1=1, x2=1, y1=1, y2=0 # Direção do gradiente (de baixo para cima)
         ),
         opacity=0.9, # Opacidade da área
-        # stroke=cor_linha, # stroke na área pode ser redundante com line
-        # strokeWidth=3
     ).encode(
         y=alt.Y("Total_Acumulado:Q", title="Faturamento Acumulado (R$)", axis=alt.Axis(
             labelColor=COR_TEXTO_SECUNDARIO, 
@@ -754,7 +737,7 @@ def create_cumulative_evolution_chart(df):
             ]
         )
         
-        text = alt.Chart(point_data).mark_text(
+        text_highlight = alt.Chart(point_data).mark_text(
             align="left",
             baseline="middle",
             dx=15, # Deslocamento horizontal do texto
@@ -768,1172 +751,571 @@ def create_cumulative_evolution_chart(df):
             text="Label:N" # Usa a coluna 'Label' para o texto
         )
         
-        chart = alt.layer(area, point, text).properties( # Combina área, ponto e texto
+        chart_final = alt.layer(area, point, text_highlight).properties( # Combina área, ponto e texto
             height=500,
             background="transparent"
         ).configure_view(
             strokeOpacity=0
         ).interactive() # Permite zoom e pan
     else:
-        chart = area.properties(
+        chart_final = area.properties(
             height=500,
             background="transparent"
         ).configure_view(
             strokeOpacity=0
         ).interactive()
 
-    return chart
+    return chart_final
 
 # --- Funções do Heatmap de Calendário ---
-def criar_calendario_anual_espacamento_correto(df, ano):
+def criar_calendario_anual_espacamento_correto(df_calendario, ano_calendario):
     """Cria calendário anual com maior distância entre nomes dos dias e o gráfico"""
-    if df.empty or "Data" not in df.columns or "Total" not in df.columns:
-        st.warning(f"Dados insuficientes para gerar o heatmap de calendário para {ano}.")
+    if df_calendario.empty or "Data" not in df_calendario.columns or "Total" not in df_calendario.columns:
+        # st.warning(f"Dados insuficientes para gerar o heatmap de calendário para {ano_calendario}.")
         return None, None
 
-    # CORREÇÃO: Converter ano para int Python nativo
-    ano = int(ano) # Garante que 'ano' é um int Python
+    ano_calendario_int = int(ano_calendario) 
     
-    df_year = df[df["Data"].dt.year == ano].copy()
-    if df_year.empty:
-        st.info(f"Sem dados de vendas para o ano {ano}.")
+    df_year_calendario = df_calendario[df_calendario["Data"].dt.year == ano_calendario_int].copy()
+    if df_year_calendario.empty:
+        # st.info(f"Sem dados de vendas para o ano {ano_calendario_int}.")
         return None, None
 
-    # Criar range completo do ano CORRETO (usando int para ano)
-    dates_completo = pd.date_range(start=f'{ano}-01-01', end=f'{ano}-12-31', freq='D')
+    dates_completos_calendario = pd.date_range(start=f'{ano_calendario_int}-01-01', end=f'{ano_calendario_int}-12-31', freq='D')
 
-    # Criar DataFrame completo para o ano todo, preenchendo dias sem vendas
-    dados_ano_completo = []
-    for date_obj in dates_completo:
-        # Verificar se a data existe no DataFrame filtrado do ano
-        if date_obj in df_year['Data'].values:
-            row = df_year[df_year['Data'] == date_obj].iloc[0]
-            dados_ano_completo.append({
-                'Data': date_obj,
-                'Cartão': row.get('Cartão', 0), # Usar .get com default para segurança
-                'Dinheiro': row.get('Dinheiro', 0),
-                'Pix': row.get('Pix', 0),
-                'Total_Vendas': row.get('Total', 0)
+    dados_ano_completo_calendario = []
+    for date_obj_cal in dates_completos_calendario:
+        if date_obj_cal in df_year_calendario['Data'].values:
+            row_cal = df_year_calendario[df_year_calendario['Data'] == date_obj_cal].iloc[0]
+            dados_ano_completo_calendario.append({
+                'Data': date_obj_cal,
+                'Cartão': row_cal.get('Cartão', 0.0), 
+                'Dinheiro': row_cal.get('Dinheiro', 0.0),
+                'Pix': row_cal.get('Pix', 0.0),
+                'Total_Vendas': row_cal.get('Total', 0.0)
             })
-        else: # Dia sem vendas registradas
-            dados_ano_completo.append({
-                'Data': date_obj,
-                'Cartão': 0,
-                'Dinheiro': 0,
-                'Pix': 0,
-                'Total_Vendas': 0
+        else: 
+            dados_ano_completo_calendario.append({
+                'Data': date_obj_cal, 'Cartão': 0.0, 'Dinheiro': 0.0, 'Pix': 0.0, 'Total_Vendas': 0.0
             })
 
-    df_ano_completo = pd.DataFrame(dados_ano_completo)
-    df_ano_completo['Data'] = pd.to_datetime(df_ano_completo['Data']) # Garante tipo datetime
+    df_ano_completo_calendario = pd.DataFrame(dados_ano_completo_calendario)
+    df_ano_completo_calendario['Data'] = pd.to_datetime(df_ano_completo_calendario['Data']) 
 
-    # Informações de data para posicionamento e hover
-    df_ano_completo['data_str'] = df_ano_completo['Data'].dt.strftime('%d/%m/%Y')
-    df_ano_completo['dia_semana_num'] = df_ano_completo['Data'].dt.dayofweek # 0=Segunda, ..., 6=Domingo
+    df_ano_completo_calendario['data_str_cal'] = df_ano_completo_calendario['Data'].dt.strftime('%d/%m/%Y')
+    
+    primeiro_dia_ano_obj_cal = dt.date(ano_calendario_int, 1, 1) 
+    primeiro_dia_semana_ano_cal = primeiro_dia_ano_obj_cal.weekday() 
 
-    # CORREÇÃO: Usar datetime.date com int Python para o primeiro dia do ano
-    primeiro_dia_ano_obj = dt.date(ano, 1, 1) # Objeto date
-    primeiro_dia_semana_ano = primeiro_dia_ano_obj.weekday() # Dia da semana do primeiro dia do ano
+    x_positions_cal, y_positions_cal, valores_categoria_cal, hover_texts_cal = [], [], [], []
 
-    # Listas para armazenar dados para o heatmap
-    x_positions = [] # Posição da semana no ano (coluna do heatmap)
-    y_positions = [] # Dia da semana (linha do heatmap)
-    valores_categoria = [] # Categoria de valor para a cor
-    hover_texts = [] # Texto para tooltip
+    for _, row_cal_iter in df_ano_completo_calendario.iterrows():
+        data_atual_obj_cal = row_cal_iter['Data'].date() 
+        dias_desde_inicio_ano_cal = (data_atual_obj_cal - primeiro_dia_ano_obj_cal).days
+        semana_no_ano_cal = (dias_desde_inicio_ano_cal + primeiro_dia_semana_ano_cal) // 7
+        dia_da_semana_grid_cal = (dias_desde_inicio_ano_cal + primeiro_dia_semana_ano_cal) % 7
 
-    for _, row in df_ano_completo.iterrows():
-        data_atual_obj = row['Data'].date() # Converte para objeto date para cálculo de dias
-        
-        # Calcular dias desde o início do ano
-        dias_desde_inicio_ano = (data_atual_obj - primeiro_dia_ano_obj).days
+        x_positions_cal.append(semana_no_ano_cal)
+        y_positions_cal.append(dia_da_semana_grid_cal) 
 
-        # Calcular posição da semana (x) e dia da semana (y) no grid do heatmap
-        # Adiciona o weekday do primeiro dia do ano para alinhar corretamente
-        semana_no_ano = (dias_desde_inicio_ano + primeiro_dia_semana_ano) // 7
-        dia_da_semana_grid = (dias_desde_inicio_ano + primeiro_dia_semana_ano) % 7
+        total_vendas_dia_cal = row_cal_iter['Total_Vendas']
+        cat = 0
+        if total_vendas_dia_cal == 0: cat = 0
+        elif total_vendas_dia_cal < 1500: cat = 1
+        elif total_vendas_dia_cal < 2500: cat = 2
+        elif total_vendas_dia_cal < 3000: cat = 3
+        else: cat = 4
+        valores_categoria_cal.append(cat)
 
-        x_positions.append(semana_no_ano)
-        y_positions.append(dia_da_semana_grid) # 0-6 representando Seg-Dom
-
-        # Classificar valores em categorias para as cores do heatmap
-        total_vendas_dia = row['Total_Vendas']
-        if total_vendas_dia == 0:
-            categoria = 0 # Sem vendas
-        elif total_vendas_dia < 1500:
-            categoria = 1 # Faixa 1
-        elif total_vendas_dia < 2500:
-            categoria = 2 # Faixa 2
-        elif total_vendas_dia < 3000:
-            categoria = 3 # Faixa 3
+        hover_text_cal = f"📅 {row_cal_iter['data_str_cal']}<br>"
+        if total_vendas_dia_cal > 0:
+            hover_text_cal += (f"💰 Total: {format_brl(total_vendas_dia_cal)}<br>"
+                             f"💳 Cartão: {format_brl(row_cal_iter['Cartão'])}<br>"
+                             f"💵 Dinheiro: {format_brl(row_cal_iter['Dinheiro'])}<br>"
+                             f"📱 Pix: {format_brl(row_cal_iter['Pix'])}")
         else:
-            categoria = 4 # Faixa 4 (mais alta)
+            hover_text_cal += "❌ Sem vendas"
+        hover_texts_cal.append(hover_text_cal)
 
-        valores_categoria.append(categoria)
+    max_semana_heatmap_cal = max(x_positions_cal) + 1 
+    matriz_vendas_heatmap_cal = np.full((7, max_semana_heatmap_cal), np.nan) 
+    matriz_hover_heatmap_cal = np.full((7, max_semana_heatmap_cal), '', dtype=object)
 
-        # Criar texto do hover
-        if total_vendas_dia > 0:
-            hover_text = (f"📅 {row['data_str']}<br>"
-                         f"💰 Total: {format_brl(total_vendas_dia)}<br>"
-                         f"💳 Cartão: {format_brl(row['Cartão'])}<br>"
-                         f"💵 Dinheiro: {format_brl(row['Dinheiro'])}<br>"
-                         f"📱 Pix: {format_brl(row['Pix'])}")
-        else:
-            hover_text = f"📅 {row['data_str']}<br>❌ Sem vendas"
-        hover_texts.append(hover_text)
+    for x_cal, y_cal, valor_cat_cal, hover_txt_cal in zip(x_positions_cal, y_positions_cal, valores_categoria_cal, hover_texts_cal):
+        if 0 <= y_cal < 7 and 0 <= x_cal < max_semana_heatmap_cal: 
+            matriz_vendas_heatmap_cal[y_cal, x_cal] = valor_cat_cal
+            matriz_hover_heatmap_cal[y_cal, x_cal] = hover_txt_cal
 
-    # Criar matriz para o heatmap
-    max_semana_heatmap = max(x_positions) + 1 # Número de colunas
-    matriz_vendas_heatmap = np.full((7, max_semana_heatmap), np.nan) # 7 dias, nan para gaps
-    matriz_hover_heatmap = np.full((7, max_semana_heatmap), '', dtype=object)
-
-    for x, y, valor_cat, hover_txt in zip(x_positions, y_positions, valores_categoria, hover_texts):
-        if 0 <= y < 7 and 0 <= x < max_semana_heatmap: # Segurança
-            matriz_vendas_heatmap[y, x] = valor_cat
-            matriz_hover_heatmap[y, x] = hover_txt
-
-    # Escala de cores para o heatmap (estilo GitHub contributions)
-    escala_cores_heatmap = [
-        [0.0, '#161b22'],    # Cor para categoria 0 (sem vendas)
-        [0.001, '#39D353'],  # Início da cor para categoria 1
-        [0.25, '#39D353'],   # Fim da cor para categoria 1
-        [0.251, '#37AB4B'], # Início da cor para categoria 2
-        [0.5, '#37AB4B'],    # Fim da cor para categoria 2
-        [0.501, '#006D31'], # Início da cor para categoria 3
-        [0.75, '#006D31'],   # Fim da cor para categoria 3
-        [0.751, '#0D4428'], # Início da cor para categoria 4
-        [1.0, '#0D4428']     # Fim da cor para categoria 4
+    escala_cores_heatmap_cal = [
+        [0.0, '#202020'], [0.001, '#39D353'], [0.25, '#39D353'], [0.251, '#37AB4B'], [0.5, '#37AB4B'],
+        [0.501, '#006D31'], [0.75, '#006D31'], [0.751, '#0D4428'], [1.0, '#0D4428']
     ]
 
-    # Criar figura do heatmap com Plotly
-    fig_heatmap = go.Figure(data=go.Heatmap(
-        z=matriz_vendas_heatmap,
-        text=matriz_hover_heatmap,
-        hovertemplate='%{text}<extra></extra>', # <extra></extra> remove trace info
-        colorscale=escala_cores_heatmap,
-        showscale=False, # Não mostrar a barra de escala de cores
-        zmin=0, # Mínimo para a escala de cores (categoria 0)
-        zmax=4, # Máximo para a escala de cores (categoria 4)
-        xgap=3, # Espaçamento horizontal entre células
-        ygap=3, # Espaçamento vertical entre células
-        hoverongaps=False # Não mostrar tooltip em gaps
+    fig_heatmap_cal = go.Figure(data=go.Heatmap(
+        z=matriz_vendas_heatmap_cal, text=matriz_hover_heatmap_cal, hovertemplate='%{text}<extra></extra>',
+        colorscale=escala_cores_heatmap_cal, showscale=False, zmin=0, zmax=4, xgap=3, ygap=3, hoverongaps=False
     ))
 
-    # Calcular posições dos labels dos meses para o eixo X
-    nomes_meses_labels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
-    posicoes_meses_ticks = []
-    for mes_idx in range(1, 13): # Para cada mês de 1 a 12
-        primeiro_dia_mes_obj = dt.date(ano, mes_idx, 1)
-        dias_desde_inicio_ano_mes = (primeiro_dia_mes_obj - primeiro_dia_ano_obj).days
-        semana_mes_tick = (dias_desde_inicio_ano_mes + primeiro_dia_semana_ano) // 7
-        posicoes_meses_ticks.append(semana_mes_tick)
+    nomes_meses_labels_cal = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+    posicoes_meses_ticks_cal = []
+    for mes_idx_cal in range(1, 13): 
+        primeiro_dia_mes_obj_cal = dt.date(ano_calendario_int, mes_idx_cal, 1)
+        dias_desde_inicio_ano_mes_cal = (primeiro_dia_mes_obj_cal - primeiro_dia_ano_obj_cal).days
+        semana_mes_tick_cal = (dias_desde_inicio_ano_mes_cal + primeiro_dia_semana_ano_cal) // 7
+        posicoes_meses_ticks_cal.append(semana_mes_tick_cal)
     
-    # Remove duplicatas e garante ordem (caso meses comecem na mesma semana)
-    posicoes_meses_unicas, indices_unicos = np.unique(posicoes_meses_ticks, return_index=True)
-    nomes_meses_finais = [nomes_meses_labels[i] for i in indices_unicos]
+    posicoes_meses_unicas_cal, indices_unicos_cal = np.unique(posicoes_meses_ticks_cal, return_index=True)
+    nomes_meses_finais_cal = [nomes_meses_labels_cal[i_cal] for i_cal in indices_unicos_cal]
 
-
-    # Layout do heatmap
-    fig_heatmap.update_layout(
-        title=f"📊 Calendário de Vendas {ano}",
-        paper_bgcolor='rgba(0,0,0,0)', # Fundo transparente
-        plot_bgcolor='rgba(0,0,0,0)',  # Fundo da área de plotagem transparente
+    fig_heatmap_cal.update_layout(
+        title=f"📊 Calendário de Vendas {ano_calendario_int}", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
         font=dict(color=COR_TEXTO_PRINCIPAL, family="Arial"),
-
-        xaxis=dict(
-            title="",
-            showgrid=False, # Sem grid vertical
-            zeroline=False, # Sem linha zero
-            tickmode='array',
-            tickvals=posicoes_meses_unicas, # Posições dos ticks dos meses
-            ticktext=nomes_meses_finais,    # Nomes dos meses
-            tickfont=dict(color=COR_TEXTO_PRINCIPAL, size=14),
-            side='top', # Meses no topo
-            tickangle=0, # Labels dos meses retos
-            ticklabelstandoff=5 # Distância dos labels do eixo
-        ),
-
-        yaxis=dict(
-            title="",
-            showgrid=False, # Sem grid horizontal
-            zeroline=False, # Sem linha zero
-            tickmode='array',
-            tickvals=[0, 1, 2, 3, 4, 5, 6], # Posições dos dias da semana
-            ticktext=['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'], # Nomes dos dias
-            tickfont=dict(color=COR_TEXTO_PRINCIPAL, size=14),
-            ticklen=0, # Comprimento dos ticks (0 para remover)
-            ticklabelstandoff=15, # Aumenta a distância dos nomes dos dias
-            autorange="reversed" # Domigo no topo, Sábado em baixo (se 0=Seg)
-        ),
-
-        height=350, # Altura do gráfico
-        title_x=0.5, # Centralizar título
-        title_font=dict(size=18, color=COR_TEXTO_PRINCIPAL),
-        margin=dict(l=70, r=20, t=80, b=20) # Ajustar margens
+        xaxis=dict(title="", showgrid=False, zeroline=False, tickmode='array', tickvals=posicoes_meses_unicas_cal,
+                   ticktext=nomes_meses_finais_cal, tickfont=dict(color=COR_TEXTO_PRINCIPAL, size=14),
+                   side='top', tickangle=0, ticklabelstandoff=5),
+        yaxis=dict(title="", showgrid=False, zeroline=False, tickmode='array', tickvals=[0, 1, 2, 3, 4, 5, 6],
+                   ticktext=['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'],
+                   tickfont=dict(color=COR_TEXTO_PRINCIPAL, size=14), ticklen=0, ticklabelstandoff=15, autorange="reversed"),
+        height=350, title_x=0.5, title_font=dict(size=18, color=COR_TEXTO_PRINCIPAL),
+        margin=dict(l=70, r=20, t=80, b=20)
     )
+    return fig_heatmap_cal, df_ano_completo_calendario
 
-    return fig_heatmap, df_ano_completo # Retorna a figura e o DataFrame processado para o ano
-
-def criar_heatmap_vendas_mensais_espacamento_correto(df_anual_completo):
+def criar_heatmap_vendas_mensais_espacamento_correto(df_anual_completo_mensal):
     """Função para criar heatmap mensal horizontal com espaçamento correto."""
-    if df_anual_completo.empty:
+    if df_anual_completo_mensal.empty:
         return None, None
 
-    # Filtra apenas dias com vendas para cálculo mensal (se necessário, mas aqui somamos tudo)
-    df_vendas_para_mes = df_anual_completo.copy() # Usar todos os dados, incluindo dias com zero vendas
-    df_vendas_para_mes['MesNum'] = df_vendas_para_mes['Data'].dt.month
+    df_vendas_para_mes_mensal = df_anual_completo_mensal.copy() 
+    df_vendas_para_mes_mensal['MesNum'] = df_vendas_para_mes_mensal['Data'].dt.month
     
-    # Agrupar por mês para somar vendas
-    vendas_mensais_agg = df_vendas_para_mes.groupby('MesNum').agg(
-        Total_Vendas_Mes=('Total_Vendas', 'sum'),
-        Cartao_Mes=('Cartão', 'sum'),
-        Dinheiro_Mes=('Dinheiro', 'sum'),
-        Pix_Mes=('Pix', 'sum')
+    vendas_mensais_agg_mensal = df_vendas_para_mes_mensal.groupby('MesNum').agg(
+        Total_Vendas_Mes=('Total_Vendas', 'sum'), Cartao_Mes=('Cartão', 'sum'),
+        Dinheiro_Mes=('Dinheiro', 'sum'), Pix_Mes=('Pix', 'sum')
     ).reset_index()
 
-    nomes_meses_curto = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+    nomes_meses_curto_mensal = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+    matriz_valores_mensal_hm = np.zeros((1, 12))
+    matriz_textos_hover_mensal_hm = np.full((1, 12), '', dtype=object)
+    ano_heatmap_mensal = df_anual_completo_mensal['Data'].dt.year.iloc[0] if not df_anual_completo_mensal.empty else datetime.now().year
 
-    # Preparar dados para o heatmap mensal (1 linha, 12 colunas)
-    matriz_valores_mensal = np.zeros((1, 12))
-    matriz_textos_hover_mensal = np.full((1, 12), '', dtype=object)
+    for mes_idx_mensal in range(12): 
+        mes_atual_num_mensal = mes_idx_mensal + 1 
+        nome_mes_atual_mensal = nomes_meses_curto_mensal[mes_idx_mensal]
+        dados_do_mes_mensal = vendas_mensais_agg_mensal[vendas_mensais_agg_mensal['MesNum'] == mes_atual_num_mensal]
 
-    ano_heatmap = df_anual_completo['Data'].dt.year.iloc[0] if not df_anual_completo.empty else datetime.now().year
+        if not dados_do_mes_mensal.empty:
+            row_mes_mensal = dados_do_mes_mensal.iloc[0]
+            matriz_valores_mensal_hm[0, mes_idx_mensal] = row_mes_mensal['Total_Vendas_Mes']
+            hover_text_mes_mensal = (f"📅 {nome_mes_atual_mensal} {ano_heatmap_mensal}<br>"
+                                     f"💰 Total Mês: {format_brl(row_mes_mensal['Total_Vendas_Mes'])}<br>"
+                                     f"💳 Cartão: {format_brl(row_mes_mensal['Cartao_Mes'])}<br>"
+                                     f"💵 Dinheiro: {format_brl(row_mes_mensal['Dinheiro_Mes'])}<br>"
+                                     f"📱 Pix: {format_brl(row_mes_mensal['Pix_Mes'])}")
+        else: 
+            matriz_valores_mensal_hm[0, mes_idx_mensal] = 0 
+            hover_text_mes_mensal = f"📅 {nome_mes_atual_mensal} {ano_heatmap_mensal}<br>❌ Sem vendas neste mês"
+        matriz_textos_hover_mensal_hm[0, mes_idx_mensal] = hover_text_mes_mensal
 
-    for mes_idx in range(12): # Loop de 0 a 11 (Janeiro a Dezembro)
-        mes_atual_num = mes_idx + 1 # Mês de 1 a 12
-        nome_mes_atual = nomes_meses_curto[mes_idx]
-
-        dados_do_mes = vendas_mensais_agg[vendas_mensais_agg['MesNum'] == mes_atual_num]
-
-        if not dados_do_mes.empty:
-            row_mes = dados_do_mes.iloc[0]
-            matriz_valores_mensal[0, mes_idx] = row_mes['Total_Vendas_Mes']
-
-            hover_text_mes = (f"📅 {nome_mes_atual} {ano_heatmap}<br>"
-                             f"💰 Total Mês: {format_brl(row_mes['Total_Vendas_Mes'])}<br>"
-                             f"💳 Cartão: {format_brl(row_mes['Cartao_Mes'])}<br>"
-                             f"💵 Dinheiro: {format_brl(row_mes['Dinheiro_Mes'])}<br>"
-                             f"📱 Pix: {format_brl(row_mes['Pix_Mes'])}")
-        else: # Mês sem vendas
-            matriz_valores_mensal[0, mes_idx] = 0 # Ou np.nan se preferir cor de gap
-            hover_text_mes = f"📅 {nome_mes_atual} {ano_heatmap}<br>❌ Sem vendas neste mês"
-        
-        matriz_textos_hover_mensal[0, mes_idx] = hover_text_mes
-
-    # Escala de cores para o heatmap mensal (pode ser a mesma do anual ou diferente)
-    escala_cores_mensal = [
-        [0.0, '#161b22'],      # Cor para zero/baixo valor
-        [0.001, '#ADD8E6'],    # Azul claro para valores baixos
-        [0.25, '#87CEEB'],     # SkyBlue
-        [0.5, '#4682B4'],      # SteelBlue
-        [0.75, '#0000CD'],     # MediumBlue
-        [1.0, '#000080']       # Navy para valores altos
+    escala_cores_mensal_hm = [
+        [0.0, '#202020'], [0.001, '#ADD8E6'], [0.25, '#87CEEB'], [0.5, '#4682B4'], [0.75, '#0000CD'], [1.0, '#000080']
     ]
-    max_valor_mensal = np.max(matriz_valores_mensal) if np.any(matriz_valores_mensal > 0) else 1 # Evitar divisão por zero
-
-    # Normalizar z para a escala de cores se os valores forem muito dispersos
-    # Aqui, vamos usar os valores diretamente e ajustar a escala de cores se necessário
-    # Se usar zmin/zmax na figura, a escala de cores será relativa a eles.
-
-    fig_heatmap_mensal = go.Figure(data=go.Heatmap(
-        z=matriz_valores_mensal,
-        text=matriz_textos_hover_mensal,
-        hovertemplate='%{text}<extra></extra>',
-        colorscale=escala_cores_mensal,
-        showscale=False, # Opcional: mostrar barra de cores
-        xgap=5, # Espaçamento horizontal
-        ygap=5  # Espaçamento vertical (relevante se houver mais de uma linha)
+    fig_heatmap_mensal_final = go.Figure(data=go.Heatmap(
+        z=matriz_valores_mensal_hm, text=matriz_textos_hover_mensal_hm, hovertemplate='%{text}<extra></extra>',
+        colorscale=escala_cores_mensal_hm, showscale=False, xgap=5, ygap=5
     ))
-
-    fig_heatmap_mensal.update_layout(
-        title=f'📊 Vendas Totais por Mês ({ano_heatmap})',
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
+    fig_heatmap_mensal_final.update_layout(
+        title=f'📊 Vendas Totais por Mês ({ano_heatmap_mensal})', paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
         font=dict(color=COR_TEXTO_PRINCIPAL, family="Arial"),
-
-        xaxis=dict(
-            title="",
-            showgrid=False,
-            zeroline=False,
-            tickmode='array',
-            tickvals=list(range(12)), # Posições 0-11
-            ticktext=nomes_meses_curto, # Labels Jan-Dez
-            tickfont=dict(color=COR_TEXTO_PRINCIPAL, size=14),
-            side='bottom' # Ticks na parte de baixo
-        ),
-
-        yaxis=dict(
-            title="",
-            showgrid=False,
-            zeroline=False,
-            showticklabels=False # Esconde labels do eixo Y pois é apenas uma linha
-        ),
-
-        height=250, # Altura do gráfico mensal
-        title_x=0.5,
-        title_font=dict(size=18, color=COR_TEXTO_PRINCIPAL),
-        margin=dict(l=20, r=20, t=60, b=50) # Ajustar margens
+        xaxis=dict(title="", showgrid=False, zeroline=False, tickmode='array', tickvals=list(range(12)),
+                   ticktext=nomes_meses_curto_mensal, tickfont=dict(color=COR_TEXTO_PRINCIPAL, size=14), side='bottom'),
+        yaxis=dict(title="", showgrid=False, zeroline=False, showticklabels=False),
+        height=250, title_x=0.5, title_font=dict(size=18, color=COR_TEXTO_PRINCIPAL),
+        margin=dict(l=20, r=20, t=60, b=50)
     )
-
-    return fig_heatmap_mensal, vendas_mensais_agg
-
+    return fig_heatmap_mensal_final, vendas_mensais_agg_mensal
 
 # --- Funções de Análise e Exibição ---
 
-def display_resumo_financeiro(df):
+def display_resumo_financeiro(df_resumo):
     """Exibe os cards de resumo financeiro."""
-    if df.empty:
+    if df_resumo.empty:
         st.info("Não há dados suficientes para o resumo financeiro.")
         return
 
-    total_faturamento = df["Total"].sum()
-    media_diaria = df["Total"].mean() if not df.empty else 0
-    maior_venda = df["Total"].max() if not df.empty else 0
-    # Para menor venda, considerar apenas dias com venda > 0
-    df_vendas_positivas = df[df["Total"] > 0]
-    menor_venda = df_vendas_positivas["Total"].min() if not df_vendas_positivas.empty else 0
+    total_faturamento_res = df_resumo["Total"].sum()
+    media_diaria_res = df_resumo["Total"].mean() if not df_resumo.empty else 0.0
+    maior_venda_res = df_resumo["Total"].max() if not df_resumo.empty else 0.0
+    df_vendas_positivas_res = df_resumo[df_resumo["Total"] > 0]
+    menor_venda_res = df_vendas_positivas_res["Total"].min() if not df_vendas_positivas_res.empty else 0.0
 
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("💰 Faturamento Total", format_brl(total_faturamento))
-    with col2:
-        st.metric("📊 Média por Dia Trabalhado", format_brl(media_diaria), help="Média considerando apenas dias com vendas registradas.")
-    with col3:
-        st.metric("🚀 Maior Venda Diária", format_brl(maior_venda))
-    with col4:
-        st.metric("📉 Menor Venda Diária (positiva)", format_brl(menor_venda))
+    col_res1, col_res2, col_res3, col_res4 = st.columns(4)
+    with col_res1: st.metric("💰 Faturamento Total", format_brl(total_faturamento_res))
+    with col_res2: st.metric("📊 Média por Dia Trabalhado", format_brl(media_diaria_res), help="Média considerando apenas dias com vendas registradas.")
+    with col_res3: st.metric("🚀 Maior Venda Diária", format_brl(maior_venda_res))
+    with col_res4: st.metric("📉 Menor Venda Diária (>0)", format_brl(menor_venda_res))
 
-def display_metodos_pagamento(df):
+def display_metodos_pagamento(df_metodos):
     """Exibe os cards de métodos de pagamento."""
-    if df.empty or not all(col in df.columns for col in ["Cartão", "Dinheiro", "Pix"]):
+    if df_metodos.empty or not all(col in df_metodos.columns for col in ["Cartão", "Dinheiro", "Pix"]):
         st.info("Não há dados suficientes para análise de métodos de pagamento.")
         return
 
-    total_cartao = df["Cartão"].sum()
-    total_dinheiro = df["Dinheiro"].sum()
-    total_pix = df["Pix"].sum()
-    total_geral = total_cartao + total_dinheiro + total_pix
+    total_cartao_met = df_metodos["Cartão"].sum()
+    total_dinheiro_met = df_metodos["Dinheiro"].sum()
+    total_pix_met = df_metodos["Pix"].sum()
+    total_geral_met = total_cartao_met + total_dinheiro_met + total_pix_met
 
-    # Evitar divisão por zero se total_geral for 0
-    perc_cartao = (total_cartao / total_geral * 100) if total_geral > 0 else 0
-    perc_dinheiro = (total_dinheiro / total_geral * 100) if total_geral > 0 else 0
-    perc_pix = (total_pix / total_geral * 100) if total_geral > 0 else 0
+    perc_cartao_met = (total_cartao_met / total_geral_met * 100) if total_geral_met > 0 else 0.0
+    perc_dinheiro_met = (total_dinheiro_met / total_geral_met * 100) if total_geral_met > 0 else 0.0
+    perc_pix_met = (total_pix_met / total_geral_met * 100) if total_geral_met > 0 else 0.0
 
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("💳 Cartão", format_brl(total_cartao), f"{perc_cartao:.1f}% do total")
-    with col2:
-        st.metric("💵 Dinheiro", format_brl(total_dinheiro), f"{perc_dinheiro:.1f}% do total")
-    with col3:
-        st.metric("📱 PIX", format_brl(total_pix), f"{perc_pix:.1f}% do total")
+    col_met1, col_met2, col_met3 = st.columns(3)
+    with col_met1: st.metric("💳 Cartão", format_brl(total_cartao_met), f"{perc_cartao_met:.1f}% do total")
+    with col_met2: st.metric("💵 Dinheiro", format_brl(total_dinheiro_met), f"{perc_dinheiro_met:.1f}% do total")
+    with col_met3: st.metric("📱 PIX", format_brl(total_pix_met), f"{perc_pix_met:.1f}% do total")
 
-def display_ranking_e_frequencia(df_filtered):
+def display_ranking_e_frequencia(df_rank_freq):
     """Exibe o ranking de dias e a análise de frequência."""
-    if df_filtered.empty or 'DiaSemana' not in df_filtered.columns or 'Total' not in df_filtered.columns:
+    if df_rank_freq.empty or 'DiaSemana' not in df_rank_freq.columns or 'Total' not in df_rank_freq.columns:
         st.info("📊 Dados insuficientes para calcular a análise por dia da semana e frequência.")
         return
 
-    # Calcular médias por dia da semana
-    # 'observed=False' é importante para incluir todos os dias da semana, mesmo sem dados
-    medias_por_dia = df_filtered.groupby('DiaSemana', observed=False)['Total'].agg(['mean', 'count'])
-    medias_por_dia = medias_por_dia.reindex(dias_semana_ordem).dropna(subset=['mean']) # Reordena e remove dias sem média (NaN)
-    medias_por_dia = medias_por_dia.sort_values(by='mean', ascending=False)
+    medias_por_dia_rank = df_rank_freq.groupby('DiaSemana', observed=False)['Total'].agg(['mean', 'count'])
+    medias_por_dia_rank = medias_por_dia_rank.reindex(dias_semana_ordem).dropna(subset=['mean']) 
+    medias_por_dia_rank = medias_por_dia_rank.sort_values(by='mean', ascending=False)
 
-    if not medias_por_dia.empty:
+    if not medias_por_dia_rank.empty:
         st.subheader("📊 Ranking dos Dias da Semana (Média de Faturamento)")
-        col_ranking1, col_ranking2 = st.columns(2)
-
-        with col_ranking1:
+        col_rank1, col_rank2 = st.columns(2)
+        with col_rank1:
             st.markdown("#### 🏆 **Melhores Dias**")
-            if len(medias_por_dia) >= 1:
-                primeiro = medias_por_dia.index[0]
-                st.markdown(f"🥇 **1º lugar:** {primeiro} ({format_brl(medias_por_dia.loc[primeiro, 'mean'])})")
-                st.caption(f"   {int(medias_por_dia.loc[primeiro, 'count'])} ocorrências")
-
-
-            if len(medias_por_dia) >= 2:
-                segundo = medias_por_dia.index[1]
-                st.markdown(f"🥈 **2º lugar:** {segundo} ({format_brl(medias_por_dia.loc[segundo, 'mean'])})")
-                st.caption(f"   {int(medias_por_dia.loc[segundo, 'count'])} ocorrências")
-            
-            if len(medias_por_dia) >= 3: # Adicionando terceiro lugar
-                terceiro = medias_por_dia.index[2]
-                st.markdown(f"🥉 **3º lugar:** {terceiro} ({format_brl(medias_por_dia.loc[terceiro, 'mean'])})")
-                st.caption(f"   {int(medias_por_dia.loc[terceiro, 'count'])} ocorrências")
-
-        with col_ranking2:
+            if len(medias_por_dia_rank) >= 1:
+                p1 = medias_por_dia_rank.index[0]
+                st.markdown(f"🥇 **1º:** {p1} ({format_brl(medias_por_dia_rank.loc[p1, 'mean'])}) <small>({int(medias_por_dia_rank.loc[p1, 'count'])} ocorrências)</small>", unsafe_allow_html=True)
+            if len(medias_por_dia_rank) >= 2:
+                p2 = medias_por_dia_rank.index[1]
+                st.markdown(f"🥈 **2º:** {p2} ({format_brl(medias_por_dia_rank.loc[p2, 'mean'])}) <small>({int(medias_por_dia_rank.loc[p2, 'count'])} ocorrências)</small>", unsafe_allow_html=True)
+            if len(medias_por_dia_rank) >= 3: 
+                p3 = medias_por_dia_rank.index[2]
+                st.markdown(f"🥉 **3º:** {p3} ({format_brl(medias_por_dia_rank.loc[p3, 'mean'])}) <small>({int(medias_por_dia_rank.loc[p3, 'count'])} ocorrências)</small>", unsafe_allow_html=True)
+        with col_rank2:
             st.markdown("#### 📉 **Piores Dias**")
-            # Pega os últimos, mas inverte para mostrar do "menos pior" para o "pior"
-            piores_dias = medias_por_dia.tail(3).sort_values(by='mean', ascending=True)
-            if len(piores_dias) >= 1:
-                ultimo = piores_dias.index[0]
-                st.markdown(f"🔻 **Último lugar:** {ultimo} ({format_brl(piores_dias.loc[ultimo, 'mean'])})")
-                st.caption(f"   {int(piores_dias.loc[ultimo, 'count'])} ocorrências")
-
-            if len(piores_dias) >= 2:
-                penultimo = piores_dias.index[1]
-                st.markdown(f"📊 **Penúltimo:** {penultimo} ({format_brl(piores_dias.loc[penultimo, 'mean'])})")
-                st.caption(f"   {int(piores_dias.loc[penultimo, 'count'])} ocorrências")
-            
-            if len(piores_dias) >= 3:
-                antepenultimo = piores_dias.index[2]
-                st.markdown(f"📊 **Antepenúltimo:** {antepenultimo} ({format_brl(piores_dias.loc[antepenultimo, 'mean'])})")
-                st.caption(f"   {int(piores_dias.loc[antepenultimo, 'count'])} ocorrências")
-
-
+            piores_dias_rank = medias_por_dia_rank.tail(min(3, len(medias_por_dia_rank))).sort_values(by='mean', ascending=True)
+            if len(piores_dias_rank) >= 1:
+                u1 = piores_dias_rank.index[0]
+                st.markdown(f"🔻 **Último:** {u1} ({format_brl(piores_dias_rank.loc[u1, 'mean'])}) <small>({int(piores_dias_rank.loc[u1, 'count'])} ocorrências)</small>", unsafe_allow_html=True)
+            if len(piores_dias_rank) >= 2:
+                u2 = piores_dias_rank.index[1]
+                st.markdown(f"📊 **Penúltimo:** {u2} ({format_brl(piores_dias_rank.loc[u2, 'mean'])}) <small>({int(piores_dias_rank.loc[u2, 'count'])} ocorrências)</small>", unsafe_allow_html=True)
+            if len(piores_dias_rank) >= 3:
+                u3 = piores_dias_rank.index[2]
+                st.markdown(f"📊 **Antepenúltimo:** {u3} ({format_brl(piores_dias_rank.loc[u3, 'mean'])}) <small>({int(piores_dias_rank.loc[u3, 'count'])} ocorrências)</small>", unsafe_allow_html=True)
         st.markdown("---")
 
-        # Análise de frequência de trabalho
         st.subheader("📅 Análise de Frequência de Trabalho")
+        if not df_rank_freq.empty and 'Data' in df_rank_freq.columns:
+            data_inicio_freq = df_rank_freq['Data'].min()
+            data_fim_freq = df_rank_freq['Data'].max()
+            total_dias_periodo_freq = (data_fim_freq - data_inicio_freq).days + 1
+            domingos_periodo_freq = sum(1 for i in range(total_dias_periodo_freq) if (data_inicio_freq + timedelta(days=i)).weekday() == 6)
+            dias_uteis_esperados_freq = total_dias_periodo_freq - domingos_periodo_freq
+            dias_trabalhados_freq = df_rank_freq['Data'].nunique()
+            dias_falta_freq = max(0, dias_uteis_esperados_freq - dias_trabalhados_freq)
 
-        if not df_filtered.empty and 'Data' in df_filtered.columns:
-            data_inicio_periodo = df_filtered['Data'].min()
-            data_fim_periodo = df_filtered['Data'].max()
-
-            # Calcular total de dias no período filtrado
-            total_dias_no_periodo = (data_fim_periodo - data_inicio_periodo).days + 1
-
-            # Calcular domingos no período (considerados folga padrão)
-            domingos_no_periodo = 0
-            data_iter = data_inicio_periodo
-            while data_iter <= data_fim_periodo:
-                if data_iter.weekday() == 6:  # Domingo é 6
-                    domingos_no_periodo += 1
-                data_iter += timedelta(days=1)
-
-            # Dias úteis esperados (total de dias no período menos domingos)
-            dias_uteis_esperados_periodo = total_dias_no_periodo - domingos_no_periodo
-
-            # Dias efetivamente trabalhados (contagem única de datas com vendas)
-            dias_realmente_trabalhados = df_filtered['Data'].nunique()
-
-            # Dias de falta (dias úteis esperados menos dias trabalhados)
-            dias_de_falta = dias_uteis_esperados_periodo - dias_realmente_trabalhados
-            dias_de_falta = max(0, dias_de_falta) # Garante que não seja negativo
-
-            # Exibir métricas de frequência
             col_freq1, col_freq2, col_freq3, col_freq4 = st.columns(4)
+            with col_freq1: st.metric("📅 Período Analisado", f"{total_dias_periodo_freq} dias", help=f"De {data_inicio_freq.strftime('%d/%m/%Y')} a {data_fim_freq.strftime('%d/%m/%Y')}")
+            with col_freq2: st.metric("🏢 Dias Trabalhados", f"{dias_trabalhados_freq} dias", help="Dias com registro de vendas.")
+            with col_freq3: st.metric("🏖️ Domingos (Folga)", f"{domingos_periodo_freq} dias", help="Domingos no período.")
+            with col_freq4: st.metric("❌ Faltas (Seg-Sáb)", f"{dias_falta_freq} dias", delta=f"-{dias_falta_freq}" if dias_falta_freq > 0 else None, delta_color="inverse" if dias_falta_freq > 0 else "off")
 
-            with col_freq1:
-                st.metric(
-                    "📅 Período Analisado",
-                    f"{total_dias_no_periodo} dias",
-                    help=f"De {data_inicio_periodo.strftime('%d/%m/%Y')} até {data_fim_periodo.strftime('%d/%m/%Y')}"
-                )
-            with col_freq2:
-                st.metric(
-                    "🏢 Dias Trabalhados",
-                    f"{dias_realmente_trabalhados} dias",
-                    help="Dias com registro de vendas no período."
-                )
-            with col_freq3:
-                st.metric(
-                    "🏖️ Domingos (Folga Padrão)",
-                    f"{domingos_no_periodo} dias",
-                    help="Número de domingos dentro do período analisado."
-                )
-            with col_freq4:
-                delta_falta = f"-{dias_de_falta}" if dias_de_falta > 0 else None
-                st.metric(
-                    "❌ Dias de Falta (Seg-Sáb)",
-                    f"{dias_de_falta} dias",
-                    help="Dias de segunda a sábado sem registro de vendas.",
-                    delta=delta_falta,
-                    delta_color="inverse" if dias_de_falta > 0 else "off"
-                )
+            if dias_uteis_esperados_freq > 0:
+                taxa_freq = min(100, (dias_trabalhados_freq / dias_uteis_esperados_freq) * 100)
+                msg_freq, color_freq = ("Excelente", "success") if taxa_freq >= 95 else (("Boa", "info") if taxa_freq >= 80 else ("Atenção", "warning"))
+                st.markdown(f"<div style='color: {'green' if color_freq == 'success' else ('blue' if color_freq == 'info' else 'orange')};'>🎯 **{msg_freq} frequência:** {taxa_freq:.1f}% dos dias úteis (Seg-Sáb) trabalhados!</div>", unsafe_allow_html=True)
 
-            # Calcular taxa de frequência
-            if dias_uteis_esperados_periodo > 0:
-                taxa_frequencia_percentual = (dias_realmente_trabalhados / dias_uteis_esperados_periodo) * 100
-                taxa_frequencia_percentual = min(100, taxa_frequencia_percentual) # Cap em 100%
+        else: st.info("📊 Dados insuficientes para frequência (período curto ou sem dados).")
+    else: st.info("📊 Dados insuficientes para ranking de dias.")
 
-                if taxa_frequencia_percentual >= 95:
-                    st.success(f"🎯 **Excelente frequência:** {taxa_frequencia_percentual:.1f}% dos dias úteis (Seg-Sáb) trabalhados!")
-                elif taxa_frequencia_percentual >= 80:
-                    st.info(f"👍 **Boa frequência:** {taxa_frequencia_percentual:.1f}% dos dias úteis (Seg-Sáb) trabalhados.")
-                else:
-                    st.warning(f"⚠️ **Atenção à frequência:** {taxa_frequencia_percentual:.1f}% dos dias úteis (Seg-Sáb) trabalhados. Considere analisar os dias de falta.")
-            else:
-                st.info("Não há dias úteis esperados no período para calcular a taxa de frequência.")
-        else:
-            st.info("📊 Dados insuficientes para calcular a análise de frequência (período muito curto ou sem dados).")
-    else:
-        st.info("📊 Dados insuficientes para calcular o ranking de dias da semana.")
-
-def display_insights(df):
+def display_insights(df_insights):
     """Exibe insights automáticos com estilo melhorado."""
-    if df.empty or len(df) < 2: # Precisa de pelo menos 2 registros para algumas comparações
+    if df_insights.empty or len(df_insights) < 2: 
         st.info("Dados insuficientes para gerar insights automáticos.")
         return
 
-    total_vendas_insight = df["Total"].sum()
-    dias_trabalhados_insight = df["Data"].nunique()
-    # media_diaria_insight = total_vendas_insight / dias_trabalhados_insight if dias_trabalhados_insight > 0 else 0
-
-    # Insight 1: Melhor dia da semana
-    media_por_dia_insight = df.groupby("DiaSemana", observed=False)["Total"].mean().reset_index().dropna()
-    melhor_dia_semana_insight = media_por_dia_insight.loc[media_por_dia_insight["Total"].idxmax()] if not media_por_dia_insight.empty else None
-
-    # Insight 2: Método de pagamento predominante
-    metodos_total_insight = {
-        "Cartão": df["Cartão"].sum(),
-        "Dinheiro": df["Dinheiro"].sum(),
-        "PIX": df["Pix"].sum() # Usar 'Pix' como no DataFrame
-    }
-    metodos_total_insight = {k: v for k, v in metodos_total_insight.items() if v > 0} # Remove métodos com zero
-    if metodos_total_insight:
-        melhor_metodo_insight = max(metodos_total_insight, key=metodos_total_insight.get)
-        valor_melhor_metodo_insight = metodos_total_insight[melhor_metodo_insight]
-        percentual_melhor_insight = (valor_melhor_metodo_insight / total_vendas_insight * 100) if total_vendas_insight > 0 else 0
-        sugestao_taxa_insight = """
-        <p style="margin-top: 0.5rem; font-size: 0.9rem; color: #b0bec5;">
-        <i>Sugestão: Se Cartão for predominante, avalie as taxas e negocie com adquirentes. Para Dinheiro, garanta troco. Para PIX, promova a facilidade.</i>
-        </p>"""
-    else:
-        melhor_metodo_insight = None
-        percentual_melhor_insight = 0
-        sugestao_taxa_insight = ""
-
-    # Insight 3: Comparação com período anterior (ex: última semana vs penúltima)
-    df_sorted_insight = df.sort_values("Data")
-    variacao_semanal_insight = None # Inicializa
-    if len(df_sorted_insight) >= 14: # Precisa de pelo menos 2 semanas de dados
-        # Considera os últimos 7 dias com dados vs os 7 dias anteriores com dados
-        datas_unicas_ordenadas = sorted(df_sorted_insight['Data'].unique())
-        if len(datas_unicas_ordenadas) >= 14 : # Verifica se temos pelo menos 14 dias distintos de operação
-            ultimas_datas = datas_unicas_ordenadas[-7:]
-            penultimas_datas = datas_unicas_ordenadas[-14:-7]
-
-            media_ultima_semana_insight = df_sorted_insight[df_sorted_insight['Data'].isin(ultimas_datas)]["Total"].mean()
-            media_penultima_semana_insight = df_sorted_insight[df_sorted_insight['Data'].isin(penultimas_datas)]["Total"].mean()
-            
-            if media_penultima_semana_insight > 0 : # Evita divisão por zero
-                variacao_semanal_insight = ((media_ultima_semana_insight - media_penultima_semana_insight) / media_penultima_semana_insight * 100)
-                tendencia_texto_insight = "crescimento" if variacao_semanal_insight > 5 else "queda" if variacao_semanal_insight < -5 else "estabilidade"
-                tendencia_cor_insight = "#63d2b4" if variacao_semanal_insight > 5 else "#ec7063" if variacao_semanal_insight < -5 else "#f5b041"
-            else: # Não há base para comparação
-                tendencia_texto_insight = "base zero na penúltima semana"
-                tendencia_cor_insight = COR_TEXTO_SECUNDARIO
-        else: # Não há 14 dias distintos de operação
-            tendencia_texto_insight = "insuficientes (menos de 14 dias operados)"
-            tendencia_cor_insight = COR_TEXTO_SECUNDARIO
-    else: # Menos de 14 registros totais
-        tendencia_texto_insight = "insuficientes"
-        tendencia_cor_insight = COR_TEXTO_SECUNDARIO
-
-
-    # Exibição dos Insights
+    total_vendas_ins = df_insights["Total"].sum()
+    media_por_dia_ins = df_insights.groupby("DiaSemana", observed=False)["Total"].mean().reset_index().dropna()
+    melhor_dia_ins = media_por_dia_ins.loc[media_por_dia_ins["Total"].idxmax()] if not media_por_dia_ins.empty else None
+    metodos_total_ins = {"Cartão": df_insights["Cartão"].sum(), "Dinheiro": df_insights["Dinheiro"].sum(), "PIX": df_insights["Pix"].sum()}
+    metodos_total_ins = {k: v for k, v in metodos_total_ins.items() if v > 0}
+    melhor_metodo_ins, percentual_melhor_ins, sugestao_taxa_ins = None, 0, ""
+    if metodos_total_ins:
+        melhor_metodo_ins = max(metodos_total_ins, key=metodos_total_ins.get)
+        valor_melhor_metodo_ins = metodos_total_ins[melhor_metodo_ins]
+        percentual_melhor_ins = (valor_melhor_metodo_ins / total_vendas_ins * 100) if total_vendas_ins > 0 else 0
+        sugestao_taxa_ins = "<p style='margin-top:0.5rem;font-size:0.9rem;color:#b0bec5;'><i>Sugestão: Avalie taxas do Cartão, garanta troco para Dinheiro, promova PIX.</i></p>"
+    
+    df_sorted_ins = df_insights.sort_values("Data")
+    variacao_semanal_ins, tendencia_texto_ins, tendencia_cor_ins = None, "insuficientes", COR_TEXTO_SECUNDARIO
+    if len(df_sorted_ins) >= 14:
+        datas_unicas_ins = sorted(df_sorted_ins['Data'].unique())
+        if len(datas_unicas_ins) >= 14:
+            media_ultima_ins = df_sorted_ins[df_sorted_ins['Data'].isin(datas_unicas_ins[-7:])]["Total"].mean()
+            media_penultima_ins = df_sorted_ins[df_sorted_ins['Data'].isin(datas_unicas_ins[-14:-7])]["Total"].mean()
+            if media_penultima_ins > 0:
+                variacao_semanal_ins = ((media_ultima_ins - media_penultima_ins) / media_penultima_ins * 100)
+                tendencia_texto_ins, tendencia_cor_ins = ("crescimento", "#63d2b4") if variacao_semanal_ins > 5 else (("queda", "#ec7063") if variacao_semanal_ins < -5 else ("estabilidade", "#f5b041"))
+            else: tendencia_texto_ins = "base zero na penúltima semana"
+        else: tendencia_texto_ins = "menos de 14 dias operados"
+    
     st.subheader("🧠 Insights Automáticos Rápidos")
-    col_insight1, col_insight2, col_insight3 = st.columns(3)
-
-    with col_insight1:
-        if melhor_dia_semana_insight is not None:
-            st.markdown(f"""
-            <div class="insight-container" style="border-left-color: {CORES_MODO_ESCURO[0]};">
-                <h4 style="color: {CORES_MODO_ESCURO[0]};">🏆 Dia Mais Forte</h4>
-                <p>A <strong>{melhor_dia_semana_insight["DiaSemana"]}</strong> apresenta a maior média de faturamento: <strong>{format_brl(melhor_dia_semana_insight["Total"])}</strong>.</p>
-                <p style="margin-top: 0.5rem; font-size: 0.9rem; color: #b0bec5;">
-                <i>Sugestão: Reforce o marketing ou promoções para este dia.</i>
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-             st.markdown(f"<div class=\"insight-container\" style=\"border-left-color: {COR_TEXTO_SECUNDARIO};\"><h4 style=\"color: {COR_TEXTO_SECUNDARIO};\">🏆 Dia Mais Forte</h4><p><i>Sem dados suficientes para determinar.</i></p></div>", unsafe_allow_html=True)
-
-    with col_insight2:
-        if melhor_metodo_insight is not None:
-            st.markdown(f"""
-            <div class="insight-container" style="border-left-color: {CORES_MODO_ESCURO[1]};">
-                <h4 style="color: {CORES_MODO_ESCURO[1]};">💳 Pagamento Preferido</h4>
-                <p>O método <strong>{melhor_metodo_insight}</strong> é o mais utilizado, representando <strong>{percentual_melhor_insight:.1f}%</strong> ({format_brl(valor_melhor_metodo_insight)}) do total faturado.</p>
-                {sugestao_taxa_insight}
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-             st.markdown(f"<div class=\"insight-container\" style=\"border-left-color: {COR_TEXTO_SECUNDARIO};\"><h4 style=\"color: {COR_TEXTO_SECUNDARIO};\">💳 Pagamento Preferido</h4><p><i>Sem dados suficientes para analisar.</i></p></div>", unsafe_allow_html=True)
-
-    with col_insight3:
-        if variacao_semanal_insight is not None:
-            st.markdown(f"""
-            <div class="insight-container" style="border-left-color: {tendencia_cor_insight};">
-                <h4 style="color: {tendencia_cor_insight};">📈 Tendência Semanal (Média Diária)</h4>
-                <p>Comparando as médias diárias das duas últimas semanas operadas, houve <strong>{tendencia_texto_insight}</strong> de <strong>{abs(variacao_semanal_insight):.1f}%</strong>.</p>
-                 <p style="margin-top: 0.5rem; font-size: 0.9rem; color: #b0bec5;">
-                <i>Sugestão: Analise os fatores que influenciaram essa variação (promoções, eventos, etc.).</i>
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
-        else: # Caso variacao_semanal_insight seja None, mas tendencia_texto_insight tenha uma razão
-            st.markdown(f"""
-            <div class="insight-container" style="border-left-color: {tendencia_cor_insight};">
-                <h4 style="color: {tendencia_cor_insight};">📈 Tendência Semanal</h4>
-                <p>Dados <strong>{tendencia_texto_insight}</strong> para calcular a variação entre as últimas duas semanas.</p>
-            </div>
-            """, unsafe_allow_html=True)
+    col_ins1, col_ins2, col_ins3 = st.columns(3)
+    with col_ins1:
+        if melhor_dia_ins:
+            st.markdown(f"<div class='insight-container' style='border-left-color:{CORES_MODO_ESCURO[0]};'><h4 style='color:{CORES_MODO_ESCURO[0]};'>🏆 Dia Mais Forte</h4><p>A <strong>{melhor_dia_ins['DiaSemana']}</strong> tem média de <strong>{format_brl(melhor_dia_ins['Total'])}</strong>.</p><p style='margin-top:0.5rem;font-size:0.9rem;color:#b0bec5;'><i>Sugestão: Reforce marketing/promoções neste dia.</i></p></div>", unsafe_allow_html=True)
+        else: st.markdown(f"<div class='insight-container' style='border-left-color:{COR_TEXTO_SECUNDARIO};'><h4 style='color:{COR_TEXTO_SECUNDARIO};'>🏆 Dia Mais Forte</h4><p><i>Sem dados suficientes.</i></p></div>", unsafe_allow_html=True)
+    with col_ins2:
+        if melhor_metodo_ins:
+            st.markdown(f"<div class='insight-container' style='border-left-color:{CORES_MODO_ESCURO[1]};'><h4 style='color:{CORES_MODO_ESCURO[1]};'>💳 Pagamento Preferido</h4><p><strong>{melhor_metodo_ins}</strong> é o mais usado ({percentual_melhor_ins:.1f}% do total).</p>{sugestao_taxa_ins}</div>", unsafe_allow_html=True)
+        else: st.markdown(f"<div class='insight-container' style='border-left-color:{COR_TEXTO_SECUNDARIO};'><h4 style='color:{COR_TEXTO_SECUNDARIO};'>💳 Pagamento Preferido</h4><p><i>Sem dados suficientes.</i></p></div>", unsafe_allow_html=True)
+    with col_ins3:
+        st.markdown(f"<div class='insight-container' style='border-left-color:{tendencia_cor_ins};'><h4 style='color:{tendencia_cor_ins};'>📈 Tendência Semanal</h4><p>Comparando médias diárias, houve <strong>{tendencia_texto_ins}</strong>{' de <strong>' + str(abs(variacao_semanal_ins):.1f) + '%</strong>' if variacao_semanal_ins is not None else ''}.</p><p style='margin-top:0.5rem;font-size:0.9rem;color:#b0bec5;'><i>Sugestão: Analise fatores (promoções, eventos).</i></p></div>", unsafe_allow_html=True)
 
 # --- Funções da Análise Contábil ---
 
-def calculate_financial_results(df, salario_base, custo_contadora, cpv_percent):
+def calculate_financial_results(df_dre_calc, salario_base_dre_calc, custo_contadora_dre_calc, cpv_percent_dre_calc):
     """Calcula os resultados financeiros para a DRE."""
-    resultados = {} # Dicionário para armazenar os resultados
+    res = {}
+    res['receita_bruta'] = df_dre_calc['Total'].sum()
+    res['receita_tributavel_direto'] = df_dre_calc['Dinheiro'].sum() + df_dre_calc['Pix'].sum()
+    res['impostos_sobre_vendas'] = res['receita_tributavel_direto'] * 0.06 # Simples Nacional 6%
+    res['receita_liquida'] = res['receita_bruta'] - res['impostos_sobre_vendas']
+    res['custo_produtos_vendidos'] = res['receita_bruta'] * (cpv_percent_dre_calc / 100.0)
+    res['lucro_bruto'] = res['receita_liquida'] - res['custo_produtos_vendidos']
+    res['despesas_com_pessoal'] = salario_base_dre_calc * 1.55 # Salário + ~55% encargos
+    res['despesas_contabeis'] = custo_contadora_dre_calc
+    res['total_despesas_operacionais'] = res['despesas_com_pessoal'] + res['despesas_contabeis']
+    res['lucro_operacional'] = res['lucro_bruto'] - res['total_despesas_operacionais']
+    res['resultado_financeiro'] = 0 # Simplificado
+    res['lucro_antes_ir'] = res['lucro_operacional'] + res['resultado_financeiro']
+    res['ir_csll'] = 0 # Já no Simples
+    res['lucro_liquido'] = res['lucro_antes_ir'] - res['ir_csll']
+    res['margem_bruta'] = (res['lucro_bruto'] / res['receita_liquida'] * 100) if res['receita_liquida'] else 0.0
+    res['margem_operacional'] = (res['lucro_operacional'] / res['receita_liquida'] * 100) if res['receita_liquida'] else 0.0
+    res['margem_liquida'] = (res['lucro_liquido'] / res['receita_liquida'] * 100) if res['receita_liquida'] else 0.0
+    return res
 
-    # (+) Receita Operacional Bruta (ROB)
-    resultados['receita_bruta'] = df['Total'].sum()
-
-    # (-) Deduções da Receita Bruta
-    # Considera Simples Nacional (ex: 6% sobre receita tributável - Dinheiro e Pix)
-    # Cartão já tem taxas descontadas na fonte ou pagas à operadora (não entra aqui como imposto direto sobre venda)
-    resultados['receita_tributavel_direto'] = df['Dinheiro'].sum() + df['Pix'].sum()
-    # receitas_cartao = df['Cartão'].sum() # Pode ser usado para outras análises
-    # Imposto do Simples Nacional (estimativa, a alíquota real varia)
-    aliquota_simples = 0.06 
-    resultados['impostos_sobre_vendas'] = resultados['receita_tributavel_direto'] * aliquota_simples
-
-    # (=) Receita Operacional Líquida (ROL)
-    resultados['receita_liquida'] = resultados['receita_bruta'] - resultados['impostos_sobre_vendas']
-
-    # (-) Custo dos Produtos Vendidos (CPV) ou Custo das Mercadorias Vendidas (CMV)
-    # Estimado como um percentual da Receita Bruta
-    resultados['custo_produtos_vendidos'] = resultados['receita_bruta'] * (cpv_percent / 100.0)
-
-    # (=) Lucro Bruto (Resultado Bruto)
-    resultados['lucro_bruto'] = resultados['receita_liquida'] - resultados['custo_produtos_vendidos']
-
-    # (-) Despesas Operacionais
-    #   (-) Despesas com Pessoal (Salário + Encargos)
-    encargos_sociais_percentual = 0.55 # Estimativa de encargos sobre o salário base
-    resultados['despesas_com_pessoal'] = salario_base * (1 + encargos_sociais_percentual)
-    #   (-) Despesas Administrativas (Ex: Contabilidade)
-    resultados['despesas_contabeis'] = custo_contadora
-    #   (-) Outras Despesas (Aluguel, Luz, Água, Marketing, Taxas de Cartão, etc. - não incluídas aqui para simplificar)
-    # Para uma DRE completa, essas outras despesas seriam subtraídas aqui.
-    # Atualmente, as taxas de cartão estão implícitas na receita de cartão (receita já líquida da taxa da maquininha)
-    # ou deveriam ser adicionadas como despesa financeira/operacional.
-    
-    # Somatório das Despesas Operacionais listadas
-    resultados['total_despesas_operacionais'] = resultados['despesas_com_pessoal'] + resultados['despesas_contabeis']
-
-    # (=) Lucro Operacional (Resultado Operacional Antes do Resultado Financeiro) - também conhecido como EBIT ou LAJIR
-    resultados['lucro_operacional'] = resultados['lucro_bruto'] - resultados['total_despesas_operacionais']
-
-    # (+/-) Resultado Financeiro (Receitas Financeiras - Despesas Financeiras)
-    # Ex: Rendimentos de aplicações, Juros pagos. Aqui, simplificado para zero.
-    # Taxas de cartão poderiam entrar como despesa financeira se a receita de cartão fosse bruta.
-    resultados['resultado_financeiro'] = 0 
-
-    # (=) Lucro Antes do Imposto de Renda e Contribuição Social (LAIR)
-    resultados['lucro_antes_ir'] = resultados['lucro_operacional'] + resultados['resultado_financeiro']
-
-    # (-) Imposto de Renda (IRPJ) e Contribuição Social sobre o Lucro Líquido (CSLL)
-    # Para Simples Nacional, esses impostos já estão (majoritariamente) inclusos na guia única do Simples.
-    # Para Lucro Presumido/Real, seriam calculados aqui sobre o LAIR. Simplificando, zero.
-    resultados['ir_csll'] = 0
-
-    # (=) Lucro Líquido do Exercício (Resultado Líquido)
-    resultados['lucro_liquido'] = resultados['lucro_antes_ir'] - resultados['ir_csll']
-
-    # Cálculo de Margens (em relação à Receita Líquida)
-    resultados['margem_bruta'] = (resultados['lucro_bruto'] / resultados['receita_liquida'] * 100) if resultados['receita_liquida'] > 0 else 0
-    resultados['margem_operacional'] = (resultados['lucro_operacional'] / resultados['receita_liquida'] * 100) if resultados['receita_liquida'] > 0 else 0
-    resultados['margem_liquida'] = (resultados['lucro_liquido'] / resultados['receita_liquida'] * 100) if resultados['receita_liquida'] > 0 else 0
-    
-    return resultados
-
-def create_dre_textual(resultados, df_completo_dre, anos_selecionados_dre):
+def create_dre_textual(resultados_dre_txt, df_completo_dre_txt, anos_selecionados_dre_txt):
     """Cria a DRE em formato textual com base nos resultados calculados."""
     st.subheader("🧾 Demonstração do Resultado do Exercício (DRE)")
+    periodo_str_dre_txt = "Período não definido"
+    if not df_completo_dre_txt.empty and anos_selecionados_dre_txt:
+        anos_int_dre_txt = [int(a) for a in anos_selecionados_dre_txt]
+        df_periodo_dre_txt = df_completo_dre_txt[df_completo_dre_txt['Ano'].isin(anos_int_dre_txt)]
+        if not df_periodo_dre_txt.empty:
+            periodo_str_dre_txt = f"Período: {df_periodo_dre_txt['Data'].min().strftime('%d/%m/%Y')} a {df_periodo_dre_txt['Data'].max().strftime('%d/%m/%Y')}"
+        else: periodo_str_dre_txt = f"Período: Ano(s) {', '.join(map(str, anos_selecionados_dre_txt))} (sem dados no filtro)"
+    elif anos_selecionados_dre_txt: periodo_str_dre_txt = f"Período: Ano(s) {', '.join(map(str, anos_selecionados_dre_txt))} (sem dados carregados)"
+    st.caption(periodo_str_dre_txt)
+    html_dre_txt = f"""
+    <div class="dre-textual-container"><table><thead><tr><th>Descrição</th><th style="text-align:right;">Valor (R$)</th></tr></thead><tbody>
+    <tr><td>(+) Receita Operacional Bruta</td><td style="text-align:right;">{format_brl(resultados_dre_txt['receita_bruta'])}</td></tr>
+    <tr><td>(-) Deduções da Receita Bruta (Simples Nacional)</td><td style="text-align:right;">({format_brl(abs(resultados_dre_txt['impostos_sobre_vendas']))})</td></tr>
+    <tr><td><strong>(=) Receita Operacional Líquida</strong></td><td style="text-align:right;"><strong>{format_brl(resultados_dre_txt['receita_liquida'])}</strong></td></tr>
+    <tr><td>(-) Custo dos Produtos Vendidos (CPV)</td><td style="text-align:right;">({format_brl(abs(resultados_dre_txt['custo_produtos_vendidos']))})</td></tr>
+    <tr><td><strong>(=) Lucro Bruto</strong></td><td style="text-align:right;"><strong>{format_brl(resultados_dre_txt['lucro_bruto'])}</strong></td></tr>
+    <tr><td>(-) Despesas Operacionais</td><td></td></tr>
+    <tr><td>&nbsp;&nbsp;&nbsp;&nbsp;(-) Despesas com Pessoal</td><td style="text-align:right;">({format_brl(abs(resultados_dre_txt['despesas_com_pessoal']))})</td></tr>
+    <tr><td>&nbsp;&nbsp;&nbsp;&nbsp;(-) Despesas Administrativas (Contabilidade)</td><td style="text-align:right;">({format_brl(abs(resultados_dre_txt['despesas_contabeis']))})</td></tr>
+    <tr><td><strong>(=) Lucro Operacional (EBIT/LAJIR)</strong></td><td style="text-align:right;"><strong>{format_brl(resultados_dre_txt['lucro_operacional'])}</strong></td></tr>
+    <tr><td>(+/-) Resultado Financeiro</td><td style="text-align:right;">{format_brl(resultados_dre_txt['resultado_financeiro'])}</td></tr>
+    <tr><td><strong>(=) Lucro Antes do Imposto de Renda (LAIR)</strong></td><td style="text-align:right;"><strong>{format_brl(resultados_dre_txt['lucro_antes_ir'])}</strong></td></tr>
+    <tr><td>(-) Imposto de Renda e CSLL (já no Simples)</td><td style="text-align:right;">({format_brl(abs(resultados_dre_txt['ir_csll']))})</td></tr>
+    <tr><td><strong>(=) Lucro Líquido do Exercício</strong></td><td style="text-align:right;"><strong>{format_brl(resultados_dre_txt['lucro_liquido'])}</strong></td></tr>
+    </tbody></table></div>"""
+    st.markdown(html_dre_txt, unsafe_allow_html=True)
 
-    # Determinar período com base nos dados filtrados e anos selecionados
-    periodo_str_dre = "Período não definido"
-    if not df_completo_dre.empty and anos_selecionados_dre:
-        anos_int_dre = [int(a) for a in anos_selecionados_dre] # Garante que anos são int
-        df_periodo_dre = df_completo_dre[df_completo_dre['Ano'].isin(anos_int_dre)]
-        if not df_periodo_dre.empty:
-            min_date_dre = df_periodo_dre['Data'].min()
-            max_date_dre = df_periodo_dre['Data'].max()
-            periodo_str_dre = f"Período: {min_date_dre.strftime('%d/%m/%Y')} a {max_date_dre.strftime('%d/%m/%Y')}"
-        else:
-            periodo_str_dre = f"Período: Ano(s) {', '.join(map(str, anos_selecionados_dre))} (sem dados no filtro específico)"
-    elif anos_selecionados_dre:
-         periodo_str_dre = f"Período: Ano(s) {', '.join(map(str, anos_selecionados_dre))} (sem dados carregados)"
-
-
-    st.caption(periodo_str_dre)
-
-    # Estrutura HTML da DRE para melhor formatação
-    # Usar parênteses para valores negativos (convenção contábil)
-    html_dre = f"""
-    <div class="dre-textual-container">
-        <table>
-            <thead>
-                <tr>
-                    <th>Descrição</th>
-                    <th style="text-align: right;">Valor (R$)</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr><td>(+) Receita Operacional Bruta</td><td style="text-align: right;">{format_brl(resultados['receita_bruta'])}</td></tr>
-                <tr><td>(-) Deduções da Receita Bruta (Simples Nacional)</td><td style="text-align: right;">({format_brl(abs(resultados['impostos_sobre_vendas']))})</td></tr>
-                <tr><td><strong>(=) Receita Operacional Líquida</strong></td><td style="text-align: right;"><strong>{format_brl(resultados['receita_liquida'])}</strong></td></tr>
-                <tr><td>(-) Custo dos Produtos Vendidos (CPV)</td><td style="text-align: right;">({format_brl(abs(resultados['custo_produtos_vendidos']))})</td></tr>
-                <tr><td><strong>(=) Lucro Bruto</strong></td><td style="text-align: right;"><strong>{format_brl(resultados['lucro_bruto'])}</strong></td></tr>
-                <tr><td>(-) Despesas Operacionais</td><td></td></tr>
-                <tr><td>&nbsp;&nbsp;&nbsp;&nbsp;(-) Despesas com Pessoal</td><td style="text-align: right;">({format_brl(abs(resultados['despesas_com_pessoal']))})</td></tr>
-                <tr><td>&nbsp;&nbsp;&nbsp;&nbsp;(-) Despesas Administrativas (Contabilidade)</td><td style="text-align: right;">({format_brl(abs(resultados['despesas_contabeis']))})</td></tr>
-                <tr><td><strong>(=) Lucro Operacional (EBIT/LAJIR)</strong></td><td style="text-align: right;"><strong>{format_brl(resultados['lucro_operacional'])}</strong></td></tr>
-                <tr><td>(+/-) Resultado Financeiro</td><td style="text-align: right;">{format_brl(resultados['resultado_financeiro'])}</td></tr>
-                <tr><td><strong>(=) Lucro Antes do Imposto de Renda (LAIR)</strong></td><td style="text-align: right;"><strong>{format_brl(resultados['lucro_antes_ir'])}</strong></td></tr>
-                <tr><td>(-) Imposto de Renda e CSLL (já no Simples)</td><td style="text-align: right;">({format_brl(abs(resultados['ir_csll']))})</td></tr>
-                <tr><td><strong>(=) Lucro Líquido do Exercício</strong></td><td style="text-align: right;"><strong>{format_brl(resultados['lucro_liquido'])}</strong></td></tr>
-            </tbody>
-        </table>
-    </div>
-    """
-    st.markdown(html_dre, unsafe_allow_html=True)
-
-def create_financial_dashboard_altair(resultados):
+def create_financial_dashboard_altair(resultados_fin_dash):
     """Cria um dashboard visual simples com os principais resultados financeiros."""
-    # Preparar dados para o gráfico
-    # Usar valores absolutos para custos e despesas para representação em barras
-    # O sinal já está implícito na natureza do componente (ex: Custo é sempre uma dedução)
-    data_chart = pd.DataFrame({
-        'Componente': [
-            'Receita Líquida',
-            'Custo Produtos', # CPV
-            'Despesas Pessoal',
-            'Despesas Contábeis',
-            'Lucro Líquido'
-        ],
-        'Valor': [
-            resultados['receita_liquida'],
-            abs(resultados['custo_produtos_vendidos']), # CPV é um custo
-            abs(resultados['despesas_com_pessoal']),  # Despesa
-            abs(resultados['despesas_contabeis']),   # Despesa
-            resultados['lucro_liquido'] # Pode ser positivo ou negativo
-        ],
-        'Tipo': [ # Para colorir as barras
-            'Receita',
-            'Custo',
-            'Despesa',
-            'Despesa',
-            'Resultado Final' # Lucro ou Prejuízo
-        ]
+    data_chart_fin = pd.DataFrame({
+        'Componente': ['Receita Líquida', 'Custo Produtos', 'Despesas Pessoal', 'Despesas Contábeis', 'Lucro Líquido'],
+        'Valor': [resultados_fin_dash['receita_liquida'], abs(resultados_fin_dash['custo_produtos_vendidos']), abs(resultados_fin_dash['despesas_com_pessoal']), abs(resultados_fin_dash['despesas_contabeis']), resultados_fin_dash['lucro_liquido']],
+        'Tipo': ['Receita', 'Custo', 'Despesa', 'Despesa', 'Resultado Final']
     })
-    
-    # Filtrar componentes com valor zero para não poluir o gráfico, exceto Lucro Líquido
-    data_chart_filtered = data_chart[ (data_chart['Valor'] != 0) | (data_chart['Componente'] == 'Lucro Líquido') ]
-
-
-    if data_chart_filtered.empty:
-        return None
-
-    color_scale = alt.Scale(
-        domain=['Receita', 'Custo', 'Despesa', 'Resultado Final'],
-        range=['#1f77b4', '#ff7f0e', '#d62728', '#2ca02c' if resultados['lucro_liquido'] >= 0 else '#8c564b'] # Verde para lucro, Marrom para prejuízo
-    )
-
-    bars = alt.Chart(data_chart_filtered).mark_bar(cornerRadius=5).encode(
-        x=alt.X('Componente:N', sort=None, title=None, axis=alt.Axis(labels=True, labelAngle=-45, labelColor=COR_TEXTO_SECUNDARIO)), # Mostrar labels dos componentes
+    data_chart_fin_filt = data_chart_fin[(data_chart_fin['Valor'] != 0) | (data_chart_fin['Componente'] == 'Lucro Líquido')]
+    if data_chart_fin_filt.empty: return None
+    color_scale_fin = alt.Scale(domain=['Receita', 'Custo', 'Despesa', 'Resultado Final'], range=['#1f77b4', '#ff7f0e', '#d62728', '#2ca02c' if resultados_fin_dash['lucro_liquido'] >= 0 else '#8c564b'])
+    bars_fin = alt.Chart(data_chart_fin_filt).mark_bar(cornerRadiusTop=5).encode(
+        x=alt.X('Componente:N', sort=None, title=None, axis=alt.Axis(labels=True, labelAngle=-45, labelColor=COR_TEXTO_SECUNDARIO)),
         y=alt.Y('Valor:Q', title='Valor (R$)', axis=alt.Axis(labelColor=COR_TEXTO_SECUNDARIO, titleColor=COR_TEXTO_PRINCIPAL)),
-        color=alt.Color('Tipo:N', scale=color_scale, legend=alt.Legend(title="Tipo de Componente", labelColor=COR_TEXTO_SECUNDARIO, titleColor=COR_TEXTO_PRINCIPAL)),
-        tooltip=[
-            alt.Tooltip('Componente:N', title='Componente'),
-            alt.Tooltip('Valor:Q', title='Valor (R$)', format=',.2f')
-        ]
+        color=alt.Color('Tipo:N', scale=color_scale_fin, legend=alt.Legend(title="Tipo", labelColor=COR_TEXTO_SECUNDARIO, titleColor=COR_TEXTO_PRINCIPAL, orient="top-left")),
+        tooltip=[alt.Tooltip('Componente:N', title='Componente'), alt.Tooltip('Valor:Q', title='Valor (R$)', format=',.2f')]
     )
-
-    # Adicionar texto com os valores sobre as barras
-    text_chart = bars.mark_text(
-        align='center',
-        baseline='bottom',
-        dy=-7, # Ajuste para posicionar o texto acima da barra
-        color=COR_TEXTO_PRINCIPAL
-    ).encode(
-        text=alt.Text('Valor:Q', format=',.0f') # Formato resumido para o texto
-    )
-
-    chart_final = (bars + text_chart).properties(
-        title=alt.TitleParams(
-            text='Visão Geral: Receita, Custos, Despesas e Lucro',
-            color=COR_TEXTO_PRINCIPAL,
-            fontSize=16,
-            anchor='middle'
-            ),
-        height=400,
-        background="transparent" # Fundo transparente
-    ).configure_view(
-        strokeOpacity=0 # Remove borda da área de plotagem
-    )
-
-    return chart_final
+    text_chart_fin = bars_fin.mark_text(align='center', baseline='bottom', dy=-7, color=COR_TEXTO_PRINCIPAL, fontWeight='bold').encode(text=alt.Text('Valor:Q', format=',.0f'))
+    chart_final_fin = (bars_fin + text_chart_fin).properties(
+        title=alt.TitleParams(text='Visão Geral: Receita, Custos, Despesas e Lucro', color=COR_TEXTO_PRINCIPAL, fontSize=16, anchor='middle'),
+        height=400, background="transparent"
+    ).configure_view(strokeOpacity=0)
+    return chart_final_fin
 
 # --- Interface Principal da Aplicação ---
 def main():
-    # Inicializar estado da sessão para controle da tabela
-    if "show_table" not in st.session_state:
-        st.session_state.show_table = False
-    if "last_registered_data" not in st.session_state:
-        st.session_state.last_registered_data = None # Armazenar dados para a tabela
+    if "show_table" not in st.session_state: st.session_state.show_table = False
+    if "last_registered_data" not in st.session_state: st.session_state.last_registered_data = None
 
-    # Cabeçalho com logo e título
-    st.markdown(f"""
-    <div class="header-container">
-        <div class="logo-container">
-            <img src="{LOGO_URL}" class="logo-image" alt="Logo Clips Burger">
-            <div>
-                <h1>SISTEMA FINANCEIRO - CLIP'S BURGER</h1>
-                <p>Gestão inteligente de vendas - {datetime.now().year}</p>
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(f"""<div class="header-container"><div class="logo-container">
+        <img src="{LOGO_URL}" class="logo-image" alt="Logo Clips Burger">
+        <div><h1>SISTEMA FINANCEIRO - CLIP'S BURGER</h1><p>Gestão inteligente de vendas - {datetime.now().year}</p></div>
+    </div></div>""", unsafe_allow_html=True)
 
-    # Carregar e processar dados
-    df_raw = read_sales_data()
-    df_processed = process_data(df_raw)
+    df_raw_main = read_sales_data()
+    df_processed_main = process_data(df_raw_main)
 
-    # Sidebar para filtros
     with st.sidebar:
         st.header("🔍 Filtros de Análise")
         st.markdown("---")
+        anos_disp_main = sorted(df_processed_main["Ano"].dropna().unique().astype(int), reverse=True) if not df_processed_main.empty and "Ano" in df_processed_main.columns else []
+        def_ano_main = [datetime.now().year] if datetime.now().year in anos_disp_main else ([anos_disp_main[0]] if anos_disp_main else [])
+        sel_anos_main = st.multiselect("Ano(s):", options=anos_disp_main, default=def_ano_main)
+        sel_meses_main = []
+        if sel_anos_main:
+            meses_anos_filt_main = sorted(df_processed_main[df_processed_main["Ano"].isin(sel_anos_main)]["Mês"].dropna().unique().astype(int))
+            mapa_meses_main = {m: meses_ordem[m-1] for m in meses_anos_filt_main}
+            def_mes_main = [datetime.now().month] if datetime.now().month in meses_anos_filt_main else meses_anos_filt_main
+            sel_meses_main = st.multiselect("Mês(es):", options=meses_anos_filt_main, format_func=lambda m: mapa_meses_main.get(m,m), default=def_mes_main)
+        else: st.multiselect("Mês(es):", options=[], disabled=True, help="Selecione um ano.")
 
-        # Filtro de Ano(s)
-        anos_disponiveis_df = sorted(df_processed["Ano"].dropna().unique().astype(int), reverse=True) if not df_processed.empty and "Ano" in df_processed.columns else []
-        
-        # Default para o ano atual se houver dados, senão o último ano com dados, ou vazio
-        default_ano_selecionado = [datetime.now().year] if datetime.now().year in anos_disponiveis_df else ([anos_disponiveis_df[0]] if anos_disponiveis_df else [])
-        
-        selected_anos_filtro = st.multiselect("Ano(s):", options=anos_disponiveis_df, default=default_ano_selecionado)
-
-        # Filtro de Mês(es) - dinâmico baseado nos anos selecionados
-        if selected_anos_filtro:
-            meses_ano_filtrado = sorted(df_processed[df_processed["Ano"].isin(selected_anos_filtro)]["Mês"].dropna().unique().astype(int))
-            mapa_meses_nomes_filtrados = {m: meses_ordem[m-1] for m in meses_ano_filtrado} # Nomes para exibição
-            
-            # Default para o mês atual se houver dados nos anos selecionados, senão todos os meses disponíveis nesses anos
-            default_mes_selecionado = [datetime.now().month] if datetime.now().month in meses_ano_filtrado else meses_ano_filtrado
-            
-            selected_meses_num_filtro = st.multiselect("Mês(es):",
-                                              options=meses_ano_filtrado,
-                                              format_func=lambda m: mapa_meses_nomes_filtrados.get(m, m), # Mostra nome do mês
-                                              default=default_mes_selecionado)
-        else: # Se nenhum ano selecionado, desabilitar filtro de mês
-            selected_meses_num_filtro = []
-            st.multiselect("Mês(es):", options=[], disabled=True, help="Selecione um ano primeiro.")
-
-    # Aplicar filtros ao DataFrame processado
-    df_filtered_main = df_processed.copy()
-    if selected_anos_filtro:
-        df_filtered_main = df_filtered_main[df_filtered_main["Ano"].isin(selected_anos_filtro)]
-    if selected_meses_num_filtro: # Só filtra por mês se houver meses selecionados
-        df_filtered_main = df_filtered_main[df_filtered_main["Mês"].isin(selected_meses_num_filtro)]
+    df_filt_main = df_processed_main.copy()
+    if sel_anos_main: df_filt_main = df_filt_main[df_filt_main["Ano"].isin(sel_anos_main)]
+    if sel_meses_main: df_filt_main = df_filt_main[df_filt_main["Mês"].isin(sel_meses_main)]
 
     with st.sidebar:
         st.markdown("---")
         st.subheader("Resumo do Período Filtrado")
-        if not df_filtered_main.empty:
-            st.metric("Total de Registros de Venda", len(df_filtered_main))
-            st.metric("Faturamento Bruto no Período", format_brl(df_filtered_main["Total"].sum()))
-        else:
-            st.info("Nenhum registro encontrado com os filtros selecionados.")
-        st.markdown("<hr style='margin: 1rem 0;'>", unsafe_allow_html=True)
-        st.caption(f"Última atualização dos dados da planilha: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+        if not df_filt_main.empty:
+            st.metric("Registros de Venda", len(df_filt_main))
+            st.metric("Faturamento Bruto", format_brl(df_filt_main["Total"].sum()))
+        else: st.info("Nenhum registro com os filtros selecionados.")
+        st.markdown("<hr style='margin:1rem 0;'>", unsafe_allow_html=True)
+        st.caption(f"Última atualização: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
 
-    # Abas da aplicação
-    tab_registro, tab_dashboard_geral, tab_analise_contabil = st.tabs([
-        "📝 Registrar Nova Venda",
-        "📊 Dashboard de Vendas",
-        "💰 Análise Contábil (DRE)"
-    ])
+    tab_reg, tab_dash, tab_cont = st.tabs(["📝 Registrar Venda", "📊 Dashboard", "💰 Análise Contábil"])
 
-    # Conteúdo da Aba de Registro de Venda
-    with tab_registro:
+    with tab_reg:
         st.header("📝 Registrar Nova Venda Diária")
         st.markdown("---")
-
-        with st.form(key="registro_venda_form", clear_on_submit=True): # Limpa o formulário após submissão
-            data_venda_input = st.date_input("📅 Data da Venda", value=dt.date.today(), format="DD/MM/YYYY") # Default para hoje
-            
-            col_form_cartao, col_form_dinheiro, col_form_pix = st.columns(3)
-            with col_form_cartao:
-                valor_cartao_input = st.number_input("💳 Cartão (R$)", min_value=0.0, value=None, format="%.2f", placeholder="Ex: 150.75")
-            with col_form_dinheiro:
-                valor_dinheiro_input = st.number_input("💵 Dinheiro (R$)", min_value=0.0, value=None, format="%.2f", placeholder="Ex: 80.00")
-            with col_form_pix:
-                valor_pix_input = st.number_input("📱 PIX (R$)", min_value=0.0, value=None, format="%.2f", placeholder="Ex: 120.50")
-
-            submit_button_registro = st.form_submit_button("✅ Registrar Venda na Planilha", use_container_width=True, type="primary")
-
-            if submit_button_registro:
-                # Coleta valores, tratando None como 0.0
-                cartao_submetido = valor_cartao_input if valor_cartao_input is not None else 0.0
-                dinheiro_submetido = valor_dinheiro_input if valor_dinheiro_input is not None else 0.0
-                pix_submetido = valor_pix_input if valor_pix_input is not None else 0.0
-                total_venda_submetida = cartao_submetido + dinheiro_submetido + pix_submetido
-
-                if total_venda_submetida > 0:
-                    worksheet_gspread = get_worksheet() # Obter o objeto worksheet
-                    if worksheet_gspread:
-                        sucesso_registro = add_data_to_sheet(data_venda_input, cartao_submetido, dinheiro_submetido, pix_submetido, worksheet_gspread)
-                        if sucesso_registro:
-                            st.success(f"✅ Venda de {format_brl(total_venda_submetida)} registrada para {data_venda_input.strftime('%d/%m/%Y')}!")
-                            st.session_state.show_table = True # Ativa exibição da tabela
-                            # Força recarregamento dos dados para a tabela mostrar a última info
-                            df_raw_apos_registro = read_sales_data() 
-                            df_processed_apos_registro = process_data(df_raw_apos_registro)
-                            
-                            # Aplica filtros atuais à tabela de visualização
-                            df_filtrado_apos_registro = df_processed_apos_registro.copy()
-                            if selected_anos_filtro:
-                                df_filtrado_apos_registro = df_filtrado_apos_registro[df_filtrado_apos_registro["Ano"].isin(selected_anos_filtro)]
-                            if selected_meses_num_filtro:
-                                df_filtrado_apos_registro = df_filtrado_apos_registro[df_filtrado_apos_registro["Mês"].isin(selected_meses_num_filtro)]
-                            
-                            st.session_state.last_registered_data = df_filtrado_apos_registro # Armazena para exibir
-                            st.rerun() # Recarrega o script para atualizar visualizações
-                        else:
-                            st.error("❌ Falha ao registrar a venda na planilha. Verifique os logs ou tente novamente.")
-                    else:
-                        st.error("❌ Falha ao conectar à planilha Google Sheets. Venda não registrada.")
-                else:
-                    st.warning("⚠️ O valor total da venda deve ser maior que zero para registrar.")
-
-        # Exibição da tabela de vendas (após registro ou se show_table for True)
+        with st.form(key="reg_venda_form", clear_on_submit=True):
+            data_venda_reg = st.date_input("📅 Data da Venda", value=dt.date.today(), format="DD/MM/YYYY")
+            c1_form, c2_form, c3_form = st.columns(3)
+            with c1_form: val_cartao_reg = st.number_input("💳 Cartão (R$)", min_value=0.0, value=None, format="%.2f", placeholder="150.75")
+            with c2_form: val_din_reg = st.number_input("💵 Dinheiro (R$)", min_value=0.0, value=None, format="%.2f", placeholder="80.00")
+            with c3_form: val_pix_reg = st.number_input("📱 PIX (R$)", min_value=0.0, value=None, format="%.2f", placeholder="120.50")
+            submit_reg = st.form_submit_button("✅ Registrar Venda", use_container_width=True, type="primary")
+            if submit_reg:
+                cart_sub, din_sub, pix_sub = (val_cartao_reg or 0.0), (val_din_reg or 0.0), (val_pix_reg or 0.0)
+                total_sub = cart_sub + din_sub + pix_sub
+                if total_sub > 0:
+                    ws_gspread = get_worksheet()
+                    if ws_gspread and add_data_to_sheet(data_venda_reg, cart_sub, din_sub, pix_sub, ws_gspread):
+                        st.success(f"✅ Venda de {format_brl(total_sub)} registrada para {data_venda_reg.strftime('%d/%m/%Y')}!")
+                        st.session_state.show_table = True
+                        df_raw_post_reg = read_sales_data()
+                        df_proc_post_reg = process_data(df_raw_post_reg)
+                        df_filt_post_reg = df_proc_post_reg.copy()
+                        if sel_anos_main: df_filt_post_reg = df_filt_post_reg[df_filt_post_reg["Ano"].isin(sel_anos_main)]
+                        if sel_meses_main: df_filt_post_reg = df_filt_post_reg[df_filt_post_reg["Mês"].isin(sel_meses_main)]
+                        st.session_state.last_registered_data = df_filt_post_reg
+                        st.rerun()
+                    elif not ws_gspread: st.error("❌ Falha ao conectar à planilha.")
+                    else: st.error("❌ Falha ao registrar na planilha.")
+                else: st.warning("⚠️ Valor total da venda deve ser > 0.")
         if st.session_state.show_table and st.session_state.last_registered_data is not None and not st.session_state.last_registered_data.empty:
-            st.markdown("---")
-            st.subheader("🧾 Tabela de Vendas (Visão Conforme Filtros Atuais)")
-            df_para_exibir = st.session_state.last_registered_data
-            
-            # Colunas desejadas para a tabela e suas configurações
-            colunas_tabela = ["DataFormatada", "DiaSemana", "Cartão", "Dinheiro", "Pix", "Total"]
-            colunas_existentes_tabela = [col for col in colunas_tabela if col in df_para_exibir.columns]
-            
-            if colunas_existentes_tabela:
-                st.dataframe(df_para_exibir[colunas_existentes_tabela].sort_values(by="DataFormatada", ascending=False), # Ordena pela data mais recente
-                               use_container_width=True,
-                               height=400, # Altura fixa para a tabela com scroll
-                               hide_index=True, # Esconde o índice do DataFrame
-                               column_config={ # Configurações específicas das colunas
-                                    "DataFormatada": st.column_config.TextColumn("Data", help="Data da venda no formato DD/MM/AAAA"),
-                                    "DiaSemana": st.column_config.TextColumn("Dia da Semana"),
-                                    "Cartão": st.column_config.NumberColumn("Cartão (R$)", format="R$ %.2f"),
-                                    "Dinheiro": st.column_config.NumberColumn("Dinheiro (R$)", format="R$ %.2f"),
-                                    "Pix": st.column_config.NumberColumn("PIX (R$)", format="R$ %.2f"),
-                                    "Total": st.column_config.NumberColumn("Total Venda (R$)", format="R$ %.2f", help="Soma de Cartão, Dinheiro e PIX")
-                                })
-            else:
-                st.info("Colunas necessárias para a tabela não foram encontradas nos dados processados.")
-        elif st.session_state.show_table:
-            st.info("Nenhum dado para exibir na tabela com os filtros atuais.")
+            st.markdown("---"); st.subheader("🧾 Tabela de Vendas (Conforme Filtros)")
+            df_show_reg = st.session_state.last_registered_data
+            cols_show_reg = ["DataFormatada", "DiaSemana", "Cartão", "Dinheiro", "Pix", "Total"]
+            cols_exist_reg = [c for c in cols_show_reg if c in df_show_reg.columns]
+            if cols_exist_reg:
+                st.dataframe(df_show_reg[cols_exist_reg].sort_values(by="DataFormatada", ascending=False), use_container_width=True, height=400, hide_index=True,
+                               column_config={"DataFormatada": "Data", "DiaSemana": "Dia da Semana",
+                                              "Cartão": st.column_config.NumberColumn("Cartão (R$)", format="R$ %.2f"),
+                                              "Dinheiro": st.column_config.NumberColumn("Dinheiro (R$)", format="R$ %.2f"),
+                                              "Pix": st.column_config.NumberColumn("PIX (R$)", format="R$ %.2f"),
+                                              "Total": st.column_config.NumberColumn("Total (R$)", format="R$ %.2f")})
+            else: st.info("Colunas para tabela não encontradas.")
+        elif st.session_state.show_table: st.info("Nenhum dado para tabela com filtros atuais.")
 
-
-    # Conteúdo da Aba de Dashboard
-    with tab_dashboard_geral:
+    with tab_dash:
         st.header("📊 Dashboard Geral de Vendas")
         st.markdown("---")
-
-        if df_filtered_main.empty:
-            st.warning("⚠️ Não há dados para exibir no dashboard com os filtros selecionados. Ajuste os filtros na barra lateral ou registre novas vendas.")
+        if df_filt_main.empty:
+            st.warning("⚠️ Sem dados para dashboard com filtros. Ajuste ou registre vendas.")
         else:
-            st.subheader("📈 Resumo Financeiro do Período")
-            display_resumo_financeiro(df_filtered_main)
-            st.markdown("---")
-
-            st.subheader("🗓️ Calendário de Atividade de Vendas")
-            # Determinar o ano para exibir o heatmap (prioriza o primeiro ano selecionado, ou o ano atual se nos filtros)
-            ano_para_heatmap = None
-            if selected_anos_filtro:
-                ano_para_heatmap = selected_anos_filtro[0] # Pega o primeiro ano da lista de filtros
-            elif datetime.now().year in anos_disponiveis_df: # Se nenhum filtro de ano, mas ano atual tem dados
-                 ano_para_heatmap = datetime.now().year
-            
-            if ano_para_heatmap:
+            st.subheader("📈 Resumo Financeiro"); display_resumo_financeiro(df_filt_main); st.markdown("---")
+            st.subheader("🗓️ Calendário de Atividade"); ano_hm_dash = sel_anos_main[0] if sel_anos_main else (datetime.now().year if datetime.now().year in anos_disp_main else None)
+            if ano_hm_dash:
                 try:
-                    # Passar o DataFrame já filtrado por ano/mês (df_filtered_main) para o heatmap se fizer sentido,
-                    # ou o df_processed se o heatmap deve sempre mostrar o ano inteiro independente do filtro de mês.
-                    # Para o calendário anual, faz mais sentido usar df_processed e filtrar apenas pelo ano dentro da função.
-                    heatmap_anual_fig, df_dados_ano_heatmap = criar_calendario_anual_espacamento_correto(df_processed, ano_para_heatmap)
-                    if heatmap_anual_fig:
-                        st.plotly_chart(heatmap_anual_fig, use_container_width=True)
+                    hm_anual_fig, df_ano_hm_dash = criar_calendario_anual_espacamento_correto(df_processed_main, ano_hm_dash)
+                    if hm_anual_fig: st.plotly_chart(hm_anual_fig, use_container_width=True)
+                    if df_ano_hm_dash is not None and not df_ano_hm_dash.empty:
+                        hm_mensal_fig, _ = criar_heatmap_vendas_mensais_espacamento_correto(df_ano_hm_dash)
+                        if hm_mensal_fig: st.plotly_chart(hm_mensal_fig, use_container_width=True)
+                except Exception as e_hm_dash: st.error(f"Erro ao gerar heatmap: {e_hm_dash}")
+            else: st.info("Selecione ano ou registre vendas para calendário.")
+            st.markdown("---"); st.subheader("💹 Faturamento Acumulado"); grafico_acum_dash = create_cumulative_evolution_chart(df_filt_main)
+            if grafico_acum_dash: st.altair_chart(grafico_acum_dash, use_container_width=True)
+            st.markdown("---"); st.subheader("💳 Métodos de Pagamento"); display_metodos_pagamento(df_filt_main); st.markdown("---")
+            st.subheader("📅 Análise Diária e Distribuição"); c_daily, c_radial = st.columns([3,2])
+            with c_daily:
+                st.markdown("###### Vendas Diárias por Método"); grafico_vendas_diarias_emp_dash = create_advanced_daily_sales_chart(df_filt_main)
+                if grafico_vendas_diarias_emp_dash: st.altair_chart(grafico_vendas_diarias_emp_dash, use_container_width=True)
+            with c_radial:
+                st.markdown("###### Distribuição por Pagamento"); grafico_radial_dash = create_radial_plot(df_filt_main)
+                if grafico_radial_dash: st.altair_chart(grafico_radial_dash, use_container_width=True)
+            st.markdown("---"); st.subheader("📊 Média de Vendas por Dia da Semana"); grafico_wd_dash = create_weekday_sales_chart(df_filt_main)
+            if grafico_wd_dash: st.altair_chart(grafico_wd_dash, use_container_width=True)
+            st.markdown("---"); display_ranking_e_frequencia(df_filt_main); st.markdown("---")
+            display_insights(df_filt_main); st.markdown("---")
 
-                        # Heatmap Mensal abaixo do Anual, usando os dados processados do ano do heatmap anual
-                        if df_dados_ano_heatmap is not None and not df_dados_ano_heatmap.empty:
-                            heatmap_mensal_fig, _ = criar_heatmap_vendas_mensais_espacamento_correto(df_dados_ano_heatmap)
-                            if heatmap_mensal_fig:
-                                st.plotly_chart(heatmap_mensal_fig, use_container_width=True)
-                            # else: st.info(f"Não foi possível gerar o heatmap mensal para {ano_para_heatmap}.") # Opcional
-                        # else: st.info(f"Dados anuais para heatmap mensal não disponíveis para {ano_para_heatmap}.") # Opcional
-                    # else: st.info(f"Não foi possível gerar o heatmap anual para {ano_para_heatmap}.") # Opcional
-                except Exception as e_heatmap:
-                    st.error(f"Ocorreu um erro ao gerar o heatmap de calendário: {e_heatmap}")
-            else:
-                st.info("Selecione um ano no filtro ou registre vendas para visualizar o calendário de atividades.")
-            st.markdown("---")
-
-            st.subheader("💹 Evolução do Faturamento Acumulado no Período")
-            grafico_acumulado = create_cumulative_evolution_chart(df_filtered_main)
-            if grafico_acumulado:
-                st.altair_chart(grafico_acumulado, use_container_width=True)
-            # else: st.info("Não foi possível gerar o gráfico de evolução acumulada.") # Opcional
-
-            st.markdown("---")
-            st.subheader("💳 Métodos de Pagamento no Período")
-            display_metodos_pagamento(df_filtered_main)
-            st.markdown("---")
-
-            st.subheader("📅 Análise Diária e Distribuição por Pagamento")
-            col_graf_diario, col_graf_radial = st.columns([3, 2]) # Ajustar proporção se necessário
-            with col_graf_diario:
-                st.markdown("###### Vendas Diárias por Método (Empilhado)")
-                grafico_vendas_diarias_emp = create_advanced_daily_sales_chart(df_filtered_main) # Função corrigida
-                if grafico_vendas_diarias_emp:
-                    st.altair_chart(grafico_vendas_diarias_emp, use_container_width=True)
-                # else: st.info("Sem dados de vendas diárias para exibir em formato empilhado.") # Opcional
-            with col_graf_radial:
-                st.markdown("###### Distribuição Percentual por Pagamento")
-                grafico_radial_pagamentos = create_radial_plot(df_filtered_main)
-                if grafico_radial_pagamentos:
-                    st.altair_chart(grafico_radial_pagamentos, use_container_width=True)
-                # else: st.info("Sem dados para o gráfico de distribuição de pagamentos.") # Opcional
-            
-            st.markdown("---")
-            st.subheader("📊 Média de Vendas por Dia da Semana")
-            grafico_media_dia_semana = create_weekday_sales_chart(df_filtered_main)
-            if grafico_media_dia_semana:
-                st.altair_chart(grafico_media_dia_semana, use_container_width=True)
-            # else: st.info("Sem dados para o gráfico de média por dia da semana.") # Opcional
-            
-            st.markdown("---")
-            display_ranking_e_frequencia(df_filtered_main) # Ranking e Frequência
-            st.markdown("---")
-            display_insights(df_filtered_main) # Insights Automáticos
-            st.markdown("---")
-
-    # Conteúdo da Aba de Análise Contábil
-    with tab_analise_contabil:
-        st.header("💰 Análise Contábil e Financeira (DRE)")
-        st.markdown("""
-        Esta análise apresenta uma Demonstração do Resultado do Exercício (DRE) simplificada, 
-        considerando o regime tributário do **Simples Nacional** (alíquota estimada de 6% sobre a receita tributável de Dinheiro e PIX).
-        As premissas de custos e despesas são configuráveis abaixo.
-        """)
+    with tab_cont:
+        st.header("💰 Análise Contábil e Financeira (DRE)"); st.markdown("""DRE simplificada (Simples Nacional ~6% sobre Dinheiro/PIX). Premissas configuráveis abaixo."""); st.markdown("---")
+        with st.container(border=True):
+            st.subheader("⚙️ Parâmetros para Simulação da DRE"); c_p_dre1, c_p_dre2, c_p_dre3 = st.columns(3)
+            with c_p_dre1: sal_base_dre = st.number_input("💼 Salário Base (Mensal R$)", min_value=0.0, value=1550.0, format="%.2f", help="Salário base. Encargos (~55%) adicionados.", key="sal_dre")
+            with c_p_dre2: cust_cont_dre = st.number_input("📋 Contabilidade (Mensal R$)", min_value=0.0, value=316.0, format="%.2f", key="cont_dre")
+            with c_p_dre3: cpv_perc_dre = st.number_input("📦 CPV (%)", min_value=0.0, max_value=100.0, value=30.0, format="%.1f", help="% da Receita Bruta para insumos.", key="cpv_dre")
         st.markdown("---")
-
-        with st.container(border=True): # Container para os parâmetros
-            st.subheader("⚙️ Parâmetros para Simulação da DRE")
-            col_param_dre1, col_param_dre2, col_param_dre3 = st.columns(3)
-            with col_param_dre1:
-                salario_base_dre = st.number_input(
-                    "💼 Salário Base Funcionário (Mensal R$)",
-                    min_value=0.0, value=1550.0, format="%.2f",
-                    help="Salário base mensal. Encargos de ~55% são adicionados automaticamente.",
-                    key="salario_dre_input"
-                )
-            with col_param_dre2:
-                custo_contadora_dre = st.number_input(
-                    "📋 Honorários Contábeis (Mensal R$)",
-                    min_value=0.0, value=316.0, format="%.2f",
-                    help="Valor mensal dos serviços contábeis.",
-                    key="contadora_dre_input"
-                )
-            with col_param_dre3:
-                cpv_percentual_dre = st.number_input(
-                    "📦 Custo dos Produtos Vendidos (%)",
-                    min_value=0.0, max_value=100.0, value=30.0, format="%.1f",
-                    help="Percentual da Receita Bruta destinado à compra de insumos/produtos.",
-                    key="cpv_dre_input"
-                )
-
-        st.markdown("---")
-
-        if df_filtered_main.empty or 'Total' not in df_filtered_main.columns:
-            st.warning("📊 **Não há dados de vendas suficientes no período filtrado para a análise contábil.** Ajuste os filtros ou registre mais vendas.")
+        if df_filt_main.empty or 'Total' not in df_filt_main.columns:
+            st.warning("📊 Sem dados de vendas para análise contábil. Ajuste filtros ou registre vendas.")
         else:
-            # Calcula resultados financeiros com base nos parâmetros e dados filtrados
-            resultados_dre = calculate_financial_results(
-                df_filtered_main, salario_base_dre, custo_contadora_dre, cpv_percentual_dre
-            )
-
-            with st.container(border=True): # Container para a DRE textual
-                create_dre_textual(resultados_dre, df_filtered_main, selected_anos_filtro)
-
+            res_dre_cont = calculate_financial_results(df_filt_main, sal_base_dre, cust_cont_dre, cpv_perc_dre)
+            with st.container(border=True): create_dre_textual(res_dre_cont, df_filt_main, sel_anos_main)
+            st.markdown("---"); grafico_dash_dre = create_financial_dashboard_altair(res_dre_cont)
+            if grafico_dash_dre: st.altair_chart(grafico_dash_dre, use_container_width=True)
             st.markdown("---")
-
-            # Gráfico visual da DRE
-            grafico_dashboard_dre = create_financial_dashboard_altair(resultados_dre)
-            if grafico_dashboard_dre:
-                st.altair_chart(grafico_dashboard_dre, use_container_width=True)
-            # else: st.info("Não foi possível gerar o dashboard visual da DRE.") # Opcional
-
+            with st.container(border=True):
+                st.subheader("📈 Margens e Indicadores"); c_m_dre1, c_m_dre2, c_m_dre3 = st.columns(3)
+                with c_m_dre1:
+                    st.metric("📊 Margem Bruta", f"{res_dre_cont['margem_bruta']:.2f}%", help="Lucro Bruto / Receita Líquida")
+                    st.metric("🏛️ Carga Trib. (Simples)", f"{(res_dre_cont['impostos_sobre_vendas']/res_dre_cont['receita_bruta']*100) if res_dre_cont['receita_bruta'] else 0:.2f}%", help="% Simples / Receita Bruta")
+                with c_m_dre2:
+                    st.metric("💼 Margem Operacional", f"{res_dre_cont['margem_operacional']:.2f}%", help="Lucro Operacional / Receita Líquida")
+                    st.metric("👥 Peso Desp. Pessoal", f"{(res_dre_cont['despesas_com_pessoal']/res_dre_cont['receita_bruta']*100) if res_dre_cont['receita_bruta'] else 0:.2f}%", help="% Desp. Pessoal / Receita Bruta")
+                with c_m_dre3:
+                    st.metric("💰 Margem Líquida", f"{res_dre_cont['margem_liquida']:.2f}%", help="Lucro Líquido / Receita Líquida")
+                    st.metric("📦 Peso do CPV", f"{(res_dre_cont['custo_produtos_vendidos']/res_dre_cont['receita_bruta']*100) if res_dre_cont['receita_bruta'] else 0:.2f}%", help="% CPV / Receita Bruta")
             st.markdown("---")
-
-            with st.container(border=True): # Container para margens e indicadores
-                st.subheader("📈 Análise de Margens e Indicadores Chave")
-                col_margens1, col_margens2, col_margens3 = st.columns(3)
-
-                with col_margens1:
-                    st.metric(
-                        "📊 Margem Bruta",
-                        f"{resultados_dre['margem_bruta']:.2f}%",
-                        help="Lucro Bruto / Receita Líquida. Indica a rentabilidade após o CPV."
-                    )
-                    st.metric(
-                        "🏛️ Carga Tributária (Simples s/ Vendas)",
-                        f"{(resultados_dre['impostos_sobre_vendas'] / resultados_dre['receita_bruta'] * 100) if resultados_dre['receita_bruta'] > 0 else 0:.2f}%",
-                        help="Percentual do Simples Nacional sobre a Receita Bruta."
-                    )
-                with col_margens2:
-                    st.metric(
-                        "💼 Margem Operacional",
-                        f"{resultados_dre['margem_operacional']:.2f}%",
-                        help="Lucro Operacional / Receita Líquida. Eficiência operacional."
-                    )
-                    st.metric(
-                        "👥 Peso Desp. Pessoal",
-                        f"{(resultados_dre['despesas_com_pessoal'] / resultados_dre['receita_bruta'] * 100) if resultados_dre['receita_bruta'] > 0 else 0:.2f}%",
-                        help="Percentual das Despesas com Pessoal sobre a Receita Bruta."
-                    )
-                with col_margens3:
-                    st.metric(
-                        "💰 Margem Líquida",
-                        f"{resultados_dre['margem_liquida']:.2f}%",
-                        help="Lucro Líquido / Receita Líquida. Rentabilidade final do negócio."
-                    )
-                    st.metric(
-                        "📦 Peso do CPV",
-                        f"{(resultados_dre['custo_produtos_vendidos'] / resultados_dre['receita_bruta'] * 100) if resultados_dre['receita_bruta'] > 0 else 0:.2f}%",
-                        help="Percentual do Custo dos Produtos Vendidos sobre a Receita Bruta."
-                    )
-            st.markdown("---")
-
             with st.expander("📋 Ver Resumo Executivo da DRE", expanded=False):
-                col_exec_dre1, col_exec_dre2 = st.columns(2)
-                with col_exec_dre1:
-                    st.markdown("**💰 Receitas:**")
-                    st.write(f"• Receita Bruta Total: {format_brl(resultados_dre['receita_bruta'])}")
-                    st.write(f"• Receita Líquida Total: {format_brl(resultados_dre['receita_liquida'])}")
-                    st.markdown("**📊 Resultados:**")
-                    st.write(f"• Lucro Bruto: {format_brl(resultados_dre['lucro_bruto'])}")
-                    st.write(f"• Lucro Operacional (EBIT): {format_brl(resultados_dre['lucro_operacional'])}")
-                    st.write(f"• Lucro Líquido Final: {format_brl(resultados_dre['lucro_liquido'])}")
-                with col_exec_dre2:
-                    st.markdown("**💸 Custos e Despesas Deduzidos:**")
-                    st.write(f"• Impostos (Simples s/ Vendas): {format_brl(resultados_dre['impostos_sobre_vendas'])}")
-                    st.write(f"• Custo dos Produtos (CPV): {format_brl(resultados_dre['custo_produtos_vendidos'])}")
-                    st.write(f"• Despesas com Pessoal: {format_brl(resultados_dre['despesas_com_pessoal'])}")
-                    st.write(f"• Serviços Contábeis: {format_brl(resultados_dre['despesas_contabeis'])}")
-                    st.markdown("**🎯 Avaliação Rápida do Resultado:**")
-                    if resultados_dre['lucro_liquido'] > 0:
-                        st.success(f"✅ Resultado POSITIVO de {format_brl(resultados_dre['lucro_liquido'])} no período!")
-                    elif resultados_dre['lucro_liquido'] == 0:
-                        st.warning(f"⚠️ Resultado NULO (Break-even) no período.")
-                    else:
-                        st.error(f"❌ Resultado NEGATIVO de {format_brl(resultados_dre['lucro_liquido'])} no período. Atenção!")
-            
-            st.info("""
-            💡 **Nota Importante:** Esta DRE é uma simulação simplificada para fins gerenciais. 
-            Taxas de cartão não foram explicitamente deduzidas (considera-se que a receita de cartão já é líquida dessas taxas ou que elas seriam parte de "Outras Despesas").
-            Para uma análise contábil formal e decisões fiscais, consulte sempre um contador qualificado.
-            """)
+                c_exec_dre1, c_exec_dre2 = st.columns(2)
+                with c_exec_dre1:
+                    st.markdown("**💰 Receitas:**"); st.write(f"• Receita Bruta: {format_brl(res_dre_cont['receita_bruta'])}"); st.write(f"• Receita Líquida: {format_brl(res_dre_cont['receita_liquida'])}")
+                    st.markdown("**📊 Resultados:**"); st.write(f"• Lucro Bruto: {format_brl(res_dre_cont['lucro_bruto'])}"); st.write(f"• Lucro Operacional: {format_brl(res_dre_cont['lucro_operacional'])}"); st.write(f"• Lucro Líquido: {format_brl(res_dre_cont['lucro_liquido'])}")
+                with c_exec_dre2:
+                    st.markdown("**💸 Custos e Despesas:**"); st.write(f"• Impostos (Simples): {format_brl(res_dre_cont['impostos_sobre_vendas'])}"); st.write(f"• CPV: {format_brl(res_dre_cont['custo_produtos_vendidos'])}"); st.write(f"• Desp. Pessoal: {format_brl(res_dre_cont['despesas_com_pessoal'])}"); st.write(f"• Contabilidade: {format_brl(res_dre_cont['despesas_contabeis'])}")
+                    st.markdown("**🎯 Avaliação Rápida:**")
+                    if res_dre_cont['lucro_liquido'] > 0: st.success(f"✅ POSITIVO de {format_brl(res_dre_cont['lucro_liquido'])}!")
+                    elif res_dre_cont['lucro_liquido'] == 0: st.warning("⚠️ NULO (Break-even).")
+                    else: st.error(f"❌ NEGATIVO de {format_brl(res_dre_cont['lucro_liquido'])}. Atenção!")
+            st.info("💡 Nota: DRE simplificada. Taxas de cartão não deduzidas explicitamente. Consulte um contador.")
 
 if __name__ == "__main__":
     main()
