@@ -516,82 +516,123 @@ def create_radial_plot(df):
     return radial_plot
 
 # Gráfico de Vendas Diárias (Stacked Bar Chart with Rounded Corners)
-
 def create_advanced_daily_sales_chart(df):
-    """Cria um gráfico de vendas diárias sem animação."""
+    """Cria um gráfico de vendas diárias empilhadas com visual limpo e profissional."""
     if df.empty or 'Data' not in df.columns:
         return None
     
+    # Verificar se as colunas necessárias existem
+    required_cols = ['Cartão', 'Dinheiro', 'Pix']
+    if not all(col in df.columns for col in required_cols):
+        return None
+    
     df_sorted = df.sort_values('Data').copy()
+    df_sorted.dropna(subset=['Data'] + required_cols, inplace=True)
     
     if df_sorted.empty:
         return None
     
-    df_melted = df_sorted.melt(
-        id_vars=['Data', 'DataFormatada', 'Total'],
-        value_vars=['Cartão', 'Dinheiro', 'Pix'],
+    # Agrupar por data para evitar duplicatas
+    df_grouped = df_sorted.groupby('Data')[required_cols].sum().reset_index()
+    
+    # Criar DataFormatada para labels do eixo X
+    df_grouped['DataFormatada'] = df_grouped['Data'].dt.strftime('%d/%m')
+    
+    df_melted = df_grouped.melt(
+        id_vars=['Data', 'DataFormatada'],
+        value_vars=required_cols,
         var_name='Método',
         value_name='Valor'
     )
     
+    # Filtrar apenas valores positivos
     df_melted = df_melted[df_melted['Valor'] > 0]
     
     if df_melted.empty:
         return None
     
+    # Cores exatas da imagem: laranja, verde, azul acinzentado
+    cores_exatas = ['#FF8C00', '#70AD47', '#5B9BD5']
+    
+    # Definir ordem dos métodos para empilhamento correto
+    ordem_metodos = ['Dinheiro', 'Pix', 'Cartão']  # De baixo para cima
+    
     bars = alt.Chart(df_melted).mark_bar(
-        size=20
+        size=30,  # Barras mais grossas
+        stroke='white',  # Separação branca entre segmentos
+        strokeWidth=1.5
     ).encode(
         x=alt.X(
-            'Data:T',
-            title='Data',
-            axis=alt.Axis(format='%d/%m', labelAngle=-45, labelFontSize=12)
+            'DataFormatada:O',
+            title='',  # Sem título
+            axis=alt.Axis(
+                labelAngle=0,  # Labels retos
+                labelFontSize=10,
+                labelColor='#666666',
+                grid=False,
+                ticks=False,
+                domain=False,
+                labelPadding=8
+            )
         ),
         y=alt.Y(
             'Valor:Q',
-            title='Valor (R$)',
+            title='',  # Sem título
             stack='zero',
-            axis=alt.Axis(labelFontSize=12)
+            axis=alt.Axis(
+                labelFontSize=10,
+                labelColor='#666666',
+                grid=True,
+                gridColor='#D0D0D0',  # Grid mais visível
+                gridOpacity=1,
+                ticks=False,
+                domain=False,
+                tickCount=6
+            )
         ),
         color=alt.Color(
             'Método:N',
-            scale=alt.Scale(range=CORES_MODO_ESCURO[:3]),
+            scale=alt.Scale(
+                domain=ordem_metodos,
+                range=cores_exatas
+            ),
             legend=alt.Legend(
-                title="Método de Pagamento",
+                title=None,  # Sem título na legenda
                 orient='bottom',
                 direction='horizontal',
-                titleFontSize=14,
-                labelFontSize=12,
+                labelFontSize=11,
+                labelColor='#333333',
                 symbolSize=100,
-                symbolStrokeWidth=2,
-                titlePadding=10,
-                padding=10,
-                rowPadding=5,
-                columnPadding=15
+                symbolType='square',
+                padding=15,
+                offset=20,
+                columns=3,  # 3 colunas na legenda
+                symbolStrokeWidth=0
             )
         ),
+        order=alt.Order(
+            'Método:N',
+            sort=ordem_metodos  # Controla ordem do empilhamento
+        ),
         tooltip=[
-            alt.Tooltip('DataFormatada:N', title='Data'),
+            alt.Tooltip('DataFormatada:O', title='Data'),
             alt.Tooltip('Método:N', title='Método'),
             alt.Tooltip('Valor:Q', title='Valor (R$)', format=',.2f')
         ]
     ).properties(
-        title=alt.TitleParams(
-            text="Vendas Diárias por Método de Pagamento",
-            fontSize=16,
-            anchor='start'
-        ),
-        height=500,
-        width=1000,
-        padding={'bottom': 100}
+        height=350,
+        width=900,
+        padding={'top': 10, 'bottom': 80, 'left': 50, 'right': 20}
     ).configure_view(
-        stroke=None
+        stroke=None,
+        fill='white'
     ).configure(
-        background='transparent'
+        background='white'
+    ).configure_axis(
+        labelLimit=0  # Remove limite de caracteres nos labels
     )
     
     return bars
-
 
 # Gráfico de Média de Vendas por Dia da Semana
 def create_weekday_sales_chart(df):
