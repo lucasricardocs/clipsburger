@@ -128,10 +128,10 @@ def inject_css():
 
     @media (max-width: 768px) { /* Ajustes para mobile */
         .logo-image {
-            width: 100px; /* Logo menor */
+            width: 200px; /* Logo menor */
         }
         .logo-container h1 {
-            font-size: 1.6rem; /* Título menor */
+            font-size: 3rem; /* Título menor */
         }
         .stMetric {
             min-height: 90px; /* Métricas menores */
