@@ -184,12 +184,6 @@ def inject_css():
         20% {{
             filter: drop-shadow(0 0 15px rgba(147, 112, 219, 0.8)) drop-shadow(0 0 30px rgba(147, 112, 219, 0.6)); /* Roxo */
         }}
-        40% {{
-            filter: drop-shadow(0 0 15px rgba(255, 215, 0, 0.8)) drop-shadow(0 0 30px rgba(255, 215, 0, 0.6)); /* Amarelo dourado */
-        }}
-        60% {{
-            filter: drop-shadow(0 0 15px rgba(255, 69, 0, 0.8)) drop-shadow(0 0 30px rgba(255, 69, 0, 0.6)); /* Vermelho */
-        }}
         80% {{
             filter: drop-shadow(0 0 15px rgba(138, 43, 226, 0.8)) drop-shadow(0 0 30px rgba(138, 43, 226, 0.6)); /* Roxo azulado */
         }}
