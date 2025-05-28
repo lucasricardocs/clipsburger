@@ -201,15 +201,27 @@ def inject_css():
         color: {COR_TEXTO_SECUNDARIO};
         padding-left: 10px;
     }}
-
-    /* --- Tabs --- */
+    
+    /* --- Tabs (MELHORADO) --- */
     .stTabs [role="tab"] {{
-        padding: 0.8rem 1.5rem;
+        padding: 1rem 1.8rem;  /* AUMENTADO: padding */
         font-weight: 600;
+        font-size: 1.1rem;     /* ADICIONADO: fonte maior */
         border-radius: 8px 8px 0 0;
+        transition: all 0.3s ease;
     }}
     .stTabs [aria-selected="true"] {{
         background-color: {COR_FUNDO_CONTAINER};
+        color: {COR_TEXTO_PRINCIPAL};
+    }}
+    .stTabs [role="tab"]:hover {{
+        background-color: rgba(87, 163, 242, 0.1);
+    }}
+
+    /* REMOVER separador acima das tabs */
+    .stTabs > div > div > div > div:first-child {{
+        border-bottom: none !important;
+        margin-bottom: 0 !important;
     }}
 
     /* --- Tabelas --- */
@@ -508,21 +520,22 @@ def create_stacked_daily_sales_chart(df):
     """Cria gráfico de barras empilhadas arredondadas de vendas diárias por método."""
     if df.empty or "Data" not in df.columns or not any(col in df.columns for col in ["Cartão", "Dinheiro", "Pix"]):
         return None
+    
     df_chart = df.copy()
     df_chart.dropna(subset=["Data", "Cartão", "Dinheiro", "Pix"], inplace=True)
     if df_chart.empty:
         return None
 
     # Agrupar por dia caso haja múltiplas entradas
-    df_daily = df_chart.groupby(pd.Grouper(key="Data", freq="D"))[["Cartão", "Dinheiro", "Pix"]].sum().reset_index()
-    df_daily = df_daily[(df_daily["Cartão"] > 0) | (df_daily["Dinheiro"] > 0) | (df_daily["Pix"] > 0)] # Mostrar apenas dias com vendas
+    df_daily = df_chart.groupby(df_chart["Data"].dt.date)[["Cartão", "Dinheiro", "Pix"]].sum().reset_index()
+    df_daily = df_daily[(df_daily["Cartão"] > 0) | (df_daily["Dinheiro"] > 0) | (df_daily["Pix"] > 0)]
 
     if df_daily.empty:
         return None
 
-    # Transformar dados para formato longo (necessário para stacked bar)
+    # Transformar dados para formato longo
     df_long = df_daily.melt(id_vars=["Data"], value_vars=["Cartão", "Dinheiro", "Pix"], var_name="Método", value_name="Valor")
-    df_long = df_long[df_long["Valor"] > 0] # Remover valores zero para não empilhar
+    df_long = df_long[df_long["Valor"] > 0]
 
     if df_long.empty:
         return None
@@ -534,7 +547,9 @@ def create_stacked_daily_sales_chart(df):
     bars = alt.Chart(df_long).mark_bar(
         cornerRadiusTopLeft=8,
         cornerRadiusTopRight=8,
-        opacity=0.9
+        opacity=0.9,
+        stroke="white",  # ADICIONADO: borda branca
+        strokeWidth=1    # ADICIONADO: espessura da borda
     ).encode(
         x=alt.X("Data:T", title="Data", axis=alt.Axis(
             format="%d/%m", 
@@ -549,20 +564,21 @@ def create_stacked_daily_sales_chart(df):
             grid=False
         )),
         color=alt.Color("Método:N", scale=color_scale, legend=alt.Legend(title="Método", orient="bottom", titleColor=COR_TEXTO_PRINCIPAL, labelColor=COR_TEXTO_SECUNDARIO)),
-        order=alt.Order("Método", sort="descending"), # Ordem de empilhamento
+        order=alt.Order("Método", sort="descending"),
         tooltip=[
             alt.Tooltip("Data:T", title="Data", format="%d/%m/%Y"),
             alt.Tooltip("Método:N", title="Método"),
             alt.Tooltip("Valor:Q", title="Valor", format=",.2f")
         ]
     ).properties(
-        height=500, # Altura fixa
-        background="transparent" # Background transparente
+        height=500,
+        background="transparent"
     ).configure_view(
-        strokeOpacity=0 # Remove borda
-    ).interactive() # Habilita zoom e pan
+        strokeOpacity=0
+    ).interactive()
 
     return bars
+
 
 # Gráfico de Média de Vendas por Dia da Semana
 def create_weekday_sales_chart(df):
@@ -637,16 +653,18 @@ def create_cumulative_evolution_chart(df):
     )
 
     area = base.mark_area(
-        line={"color": cor_linha, "strokeWidth": 2.5},
+        line={"color": cor_linha, "strokeWidth": 3},  # AUMENTADO: strokeWidth
         color=alt.Gradient(
             gradient="linear",
             stops=[
                 alt.GradientStop(color=cor_inicio_grad, offset=0),
                 alt.GradientStop(color=cor_fim_grad, offset=1)
             ],
-            x1=1, x2=1, y1=1, y2=0 # Gradiente vertical
+            x1=1, x2=1, y1=1, y2=0
         ),
-        opacity=0.7
+        opacity=0.8,  # AUMENTADO: opacity
+        stroke=cor_linha,  # ADICIONADO: stroke explícito
+        strokeWidth=3      # ADICIONADO: strokeWidth explícito
     ).encode(
         y=alt.Y("Total_Acumulado:Q", title="Faturamento Acumulado (R$)", axis=alt.Axis(
             labelColor=COR_TEXTO_SECUNDARIO, 
@@ -717,9 +735,12 @@ def criar_calendario_anual_espacamento_correto(df, ano):
         st.warning(f"Dados insuficientes para gerar o heatmap de calendário para {ano}.")
         return None, None
 
+    # CORREÇÃO: Converter ano para int Python
+    ano = int(ano)
+    
     df_year = df[df["Data"].dt.year == ano].copy()
     if df_year.empty:
-        st.info(f"Sem dados de vendas para o ano {year}.")
+        st.info(f"Sem dados de vendas para o ano {ano}.")
         return None, None
 
     # Criar range completo do ano CORRETO
@@ -752,7 +773,7 @@ def criar_calendario_anual_espacamento_correto(df, ano):
     df_ano_completo['data_str'] = df_ano_completo['Data'].dt.strftime('%d/%m/%Y')
     df_ano_completo['dia_semana'] = df_ano_completo['Data'].dt.dayofweek  # 0=Monday
 
-    # Calcular semana do ano corretamente
+    # CORREÇÃO: Usar datetime.date com int Python
     primeiro_dia = datetime.date(ano, 1, 1)
     primeiro_dia_semana = primeiro_dia.weekday()  # Que dia da semana é 01/01
 
@@ -1600,7 +1621,8 @@ def main():
             year_to_display = current_year if current_year in selected_anos else (selected_anos[0] if selected_anos else None)
             if year_to_display:
                 try:
-                    # Usa as funções EXATAS do exemplo
+                    # CORREÇÃO: Garantir que year_to_display seja int Python
+                    year_to_display = int(year_to_display)
                     heatmap_fig_anual, df_ano_completo_heatmap = criar_calendario_anual_espacamento_correto(df_filtered, year_to_display)
                     if heatmap_fig_anual:
                         st.plotly_chart(heatmap_fig_anual, use_container_width=True)
