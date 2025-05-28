@@ -43,7 +43,7 @@ def inject_css():
     <style>
     /* --- Geral --- */
     .stApp {{
-        background: linear-gradient(135deg, #1e2a4a 0%, #2a3a5f 50%, #2d2a5a 100%); /* Background azulado/arroxeado menos escuro */
+        background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%);
         color: {COR_TEXTO_PRINCIPAL};
     }}
 
