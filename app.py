@@ -1720,7 +1720,7 @@ def main():
             with col_daily:
                 st.markdown("###### Vendas Diárias por Método (Empilhado)")
                 # Usa a nova função de gráfico empilhado
-                daily_stacked_chart = create_stacked_daily_sales_chart(df_filtered)
+                daily_stacked_chart = create_advanced_daily_sales_chart(df_filtered)  # ← CORRIGIDO
                 if daily_stacked_chart:
                     st.altair_chart(daily_stacked_chart, use_container_width=True)
                 else:
