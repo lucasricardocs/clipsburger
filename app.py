@@ -43,7 +43,7 @@ def inject_css():
     <style>
     /* --- Geral --- */
     .stApp {{
-        background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%);
+        background: linear-gradient(135deg, #1e2a4a 0%, #2a3a5f 50%, #2d2a5a 100%); /* Background azulado/arroxeado menos escuro */
         color: {COR_TEXTO_PRINCIPAL};
     }}
 
@@ -176,16 +176,16 @@ def inject_css():
         animation: celestialPulse 8s ease-in-out infinite;
     }}
 
-    /* Keyframes para a aura pulsante celestial multicolorida */
+    /* Keyframes para a aura pulsante celestial (azul, roxo e branco) */
     @keyframes celestialPulse {{
         0%, 100% {{
             filter: drop-shadow(0 0 15px rgba(100, 149, 237, 0.8)) drop-shadow(0 0 30px rgba(100, 149, 237, 0.6)); /* Azul celestial */
         }}
-        20% {{
-            filter: drop-shadow(0 0 15px rgba(147, 112, 219, 0.8)) drop-shadow(0 0 30px rgba(147, 112, 219, 0.6)); /* Roxo */
+        33% {{
+            filter: drop-shadow(0 0 15px rgba(147, 112, 219, 0.8)) drop-shadow(0 0 30px rgba(147, 112, 219, 0.6)); /* Roxo azulado */
         }}
-        80% {{
-            filter: drop-shadow(0 0 15px rgba(138, 43, 226, 0.8)) drop-shadow(0 0 30px rgba(138, 43, 226, 0.6)); /* Roxo azulado */
+        66% {{
+            filter: drop-shadow(0 0 15px rgba(255, 255, 255, 0.9)) drop-shadow(0 0 30px rgba(255, 255, 255, 0.7)); /* Branco */
         }}
     }}
 
@@ -715,7 +715,7 @@ def create_cumulative_evolution_chart(df):
 
     return chart
 
-# Função para criar o Heatmap de Calendário (ATUALIZADO)
+# Função para criar o Heatmap de Calendário (CORRIGIDA)
 def create_calendar_heatmap(df, year):
     """Cria um heatmap de calendário de vendas para um ano específico usando Plotly.
        Utiliza os dados do DataFrame processado e o estilo do exemplo.
@@ -863,7 +863,7 @@ def create_calendar_heatmap(df, year):
         margin=dict(l=20, r=80, t=50, b=20) # Ajustar margens
     )
     
-    # Criar heatmap mensal (NOVO)
+    # Criar heatmap mensal (CORRIGIDO)
     # Agrupar dados por mês
     monthly_data = df_year.groupby(df_year["Data"].dt.month)["Total"].sum()
     monthly_data = monthly_data.reindex(range(1, 13), fill_value=0)
@@ -898,12 +898,18 @@ def create_calendar_heatmap(df, year):
             name=calendar.month_name[mes]
         ))
     
-    # Configurar layout do gráfico mensal
-    fig_mensal.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(color=COR_TEXTO_PRINCIPAL, family="Arial, sans-serif", size=14),
-        xaxis=dict(
+    # Configurar layout do gráfico mensal (SIMPLIFICADO para evitar erros)
+    try:
+        fig_mensal.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            height=250,
+            margin=dict(l=20, r=20, t=20, b=20),
+            showlegend=False
+        )
+        
+        # Configurar eixos separadamente para evitar erros
+        fig_mensal.update_xaxes(
             title="",
             tickmode="array",
             tickvals=list(range(1, 13)),
@@ -912,20 +918,24 @@ def create_calendar_heatmap(df, year):
             showgrid=False,
             zeroline=False,
             showline=False
-        ),
-        yaxis=dict(
+        )
+        
+        fig_mensal.update_yaxes(
             title="Vendas Mensais (R$)",
             titlefont=dict(color=COR_TEXTO_PRINCIPAL, size=14),
             tickfont=dict(color=COR_TEXTO_SECUNDARIO, size=14),
             showgrid=False,
             zeroline=False,
             showline=False
-        ),
-        height=250,
-        margin=dict(l=20, r=20, t=20, b=20),
-        showlegend=False,
-        bargap=0.15
-    )
+        )
+    except Exception as e:
+        st.warning(f"Aviso: Configuração simplificada do gráfico mensal devido a erro: {e}")
+        # Configuração mínima em caso de erro
+        fig_mensal.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            height=250
+        )
 
     return fig_anual, fig_mensal
 
@@ -1376,15 +1386,19 @@ def main():
             # Tenta gerar para o ano atual ou o último ano com dados
             year_to_display = current_year if current_year in selected_anos else (selected_anos[0] if selected_anos else None)
             if year_to_display:
-                heatmap_fig_anual, heatmap_fig_mensal = create_calendar_heatmap(df_filtered, year_to_display)
-                if heatmap_fig_anual:
-                    st.plotly_chart(heatmap_fig_anual, use_container_width=True)
-                    
-                    # Adicionar o gráfico mensal abaixo do diário
-                    if heatmap_fig_mensal:
-                        st.plotly_chart(heatmap_fig_mensal, use_container_width=True)
-                else:
-                    st.info(f"Não foi possível gerar o heatmap para {year_to_display}.")
+                try:
+                    heatmap_fig_anual, heatmap_fig_mensal = create_calendar_heatmap(df_filtered, year_to_display)
+                    if heatmap_fig_anual:
+                        st.plotly_chart(heatmap_fig_anual, use_container_width=True)
+                        
+                        # Adicionar o gráfico mensal abaixo do diário
+                        if heatmap_fig_mensal:
+                            st.plotly_chart(heatmap_fig_mensal, use_container_width=True)
+                    else:
+                        st.info(f"Não foi possível gerar o heatmap para {year_to_display}.")
+                except Exception as e:
+                    st.error(f"Erro ao gerar o heatmap de calendário: {e}")
+                    st.info("Continuando com os outros gráficos...")
             else:
                 st.info("Selecione um ano no filtro para visualizar o calendário.")
             st.markdown("--- ")
