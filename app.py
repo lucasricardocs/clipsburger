@@ -131,7 +131,7 @@ def inject_css():
             width: 200px; /* Logo menor */
         }
         .logo-container h1 {
-            font-size: 3rem; /* Título menor */
+            font-size: 2.2rem; /* Título menor */
         }
         .stMetric {
             min-height: 90px; /* Métricas menores */
