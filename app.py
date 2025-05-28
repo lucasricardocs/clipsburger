@@ -37,13 +37,13 @@ COR_SEPARADOR = "#455a64"
 dias_semana_ordem = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"]
 meses_ordem = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
 
-# CSS para melhorar a aparência (Com logo maior e aura pulsante)
+# CSS para melhorar a aparência (Com logo maior e aura pulsante multicolorida)
 def inject_css():
     st.markdown(f"""
     <style>
     /* --- Geral --- */
     .stApp {{
-        background: linear-gradient(135deg, #0f121a 0%, #161b22 50%, #1a2333 100%);
+        background: linear-gradient(135deg, #1e2a4a 0%, #2a3a5f 50%, #2d2a5a 100%); /* Background azulado/arroxeado menos escuro */
         color: {COR_TEXTO_PRINCIPAL};
     }}
 
@@ -152,42 +152,51 @@ def inject_css():
     }}
 
     /* --- Logo e Título --- */
+    .header-container {{
+        display: flex;
+        justify-content: center; /* Centraliza horizontalmente */
+        align-items: center;
+        margin-bottom: 25px;
+        padding-bottom: 15px;
+        border-bottom: 1px solid {COR_SEPARADOR};
+    }}
+    
     .logo-container {{
         display: flex;
         align-items: center;
-        gap: 5px; /* Aumentar espaço */
+        gap: 5px; /* Espaço reduzido entre logo e título */
         margin-bottom: 5px;
-        padding-bottom: 5px; /* Aumentar padding */
-        border-bottom: 1px solid {COR_SEPARADOR};
+        padding-bottom: 5px;
     }}
+    
     .logo-image {{
-        width: 210px; /* Logo Maior */
+        width: 210px; /* Logo maior conforme solicitado */
         height: auto;
-        /* Animação da aura */
-        animation: celestialPulse 12s ease-in-out infinite;
+        /* Animação da aura com cores celestiais variadas */
+        animation: celestialPulse 8s ease-in-out infinite;
     }}
 
-    /* Keyframes para a aura pulsante celestial */
+    /* Keyframes para a aura pulsante celestial multicolorida */
     @keyframes celestialPulse {{
         0%, 100% {{
-            filter: drop-shadow(0 0 10px rgba(173, 216, 230, 0.7)) drop-shadow(0 0 20px rgba(173, 216, 230, 0.5)); /* Light Blue */
+            filter: drop-shadow(0 0 15px rgba(100, 149, 237, 0.8)) drop-shadow(0 0 30px rgba(100, 149, 237, 0.6)); /* Azul celestial */
         }}
         20% {{
-            filter: drop-shadow(0 0 16px rgba(230, 230, 250, 0.8)) drop-shadow(0 0 32px rgba(230, 230, 250, 0.6)); /* Lavender */
+            filter: drop-shadow(0 0 15px rgba(147, 112, 219, 0.8)) drop-shadow(0 0 30px rgba(147, 112, 219, 0.6)); /* Roxo */
         }}
         40% {{
-            filter: drop-shadow(0 0 13px rgba(255, 255, 255, 0.9)) drop-shadow(0 0 26px rgba(255, 255, 255, 0.7)); /* Bright White */
+            filter: drop-shadow(0 0 15px rgba(255, 215, 0, 0.8)) drop-shadow(0 0 30px rgba(255, 215, 0, 0.6)); /* Amarelo dourado */
         }}
         60% {{
-            filter: drop-shadow(0 0 17px rgba(135, 206, 250, 0.8)) drop-shadow(0 0 34px rgba(135, 206, 250, 0.6)); /* Sky Blue */
+            filter: drop-shadow(0 0 15px rgba(255, 69, 0, 0.8)) drop-shadow(0 0 30px rgba(255, 69, 0, 0.6)); /* Vermelho */
         }}
         80% {{
-             filter: drop-shadow(0 0 14px rgba(192, 192, 192, 0.7)) drop-shadow(0 0 28px rgba(192, 192, 192, 0.5)); /* Silver hint */
+            filter: drop-shadow(0 0 15px rgba(138, 43, 226, 0.8)) drop-shadow(0 0 30px rgba(138, 43, 226, 0.6)); /* Roxo azulado */
         }}
     }}
 
     .logo-container h1 {{
-        font-size: 2.4rem; /* Título ligeiramente maior */
+        font-size: 2.4rem;
         margin: 0;
         padding-left: 10px;
         font-weight: 700;
@@ -246,7 +255,7 @@ def inject_css():
 
     /* --- Responsividade --- */
     @media (max-width: 992px) {{ 
-        .logo-image {{ width: 90px; }} /* Ajustar logo em tablet */
+        .logo-image {{ width: 180px; }} /* Ajustar logo em tablet */
         .logo-container h1 {{ font-size: 2rem; }}
         .stMetric {{ padding: 1rem; min-height: 100px; }}
         .insight-container {{ padding: 1.2rem; min-height: 140px; }}
@@ -256,8 +265,8 @@ def inject_css():
     }}
 
     @media (max-width: 768px) {{ 
-        .logo-image {{ width: 70px; }} /* Ajustar logo em mobile */
-        .logo-container {{ gap: 15px; }}
+        .logo-image {{ width: 150px; }} /* Ajustar logo em mobile */
+        .logo-container {{ gap: 10px; }}
         .logo-container h1 {{ font-size: 1.6rem; }}
         .logo-container p {{ font-size: 0.9rem; }}
         .stMetric {{ min-height: 90px; padding: 0.8rem; }}
@@ -271,7 +280,7 @@ def inject_css():
     }}
 
     @media (max-width: 480px) {{ 
-        .logo-image {{ width: 60px; }} /* Ajustar logo em mobile pequeno */
+        .logo-image {{ width: 120px; }} /* Ajustar logo em mobile pequeno */
         .logo-container h1 {{ font-size: 1.4rem; }}
         .stMetric > div > div {{ font-size: 1.3rem !important; }}
         .stMetric label {{ font-size: 0.85rem !important; }}
@@ -485,10 +494,12 @@ def create_radial_plot(df):
     radial_plot = base.mark_arc(innerRadius=30, stroke=COR_FUNDO_CONTAINER, strokeWidth=3).properties(
         height=500, # Altura fixa
     ).configure_view(
-        stroke=None
+        stroke=None,
+        strokeOpacity=0
     ).configure_axis(
         labelColor=COR_TEXTO_SECUNDARIO,
-        titleColor=COR_TEXTO_PRINCIPAL
+        titleColor=COR_TEXTO_PRINCIPAL,
+        grid=False
     ).configure_legend(
         titleColor=COR_TEXTO_PRINCIPAL,
         labelColor=COR_TEXTO_SECUNDARIO
@@ -496,9 +507,9 @@ def create_radial_plot(df):
 
     return radial_plot
 
-# Gráfico de Vendas Diárias (Barras + Linha Média)
+# Gráfico de Vendas Diárias (Barras Arredondadas + Linha Média)
 def create_advanced_daily_sales_chart(df):
-    """Cria gráfico de barras de vendas diárias com linha de média móvel."""
+    """Cria gráfico de barras arredondadas de vendas diárias com linha de média móvel."""
     if df.empty or "Data" not in df.columns or "Total" not in df.columns:
         return None
     df_chart = df.copy()
@@ -517,11 +528,27 @@ def create_advanced_daily_sales_chart(df):
     df_daily["Média Móvel (7 dias)"] = df_daily["Total"].rolling(window=7, center=True, min_periods=1).mean()
 
     base = alt.Chart(df_daily).encode(
-        x=alt.X("Data:T", title="Data", axis=alt.Axis(format="%d/%m", labelAngle=-45, labelColor=COR_TEXTO_SECUNDARIO, titleColor=COR_TEXTO_PRINCIPAL))
+        x=alt.X("Data:T", title="Data", axis=alt.Axis(
+            format="%d/%m", 
+            labelAngle=-45, 
+            labelColor=COR_TEXTO_SECUNDARIO, 
+            titleColor=COR_TEXTO_PRINCIPAL,
+            grid=False
+        ))
     )
 
-    bars = base.mark_bar(size=5, opacity=0.8).encode(
-        y=alt.Y("Total:Q", title="Vendas Diárias (R$)", axis=alt.Axis(labelColor=COR_TEXTO_SECUNDARIO, titleColor=COR_TEXTO_PRINCIPAL)),
+    # Barras arredondadas e mais grossas
+    bars = base.mark_bar(
+        cornerRadiusTopLeft=8,
+        cornerRadiusTopRight=8,
+        size=20, # Barras mais grossas
+        opacity=0.9
+    ).encode(
+        y=alt.Y("Total:Q", title="Vendas Diárias (R$)", axis=alt.Axis(
+            labelColor=COR_TEXTO_SECUNDARIO, 
+            titleColor=COR_TEXTO_PRINCIPAL,
+            grid=False
+        )),
         color=alt.value(CORES_MODO_ESCURO[0]), # Cor azul principal
         tooltip=[
             alt.Tooltip("Data:T", title="Data", format="%d/%m/%Y"),
@@ -529,8 +556,12 @@ def create_advanced_daily_sales_chart(df):
         ]
     )
 
-    line = base.mark_line(color=CORES_MODO_ESCURO[1], strokeWidth=2.5).encode(
-        y=alt.Y("Média Móvel (7 dias):Q", title="Média Móvel", axis=alt.Axis(labelColor=COR_TEXTO_SECUNDARIO, titleColor=COR_TEXTO_PRINCIPAL)),
+    line = base.mark_line(color=CORES_MODO_ESCURO[1], strokeWidth=3).encode(
+        y=alt.Y("Média Móvel (7 dias):Q", title="Média Móvel", axis=alt.Axis(
+            labelColor=COR_TEXTO_SECUNDARIO, 
+            titleColor=COR_TEXTO_PRINCIPAL,
+            grid=False
+        )),
         tooltip=[
             alt.Tooltip("Data:T", title="Data", format="%d/%m/%Y"),
             alt.Tooltip("Média Móvel (7 dias):Q", title="Média Móvel (7d)", format=",.2f")
@@ -541,6 +572,8 @@ def create_advanced_daily_sales_chart(df):
         y="independent" # Escalas Y independentes
     ).properties(
         height=500 # Altura fixa
+    ).configure_view(
+        strokeOpacity=0 # Remove borda
     ).interactive() # Habilita zoom e pan
 
     return chart
@@ -557,9 +590,21 @@ def create_weekday_sales_chart(df):
     if weekday_avg.empty:
         return None
 
-    chart = alt.Chart(weekday_avg).mark_bar(cornerRadius=5).encode(
-        x=alt.X("DiaSemana:O", title="Dia da Semana", sort=dias_semana_ordem, axis=alt.Axis(labelAngle=-45, labelColor=COR_TEXTO_SECUNDARIO, titleColor=COR_TEXTO_PRINCIPAL)),
-        y=alt.Y("Total:Q", title="Média de Vendas (R$)", axis=alt.Axis(labelColor=COR_TEXTO_SECUNDARIO, titleColor=COR_TEXTO_PRINCIPAL)),
+    chart = alt.Chart(weekday_avg).mark_bar(
+        cornerRadius=8, # Bordas arredondadas
+        size=30 # Barras mais grossas
+    ).encode(
+        x=alt.X("DiaSemana:O", title="Dia da Semana", sort=dias_semana_ordem, axis=alt.Axis(
+            labelAngle=-45, 
+            labelColor=COR_TEXTO_SECUNDARIO, 
+            titleColor=COR_TEXTO_PRINCIPAL,
+            grid=False
+        )),
+        y=alt.Y("Total:Q", title="Média de Vendas (R$)", axis=alt.Axis(
+            labelColor=COR_TEXTO_SECUNDARIO, 
+            titleColor=COR_TEXTO_PRINCIPAL,
+            grid=False
+        )),
         color=alt.Color("DiaSemana:N", legend=None, scale=alt.Scale(range=CORES_MODO_ESCURO)), # Cores diferentes por dia
         tooltip=[
             alt.Tooltip("DiaSemana:O", title="Dia"),
@@ -567,12 +612,14 @@ def create_weekday_sales_chart(df):
         ]
     ).properties(
         height=500 # Altura fixa
+    ).configure_view(
+        strokeOpacity=0 # Remove borda
     )
     return chart
 
-# Gráfico de Evolução Patrimonial Acumulado (NOVO)
-def create_cumulative_evolution_chart(df, target_value=None):
-    """Cria gráfico de área da evolução acumulada de vendas com alvo."""
+# Gráfico de Evolução Patrimonial Acumulado (ATUALIZADO)
+def create_cumulative_evolution_chart(df):
+    """Cria gráfico de área da evolução acumulada de vendas com destaque no último valor."""
     if df.empty or "Data" not in df.columns or "Total" not in df.columns:
         return None
 
@@ -588,8 +635,18 @@ def create_cumulative_evolution_chart(df, target_value=None):
     cor_inicio_grad = "white"
     cor_fim_grad = "darkgreen"
 
+    # Obter o último valor para destacar
+    ultimo_valor = df_sorted["Total_Acumulado"].iloc[-1] if not df_sorted.empty else 0
+    ultimo_data = df_sorted["Data"].iloc[-1] if not df_sorted.empty else None
+
     base = alt.Chart(df_sorted).encode(
-        x=alt.X("Data:T", title="Data", axis=alt.Axis(format="%d/%m/%Y", labelAngle=-45, labelColor=COR_TEXTO_SECUNDARIO, titleColor=COR_TEXTO_PRINCIPAL))
+        x=alt.X("Data:T", title="Data", axis=alt.Axis(
+            format="%d/%m/%Y", 
+            labelAngle=-45, 
+            labelColor=COR_TEXTO_SECUNDARIO, 
+            titleColor=COR_TEXTO_PRINCIPAL,
+            grid=False
+        ))
     )
 
     area = base.mark_area(
@@ -604,55 +661,79 @@ def create_cumulative_evolution_chart(df, target_value=None):
         ),
         opacity=0.7
     ).encode(
-        y=alt.Y("Total_Acumulado:Q", title="Faturamento Acumulado (R$)", axis=alt.Axis(labelColor=COR_TEXTO_SECUNDARIO, titleColor=COR_TEXTO_PRINCIPAL)),
+        y=alt.Y("Total_Acumulado:Q", title="Faturamento Acumulado (R$)", axis=alt.Axis(
+            labelColor=COR_TEXTO_SECUNDARIO, 
+            titleColor=COR_TEXTO_PRINCIPAL,
+            grid=False
+        )),
         tooltip=[
             alt.Tooltip("Data:T", title="Data", format="%d/%m/%Y"),
             alt.Tooltip("Total_Acumulado:Q", title="Acumulado (R$)", format=",.2f")
         ]
     )
 
-    # Adicionar linha de meta (alvo)
-    if target_value is not None and isinstance(target_value, (int, float)) and target_value > 0:
-        target_data = pd.DataFrame({"meta": [target_value]})
-        rule = alt.Chart(target_data).mark_rule(color="red", strokeDash=[5,5], strokeWidth=2).encode(
-            y="meta:Q",
-            tooltip=[alt.Tooltip("meta:Q", title="Meta", format=",.2f")]
+    # Adicionar ponto para destacar o último valor
+    if ultimo_data is not None:
+        point_data = pd.DataFrame({
+            "Data": [ultimo_data],
+            "Total_Acumulado": [ultimo_valor],
+            "Label": [f"Total: {format_brl(ultimo_valor)}"]
+        })
+        
+        point = alt.Chart(point_data).mark_circle(
+            size=100,
+            color="red",
+            opacity=0.8
+        ).encode(
+            x="Data:T",
+            y="Total_Acumulado:Q",
+            tooltip=[
+                alt.Tooltip("Data:T", title="Data", format="%d/%m/%Y"),
+                alt.Tooltip("Total_Acumulado:Q", title="Total Acumulado", format=",.2f")
+            ]
         )
-        # Adicionar texto da meta (alvo)
-        text = rule.mark_text(
+        
+        text = alt.Chart(point_data).mark_text(
             align="left",
             baseline="middle",
-            dx=5, # Deslocamento horizontal do texto
-            dy=-10, # Deslocamento vertical do texto
-            text=f"🎯 Meta: {format_brl(target_value)}",
-            color="red",
+            dx=15,
+            dy=-15,
             fontSize=14,
-            fontWeight="bold"
+            fontWeight="bold",
+            color="white"
+        ).encode(
+            x="Data:T",
+            y="Total_Acumulado:Q",
+            text="Label:N"
         )
-        chart = alt.layer(area, rule, text).properties(
+        
+        chart = alt.layer(area, point, text).properties(
             height=500 # Altura fixa
+        ).configure_view(
+            strokeOpacity=0 # Remove borda
         ).interactive()
     else:
         chart = area.properties(
             height=500 # Altura fixa
+        ).configure_view(
+            strokeOpacity=0 # Remove borda
         ).interactive()
 
     return chart
 
-# Função para criar o Heatmap de Calendário (NOVO - Adaptado do Exemplo)
-# @st.cache_data # Cache pode ser útil aqui se a geração for lenta
+# Função para criar o Heatmap de Calendário (ATUALIZADO)
 def create_calendar_heatmap(df, year):
     """Cria um heatmap de calendário de vendas para um ano específico usando Plotly.
        Utiliza os dados do DataFrame processado e o estilo do exemplo.
     """
     if df.empty or "Data" not in df.columns or "Total" not in df.columns:
         st.warning(f"Dados insuficientes para gerar o heatmap de calendário para {year}.")
-        return None
+        return None, None
 
     df_year = df[df["Data"].dt.year == year].copy()
     if df_year.empty:
         st.info(f"Sem dados de vendas para o ano {year}.")
-        return None
+        return None, None
 
     # Agrupar por data (caso haja múltiplas entradas no mesmo dia)
     daily_sales = df_year.groupby(df_year["Data"].dt.date)["Total"].sum()
@@ -689,13 +770,11 @@ def create_calendar_heatmap(df, year):
     weeknumbers = [d.isocalendar().week for d in dates_list]
 
     # Ajuste para semanas que começam no ano anterior ou terminam no próximo
-    # (Simplificação: usar weeknumber diretamente pode causar pequeno desalinhamento no início/fim do ano)
-    # Uma abordagem mais precisa envolveria calcular a semana relativa ao início do ano.
     first_day_weekday = start_date.weekday()
     x_positions = [(d.toordinal() - start_date.toordinal() + first_day_weekday) // 7 for d in dates_list]
     y_positions = weekdays
 
-    # Criar texto do hover
+    # Criar texto do hover (MAIOR)
     hover_texts = []
     df_details = df_year.groupby(df_year["Data"].dt.date).agg(
         Cartao=("Cartão", "sum"),
@@ -708,14 +787,14 @@ def create_calendar_heatmap(df, year):
         date_str = date.strftime("%d/%m/%Y")
         if total > 0:
             hover_text = (
-                f"📅 {date_str}<br>"
-                f"💰 Total: {format_brl(total)}<br>"
-                f"💳 Cartão: {format_brl(cartao)}<br>"
-                f"💵 Dinheiro: {format_brl(dinheiro)}<br>"
-                f"📱 Pix: {format_brl(pix)}"
+                f"<b>📅 {date_str}</b><br><br>"  # Texto maior e mais espaçado
+                f"<b>💰 Total:</b> {format_brl(total)}<br>"
+                f"<b>💳 Cartão:</b> {format_brl(cartao)}<br>"
+                f"<b>💵 Dinheiro:</b> {format_brl(dinheiro)}<br>"
+                f"<b>📱 Pix:</b> {format_brl(pix)}"
             )
         else:
-            hover_text = f"📅 {date_str}<br>❌ Sem vendas"
+            hover_text = f"<b>📅 {date_str}</b><br><br>❌ Sem vendas"
         hover_texts.append(hover_text)
 
     # Escala de cores (do exemplo)
@@ -731,8 +810,8 @@ def create_calendar_heatmap(df, year):
         [1.0, "#0D4428"]
     ]
 
-    # Criar a figura Plotly
-    fig = go.Figure(data=go.Heatmap(
+    # Criar a figura Plotly para o calendário anual
+    fig_anual = go.Figure(data=go.Heatmap(
         x=x_positions,
         y=y_positions,
         z=color_categories,
@@ -756,10 +835,10 @@ def create_calendar_heatmap(df, year):
         month_positions.append(week_num)
 
     # Layout (adaptado do exemplo, com ajustes para modo escuro)
-    fig.update_layout(
+    fig_anual.update_layout(
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(color=COR_TEXTO_PRINCIPAL, family="Arial, sans-serif"),
+        font=dict(color=COR_TEXTO_PRINCIPAL, family="Arial, sans-serif", size=14), # Fonte maior
         xaxis=dict(
             title="",
             showgrid=False,
@@ -767,7 +846,7 @@ def create_calendar_heatmap(df, year):
             tickmode="array",
             tickvals=month_positions,
             ticktext=month_names,
-            tickfont=dict(color=COR_TEXTO_SECUNDARIO, size=12),
+            tickfont=dict(color=COR_TEXTO_SECUNDARIO, size=14),
             side="top",
             tickangle=0,
             showline=False,
@@ -779,7 +858,7 @@ def create_calendar_heatmap(df, year):
             tickmode="array",
             tickvals=[0, 1, 2, 3, 4, 5, 6],
             ticktext=["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"],
-            tickfont=dict(color=COR_TEXTO_SECUNDARIO, size=12),
+            tickfont=dict(color=COR_TEXTO_SECUNDARIO, size=14),
             autorange="reversed", # Domingo no topo se y=6 for domingo
             showline=False,
             ticklen=0,
@@ -789,8 +868,72 @@ def create_calendar_heatmap(df, year):
         height=350, # Altura menor para calendário
         margin=dict(l=20, r=80, t=50, b=20) # Ajustar margens
     )
+    
+    # Criar heatmap mensal (NOVO)
+    # Agrupar dados por mês
+    monthly_data = df_year.groupby(df_year["Data"].dt.month)["Total"].sum()
+    monthly_data = monthly_data.reindex(range(1, 13), fill_value=0)
+    
+    # Criar figura para o heatmap mensal
+    fig_mensal = go.Figure()
+    
+    # Adicionar barras para cada mês
+    for i, (mes, valor) in enumerate(monthly_data.items()):
+        # Determinar cor baseada no valor (verde mais escuro para valores maiores)
+        if valor == 0:
+            cor = "#161b22"  # Sem vendas
+        elif valor < 5000:
+            cor = "#39D353"  # Verde mais claro
+        elif valor < 10000:
+            cor = "#37AB4B"  # Verde claro
+        elif valor < 15000:
+            cor = "#006D31"  # Verde médio
+        else:
+            cor = "#0D4428"  # Verde escuro
+            
+        # Texto do hover
+        hover_text = f"<b>{calendar.month_name[mes]} {year}</b><br><br><b>Total:</b> {format_brl(valor)}"
+        
+        # Adicionar barra
+        fig_mensal.add_trace(go.Bar(
+            x=[mes],
+            y=[valor],
+            marker_color=cor,
+            width=0.8,
+            hovertemplate=hover_text + "<extra></extra>",
+            name=calendar.month_name[mes]
+        ))
+    
+    # Configurar layout do gráfico mensal
+    fig_mensal.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color=COR_TEXTO_PRINCIPAL, family="Arial, sans-serif", size=14),
+        xaxis=dict(
+            title="",
+            tickmode="array",
+            tickvals=list(range(1, 13)),
+            ticktext=[calendar.month_abbr[i] for i in range(1, 13)],
+            tickfont=dict(color=COR_TEXTO_SECUNDARIO, size=14),
+            showgrid=False,
+            zeroline=False,
+            showline=False
+        ),
+        yaxis=dict(
+            title="Vendas Mensais (R$)",
+            titlefont=dict(color=COR_TEXTO_PRINCIPAL, size=14),
+            tickfont=dict(color=COR_TEXTO_SECUNDARIO, size=14),
+            showgrid=False,
+            zeroline=False,
+            showline=False
+        ),
+        height=250,
+        margin=dict(l=20, r=20, t=20, b=20),
+        showlegend=False,
+        bargap=0.15
+    )
 
-    return fig
+    return fig_anual, fig_mensal
 
 # --- Funções de Análise e Exibição (MOVIMENTADAS E AJUSTADAS) ---
 
@@ -893,15 +1036,31 @@ def display_frequencia_trabalho(df):
     df_freq = pd.DataFrame(index=all_days)
     df_freq["Trabalhado"] = 0
     dias_unicos_trabalhados = df["Data"].dt.date.unique()
-    df_freq.loc[df_freq.index.date_isin(dias_unicos_trabalhados), "Trabalhado"] = 1
+    
+    # Versão corrigida - compatível com todas as versões do pandas
+    for data in dias_unicos_trabalhados:
+        mask = df_freq.index.date == data
+        df_freq.loc[mask, "Trabalhado"] = 1
 
     # Preparar dados para um gráfico simples (ex: barras mensais de dias trabalhados)
     df_freq["AnoMês"] = df_freq.index.strftime("%Y-%m")
     dias_trabalhados_mes = df_freq.groupby("AnoMês")["Trabalhado"].sum().reset_index()
 
-    chart = alt.Chart(dias_trabalhados_mes).mark_bar(cornerRadius=3).encode(
-        x=alt.X("AnoMês", title="Mês", axis=alt.Axis(labelAngle=-45, labelColor=COR_TEXTO_SECUNDARIO, titleColor=COR_TEXTO_PRINCIPAL)),
-        y=alt.Y("Trabalhado", title="Dias Trabalhados", axis=alt.Axis(labelColor=COR_TEXTO_SECUNDARIO, titleColor=COR_TEXTO_PRINCIPAL)),
+    chart = alt.Chart(dias_trabalhados_mes).mark_bar(
+        cornerRadius=8, # Bordas arredondadas
+        size=20 # Barras mais grossas
+    ).encode(
+        x=alt.X("AnoMês", title="Mês", axis=alt.Axis(
+            labelAngle=-45, 
+            labelColor=COR_TEXTO_SECUNDARIO, 
+            titleColor=COR_TEXTO_PRINCIPAL,
+            grid=False
+        )),
+        y=alt.Y("Trabalhado", title="Dias Trabalhados", axis=alt.Axis(
+            labelColor=COR_TEXTO_SECUNDARIO, 
+            titleColor=COR_TEXTO_PRINCIPAL,
+            grid=False
+        )),
         color=alt.value(CORES_MODO_ESCURO[2]), # Cor laranja
         tooltip=[
             alt.Tooltip("AnoMês", title="Mês"),
@@ -909,6 +1068,8 @@ def display_frequencia_trabalho(df):
         ]
     ).properties(
         height=300 # Altura menor para este gráfico
+    ).configure_view(
+        strokeOpacity=0 # Remove borda
     )
     st.altair_chart(chart, use_container_width=True)
 
@@ -1070,16 +1231,18 @@ def main():
     if "last_registered_data" not in st.session_state:
         st.session_state.last_registered_data = None
 
-    # Título com logo (usando st.columns para melhor controle)
-    col_logo, col_title = st.columns([1, 4]) # Ajustar proporção se necessário
-    with col_logo:
-        # Usar st.markdown para aplicar a classe CSS à imagem
-        st.markdown(f'<img src="{LOGO_URL}" class="logo-image">', unsafe_allow_html=True)
-    with col_title:
-        st.title("Sistema Financeiro - Clip's Burger")
-        st.caption(f"Gestão inteligente de vendas - {datetime.now().year}")
-    # O container da logo já tem a borda inferior no CSS
-    # st.markdown("--- ") # Remover separador extra aqui
+    # Título com logo centralizada
+    st.markdown("""
+    <div class="header-container">
+        <div class="logo-container">
+            <img src="https://raw.githubusercontent.com/lucasricardocs/clipsburger/main/logo.png" class="logo-image" alt="Logo Clips Burger">
+            <div>
+                <h1>SISTEMA FINANCEIRO - CLIP'S BURGER</h1>
+                <p>Gestão inteligente de vendas - 2025</p>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     # Carregar e processar dados
     df_raw = read_sales_data()
@@ -1219,9 +1382,13 @@ def main():
             # Tenta gerar para o ano atual ou o último ano com dados
             year_to_display = current_year if current_year in selected_anos else (selected_anos[0] if selected_anos else None)
             if year_to_display:
-                heatmap_fig = create_calendar_heatmap(df_filtered, year_to_display)
-                if heatmap_fig:
-                    st.plotly_chart(heatmap_fig, use_container_width=True)
+                heatmap_fig_anual, heatmap_fig_mensal = create_calendar_heatmap(df_filtered, year_to_display)
+                if heatmap_fig_anual:
+                    st.plotly_chart(heatmap_fig_anual, use_container_width=True)
+                    
+                    # Adicionar o gráfico mensal abaixo do diário
+                    if heatmap_fig_mensal:
+                        st.plotly_chart(heatmap_fig_mensal, use_container_width=True)
                 else:
                     st.info(f"Não foi possível gerar o heatmap para {year_to_display}.")
             else:
@@ -1230,9 +1397,7 @@ def main():
 
             # 3. Evolução Patrimonial Acumulada
             st.subheader("💹 Evolução do Faturamento Acumulado")
-            # Definir um valor de meta (exemplo, pode vir de um input)
-            meta_faturamento = 50000
-            cumulative_chart = create_cumulative_evolution_chart(df_filtered, target_value=meta_faturamento)
+            cumulative_chart = create_cumulative_evolution_chart(df_filtered)
             if cumulative_chart:
                 st.altair_chart(cumulative_chart, use_container_width=True)
             else:
