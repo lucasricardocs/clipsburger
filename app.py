@@ -155,9 +155,9 @@ def inject_css():
     .logo-container {{
         display: flex;
         align-items: center;
-        gap: 10px; /* Aumentar espaço */
-        margin-bottom: 25px;
-        padding-bottom: 20px; /* Aumentar padding */
+        gap: 5px; /* Aumentar espaço */
+        margin-bottom: 5px;
+        padding-bottom: 5px; /* Aumentar padding */
         border-bottom: 1px solid {COR_SEPARADOR};
     }}
     .logo-image {{
