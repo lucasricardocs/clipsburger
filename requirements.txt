@@ -4,5 +4,7 @@ pandas
 altair
 numpy
 google-auth
-python-dateutil
-plotly
+google-auth-oauthlib
+google-auth-httplib2
+matplotlib
+calplot
