@@ -155,13 +155,13 @@ def inject_css():
     .logo-container {{
         display: flex;
         align-items: center;
-        gap: 20px; /* Aumentar espaço */
+        gap: 10px; /* Aumentar espaço */
         margin-bottom: 25px;
         padding-bottom: 20px; /* Aumentar padding */
         border-bottom: 1px solid {COR_SEPARADOR};
     }}
     .logo-image {{
-        width: 110px; /* Logo Maior */
+        width: 210px; /* Logo Maior */
         height: auto;
         /* Animação da aura */
         animation: celestialPulse 12s ease-in-out infinite;
