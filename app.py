@@ -624,12 +624,9 @@ def create_advanced_daily_sales_chart(df):
         width=900,
         padding={'top': 10, 'bottom': 80, 'left': 50, 'right': 20}
     ).configure_view(
-        stroke=None,
-        fill='white'
+        stroke=None
     ).configure(
         background='white'
-    ).configure_axis(
-        labelLimit=0  # Remove limite de caracteres nos labels
     )
     
     return bars
