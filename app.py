@@ -1969,4 +1969,4 @@ def criar_heatmap_vendas_mensais(df_ano_completo, ano):
 
     return fig_mensal, vendas_mensais
 
-# --- Fim das Funções Heatmap ---
+# --- Fim das Funções Heatmap --
