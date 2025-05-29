@@ -1,4 +1,4 @@
-import stream lit as st
+import streamlit as st
 import gspread
 import pandas as pd
 import altair as alt
@@ -331,10 +331,10 @@ def get_worksheet():
             worksheet = spreadsheet.worksheet(WORKSHEET_NAME)
             return worksheet
         except SpreadsheetNotFound:
-            st.error(f"Planilha com ID \'{SPREADSHEET_ID}\' não encontrada. Verifique o ID e as permissões.")
+            st.error(f"Planilha com ID 	'{SPREADSHEET_ID}	' não encontrada. Verifique o ID e as permissões.")
             return None
         except Exception as e:
-            st.error(f"Erro ao acessar a planilha \'{WORKSHEET_NAME}\': {e}")
+            st.error(f"Erro ao acessar a planilha 	'{WORKSHEET_NAME}	': {e}")
             return None
     return None
 
@@ -363,7 +363,7 @@ def read_sales_data():
 
             # Tratar coluna 'Data'
             if "Data" not in df.columns:
-                 # st.warning("Coluna \'Data\' não encontrada na planilha. Criando coluna vazia.")
+                 # st.warning("Coluna 	'Data	' não encontrada na planilha. Criando coluna vazia.")
                  df["Data"] = pd.NaT # Cria coluna de data vazia
             else:
                 # Tenta converter para datetime, tratando diversos formatos comuns
@@ -410,7 +410,7 @@ def add_data_to_sheet(date_obj, cartao_val, dinheiro_val, pix_val, worksheet_obj
 def process_data(df_input):
     """Processa e prepara os dados de vendas para análise."""
     if df_input.empty or "Data" not in df_input.columns:
-        # st.warning("DataFrame de entrada vazio ou sem coluna \'Data\' para processamento.")
+        # st.warning("DataFrame de entrada vazio ou sem coluna 	'Data	' para processamento.")
         # Define colunas esperadas para um DataFrame vazio estruturado
         cols = ["Data", "Cartão", "Dinheiro", "Pix", "Total", "Ano", "Mês", "MêsNome", "AnoMês", "DataFormatada", "DiaSemana", "DiaDoMes"]
         empty_df = pd.DataFrame(columns=cols)
@@ -1140,7 +1140,7 @@ def create_financial_dashboard_altair(resultados_fin_dash):
     data_chart_fin = pd.DataFrame({
         'Componente': ['Receita Líquida', 'Custo Produtos', 'Despesas Pessoal', 'Despesas Contábeis', 'Lucro Líquido'],
         'Valor': [resultados_fin_dash['receita_liquida'], abs(resultados_fin_dash['custo_produtos_vendidos']), abs(resultados_fin_dash['despesas_com_pessoal']), abs(resultados_fin_dash['despesas_contabeis']), resultados_fin_dash['lucro_liquido']],
-        'Tipo': ['Receita', 'Custo', 'Despesa', 'Despesa', 'Resultado Final']
+        'Tipo': ['Receita', 'Custo', 'Despesa', 'Resultado Final']
     })
     data_chart_fin_filt = data_chart_fin[(data_chart_fin['Valor'] != 0) | (data_chart_fin['Componente'] == 'Lucro Líquido')]
     if data_chart_fin_filt.empty: return None
@@ -1277,7 +1277,7 @@ def main():
             display_insights(df_filt_main); st.markdown("---")
 
     with tab_cont:
-        st.header("💰 Análise Contábil e Financeira (DRE)"); st.markdown("""DRE simplificada (Simples Nacional ~6% sobre Dinheiro/PIX). Premissas configuráveis abaixo."""); st.markdown("---")
+        st.header("💰 Análise Contábil e Financeira (DRE)"); st.markdown("""DRE simplificada (Simples Nacional ~6% sobre Dinheiro/PIX). Premissas configuráveis abaixo.""""); st.markdown("---")
         with st.container(border=True):
             st.subheader("⚙️ Parâmetros para Simulação da DRE"); c_p_dre1, c_p_dre2, c_p_dre3 = st.columns(3)
             with c_p_dre1: sal_base_dre = st.number_input("💼 Salário Base (Mensal R$)", min_value=0.0, value=1550.0, format="%.2f", help="Salário base. Encargos (~55%) adicionados.", key="sal_dre")
