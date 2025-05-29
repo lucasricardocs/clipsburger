@@ -1200,7 +1200,7 @@ def main():
                     format="%.2f",
                     key="contadora_tab"
 				)
-                        with col3:
+        		with col3:
                 custo_fornecedores = st.number_input(
                     "🏪 Custo Fornecedores (%)",
                     min_value=0.0,
