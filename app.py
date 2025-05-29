@@ -1182,7 +1182,7 @@ def main():
             st.subheader("⚙️ Configurações Financeiras")
             
             col1, col2, col3 = st.columns(3)
-            
+
             with col1:
                 salario_minimo = st.number_input(
                     "💼 Salário Mínimo (R$)",
@@ -1191,16 +1191,17 @@ def main():
                     format="%.2f",
                     key="salario_tab4"
                 )
-            
+
             with col2:
                 custo_contadora_mensal = st.number_input(
                     "📋 Custo Contadora/Mês (R$)",
                     min_value=0.0,
                     value=st.session_state.get('contadora_tab4', 316.0),
                     format="%.2f",
-                    key="contadora_tab"
-				)
-        		with col3:
+                    key="contadora_tab4"
+                )
+
+            with col3:
                 custo_fornecedores = st.number_input(
                     "🏪 Custo Fornecedores (%)",
                     min_value=0.0,
@@ -1209,6 +1210,7 @@ def main():
                     format="%.1f",
                     key="fornecedores_tab4"
                 )
+
             
             # Filtros por ano
             if 'Ano' in df_processed.columns and not df_processed['Ano'].isnull().all():
