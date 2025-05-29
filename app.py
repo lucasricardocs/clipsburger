@@ -851,6 +851,12 @@ def display_insights(df_insights):
             else: tendencia_texto_ins = "base zero na penúltima semana"
         else: tendencia_texto_ins = "menos de 14 dias operados"
     
+    # Preparar texto da variação
+    if variacao_semanal_ins is not None:
+        variacao_texto = f" de <strong>{abs(variacao_semanal_ins):.1f}%</strong>"
+    else:
+        variacao_texto = ""
+    
     st.subheader("🧠 Insights Automáticos Rápidos")
     col_ins1, col_ins2, col_ins3 = st.columns(3)
     with col_ins1:
@@ -862,7 +868,7 @@ def display_insights(df_insights):
             st.markdown(f"<div class='insight-container' style='border-left-color:{CORES_MODO_ESCURO[1]};'><h4 style='color:{CORES_MODO_ESCURO[1]};'>💳 Pagamento Preferido</h4><p><strong>{melhor_metodo_ins}</strong> é o mais usado ({percentual_melhor_ins:.1f}% do total).</p>{sugestao_taxa_ins}</div>", unsafe_allow_html=True)
         else: st.markdown(f"<div class='insight-container' style='border-left-color:{COR_TEXTO_SECUNDARIO};'><h4 style='color:{COR_TEXTO_SECUNDARIO};'>💳 Pagamento Preferido</h4><p><i>Sem dados suficientes.</i></p></div>", unsafe_allow_html=True)
     with col_ins3:
-        st.markdown(f"<div class='insight-container' style='border-left-color:{tendencia_cor_ins};'><h4 style='color:{tendencia_cor_ins};'>📈 Tendência Semanal</h4><p>Comparando médias diárias, houve <strong>{tendencia_texto_ins}</strong>{' de <strong>' + str(abs(variacao_semanal_ins):.1f) + '%</strong>' if variacao_semanal_ins is not None else ''}.</p><p style='margin-top:0.5rem;font-size:0.9rem;color:#b0bec5;'><i>Sugestão: Analise fatores (promoções, eventos).</i></p></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='insight-container' style='border-left-color:{tendencia_cor_ins};'><h4 style='color:{tendencia_cor_ins};'>📈 Tendência Semanal</h4><p>Comparando médias diárias, houve <strong>{tendencia_texto_ins}</strong>{variacao_texto}.</p><p style='margin-top:0.5rem;font-size:0.9rem;color:#b0bec5;'><i>Sugestão: Analise fatores (promoções, eventos).</i></p></div>", unsafe_allow_html=True)
 
 # --- Funções da Análise Contábil ---
 
