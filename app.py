@@ -1070,15 +1070,15 @@ def main():
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        width: 200px;
-        height: 200px;
+        width: 150px;
+        height: 150px;
         background-image: url('https://raw.githubusercontent.com/lucasricardocs/clipsburger/refs/heads/main/logo.png');
         background-size: contain;
         background-repeat: no-repeat;
         background-position: center;
         filter: blur(20px) brightness(1.8) saturate(2.5);
         z-index: 1;
-        animation: celestialPulse 3s ease-in-out infinite alternate;
+        animation: celestialPulse 12s ease-in-out infinite alternate;
     }
     
     .logo-image {
