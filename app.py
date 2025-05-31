@@ -1400,7 +1400,7 @@ def main():
             st.divider()
 
              # Gráficos lado a lado - 2/3 para vendas diárias, 1/3 para radial
-            st.subheader("📊 Análise Diária e Métodos de Pagamento")
+            #st.subheader("📊 Análise Diária e Métodos de Pagamento")
             col_chart1, col_chart2 = st.columns([2, 1])
             
             with col_chart1:
