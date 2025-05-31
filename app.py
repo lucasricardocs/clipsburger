@@ -976,7 +976,7 @@ def create_activity_heatmap(df_input):
     months_chart = alt.Chart(month_labels).mark_text(
         align='center', # Centralizado acima da semana
         baseline='bottom',
-        fontSize=15,
+        fontSize=12,
         dy=-1,
         dx=-25, # Espaço acima do heatmap
         color='#A9A9A9' # Cor cinza claro para meses
@@ -999,7 +999,7 @@ def create_activity_heatmap(df_input):
         y=alt.Y('day_display_name:N', 
                 sort=['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'],
                 title=None,
-                axis=alt.Axis(labelAngle=0, labelFontSize=15, ticks=False, domain=False, grid=False, labelColor='#A9A9A9')),
+                axis=alt.Axis(labelAngle=0, labelFontSize=12, ticks=False, domain=False, grid=False, labelColor='#A9A9A9')),
         color=alt.Color('Total:Q',
             scale=alt.Scale(
                 # Usar cores do tema escuro, adaptadas para heatmap
@@ -1019,14 +1019,14 @@ def create_activity_heatmap(df_input):
         ]
     ).properties(
         width=800, # Ajustar largura
-        height=150  # Ajustar altura
+        height=200  # Ajustar altura
     )
 
     # Combinar gráfico final
     final_chart = alt.vconcat(
         months_chart,
         heatmap,
-        spacing=2 # Pequeno espaço entre meses e heatmap
+        spacing=1 # Pequeno espaço entre meses e heatmap
     ).configure_view(
         strokeWidth=0 # Sem borda ao redor do gráfico combinado
     ).configure_concat(
