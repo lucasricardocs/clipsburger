@@ -1070,8 +1070,8 @@ def main():
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        width: 120px;
-        height: 120px;
+        width: 175px;
+        height: 175px;
         background-image: url('https://raw.githubusercontent.com/lucasricardocs/clipsburger/refs/heads/main/logo.png');
         background-size: contain;
         background-repeat: no-repeat;
