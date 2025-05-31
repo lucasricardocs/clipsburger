@@ -391,7 +391,7 @@ def create_advanced_daily_sales_chart(df):
     bars = alt.Chart(df_melted).mark_bar(
         size=20,
         stroke='white',     # Cor da borda
-        strokeWidth=1.5     # Espessura da borda
+        strokeWidth=2     # Espessura da borda
     ).encode(
         x=alt.X(
             'Data:T',
@@ -407,19 +407,7 @@ def create_advanced_daily_sales_chart(df):
         color=alt.Color(
             'Método:N',
             scale=alt.Scale(range=CORES_MODO_ESCURO[:3]),
-            legend=alt.Legend(
-                title="Método de Pagamento",
-                orient='bottom',
-                direction='horizontal',
-                titleFontSize=14,
-                labelFontSize=12,
-                symbolSize=100,
-                symbolStrokeWidth=2,
-                titlePadding=10,
-                padding=10,
-                rowPadding=5,
-                columnPadding=15
-            )
+            legend=None
         ),
         tooltip=[
             alt.Tooltip('DataFormatada:N', title='Data'),
