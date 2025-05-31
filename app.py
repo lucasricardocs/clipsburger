@@ -808,18 +808,7 @@ def create_financial_dashboard_altair(resultados):
                 domain=['Receita', 'Dedução', 'CPV', 'Despesa', 'Resultado'],
                 range=[CORES_MODO_ESCURO[1], CORES_MODO_ESCURO[3], CORES_MODO_ESCURO[2], CORES_MODO_ESCURO[4], CORES_MODO_ESCURO[0]]
             ),
-            legend=alt.Legend(
-                title="Tipo",
-                orient='bottom',
-                direction='horizontal',
-                titleFontSize=14,
-                labelFontSize=12,
-                symbolSize=100,
-                symbolStrokeWidth=2,
-                titlePadding=10,
-                padding=10,
-                rowPadding=5,
-                columnPadding=15
+            legend=None
             )
         ),
         tooltip=[
