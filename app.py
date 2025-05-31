@@ -976,8 +976,9 @@ def create_activity_heatmap(df_input):
     months_chart = alt.Chart(month_labels).mark_text(
         align='center', # Centralizado acima da semana
         baseline='bottom',
-        fontSize=10,
-        dy=-5, # Espaço acima do heatmap
+        fontSize=15,
+        dy=-5,
+        dx=-20, # Espaço acima do heatmap
         color='#A9A9A9' # Cor cinza claro para meses
     ).encode(
         x=alt.X('week_corrected:O', axis=None), # Usar semana corrigida
@@ -989,8 +990,8 @@ def create_activity_heatmap(df_input):
     # Gráfico principal (heatmap)
     heatmap = alt.Chart(full_df).mark_rect(
         stroke='#ffffff', # Borda branca fina
-        strokeWidth=1.5,
-        cornerRadius=2 # Leve arredondamento
+        strokeWidth=1.1,
+        cornerRadius=1 # Leve arredondamento
     ).encode(
         x=alt.X('week_corrected:O', # Usar semana corrigida
                 title=None, 
@@ -1018,7 +1019,7 @@ def create_activity_heatmap(df_input):
         ]
     ).properties(
         width=800, # Ajustar largura
-        height=130  # Ajustar altura
+        height=150  # Ajustar altura
     )
 
     # Combinar gráfico final
