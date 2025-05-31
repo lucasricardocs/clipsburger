@@ -325,7 +325,7 @@ def create_cumulative_area_chart(df):
     # Cria o gráfico Altair
     area_chart = alt.Chart(df_sorted).mark_area(
         interpolate='monotone', # Suaviza a linha da área
-        line={'color': CORES_MODO_ESCURO[0], 'strokeWidth': 3}, # Estilo para a linha superior da área
+        line={'color': CORES_MODO_ESCURO[0], 'strokeWidth': 2}, # Estilo para a linha superior da área
         color=alt.Gradient( # Define o preenchimento em gradiente
             gradient='linear',
             stops=[
@@ -337,12 +337,12 @@ def create_cumulative_area_chart(df):
     ).encode(
         x=alt.X(
             'Data:T', # 'T' especifica o tipo de dado temporal
-            title='Data',
+            #title='Data',
             axis=alt.Axis(format='%d/%m', labelAngle=-45, labelFontSize=12) # Formata os rótulos do eixo x
         ),
         y=alt.Y(
             'Total_Acumulado:Q', # 'Q' especifica o tipo de dado quantitativo
-            title='Total de Vendas Acumulado (R$)',
+            #title='Total de Vendas Acumulado (R$)',
             axis=alt.Axis(labelFontSize=12) # Formata os rótulos do eixo y
         ),
         tooltip=[ # Define o que aparece ao passar o mouse
