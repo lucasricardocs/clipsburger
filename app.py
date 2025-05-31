@@ -1070,28 +1070,70 @@ def format_brl(value):
 # --- Interface Principal da Aplicação ---
 def main():
     # --- MODIFICAÇÃO DO LOGO E TÍTULO ---
+    # --- MODIFICAÇÃO DO LOGO E TÍTULO ---
     st.markdown("""
     <style>
     .logo-container {
         display: flex;
-        align-items: center; /* Centraliza verticalmente */
-        margin-bottom: 1rem; /* Espaço abaixo */
+        align-items: center;
+        margin-bottom: 1rem;
     }
+    
+    .logo-wrapper {
+        position: relative;
+        margin-right: 20px;
+    }
+    
     .logo-image {
-        width: 200px; /* Tamanho do logo */
+        width: 200px;
         height: auto;
-        margin-right: 20px; /* Espaço entre logo e título */
-        /* Efeito de aura branca transcendental */
-        filter: drop-shadow(0 0 15px rgba(255, 255, 255, 0.7)); 
+        position: relative;
+        z-index: 2;
+        border-radius: 10px;
     }
+    
+    .celestial-aura {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 250px;
+        height: 250px;
+        background: radial-gradient(circle, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.1) 40%, transparent 70%);
+        border-radius: 50%;
+        z-index: 1;
+        animation: celestialGlow 3s ease-in-out infinite alternate;
+    }
+    
+    @keyframes celestialGlow {
+        0% {
+            box-shadow: 
+                0 0 20px rgba(255, 255, 255, 0.8),
+                0 0 40px rgba(255, 255, 255, 0.6),
+                0 0 60px rgba(255, 255, 255, 0.4),
+                0 0 80px rgba(255, 255, 255, 0.3);
+            transform: translate(-50%, -50%) scale(1);
+        }
+        100% {
+            box-shadow: 
+                0 0 30px rgba(255, 255, 255, 1),
+                0 0 60px rgba(255, 255, 255, 0.8),
+                0 0 90px rgba(255, 255, 255, 0.6),
+                0 0 120px rgba(255, 255, 255, 0.4);
+            transform: translate(-50%, -50%) scale(1.1);
+        }
+    }
+    
     .title-container {
         /* O título e subtítulo ficam aqui */
     }
+    
     .title-main {
         margin: 0; 
         padding: 0;
         line-height: 1.2;
     }
+    
     .title-sub {
         margin: 0; 
         font-size: 14px; 
@@ -1101,18 +1143,20 @@ def main():
     }
     </style>
     """, unsafe_allow_html=True)
-
+    
     # Usar HTML para controle fino do layout
-    st.markdown("""
+    st.markdown(f"""
     <div class="logo-container">
-        <img src="logo.png" class="logo-image" alt="Clips Burger Logo">
+        <div class="logo-wrapper">
+            <div class="celestial-aura"></div>
+            <img src="https://raw.githubusercontent.com/lucasricardocs/clipsburger/refs/heads/main/logo.png" class="logo-image" alt="Clips Burger Logo">
+        </div>
         <div class="title-container">
             <h1 class="title-main">SISTEMA FINANCEIRO - CLIP'S BURGER</h1>
             <p class="title-sub">Gestão inteligente de vendas com análise financeira em tempo real - {datetime.now().year}</p>
         </div>
     </div>
     """, unsafe_allow_html=True)
-    # --- FIM DA MODIFICAÇÃO DO LOGO E TÍTULO ---
 
     df_raw = read_sales_data()
     df_processed = process_data(df_raw)
