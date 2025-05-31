@@ -972,7 +972,7 @@ def create_activity_heatmap(df_input):
         baseline='bottom',
         fontSize=12,
         dy=-1,
-        dx=-25, # Espaço acima do heatmap
+        dx=-30, # Espaço acima do heatmap
         color='#A9A9A9' # Cor cinza claro para meses
     ).encode(
         x=alt.X('week_corrected:O', axis=None), # Usar semana corrigida
@@ -1070,8 +1070,8 @@ def main():
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        width: 100px;
-        height: 100px;
+        width: 120px;
+        height: 120px;
         background-image: url('https://raw.githubusercontent.com/lucasricardocs/clipsburger/refs/heads/main/logo.png');
         background-size: contain;
         background-repeat: no-repeat;
@@ -1339,7 +1339,7 @@ def main():
                 st.info("Não foi possível gerar o heatmap de atividade para o período/ano selecionado.")
             # --- FIM DA INTEGRAÇÃO DO HEATMAP ---
             
-            st.markdown("---")
+           # st.markdown("---")
 
             # Coluna 1: Gráfico Acumulado e Heatmap
             
@@ -1351,7 +1351,7 @@ def main():
                 st.info("Sem dados suficientes para o gráfico de evolução acumulada.")
             # --- FIM DA INTEGRAÇÃO DO GRAFICO DE MONHATANHA ---
             
-            st.markdown("---")
+            #st.markdown("---")
 
             # Seção de métodos de pagamento com cards lado a lado
             st.subheader("💳 Métodos de Pagamento (Visão Geral)")
@@ -1419,7 +1419,7 @@ def main():
                 else:
                     st.info("Gráfico radial de pagamentos indisponível.")
             
-            st.markdown("---")
+            #st.markdown("---")
 
             # Análise melhorada de dias da semana com percentuais
             weekday_chart, best_day = create_enhanced_weekday_analysis(df_filtered)
