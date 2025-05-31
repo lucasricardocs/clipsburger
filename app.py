@@ -1070,128 +1070,128 @@ def format_brl(value):
 # --- Interface Principal da Aplicação ---
 def main():
     # --- MODIFICAÇÃO DO LOGO E TÍTULO ---
-   # --- MODIFICAÇÃO DO LOGO E TÍTULO ---
-st.markdown("""
-<style>
-.logo-container {
-    display: flex;
-    align-items: center;
-    margin-bottom: 1rem;
-}
-
-.logo-wrapper {
-    position: relative;
-    margin-right: 20px;
-}
-
-.logo-image {
-    width: 200px;
-    height: auto;
-    position: relative;
-    z-index: 10;
-    border-radius: 10px;
-}
-
-.celestial-aura {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 120px;
-    height: 120px;
-    background: radial-gradient(circle, 
-        rgba(107, 221, 248, 0.8) 0%,     /* Celestial Azure */
-        rgba(138, 181, 255, 0.6) 20%,   /* Soft Blue */
-        rgba(186, 176, 255, 0.4) 40%,   /* Lavender */
-        rgba(255, 183, 255, 0.3) 60%,   /* Cosmic Pink */
-        rgba(255, 215, 94, 0.2) 80%,    /* Cosmic Gold */
-        transparent 100%);
-    border-radius: 50%;
-    z-index: 1;
-    animation: celestialGlow 4s ease-in-out infinite alternate;
-}
-
-@keyframes celestialGlow {
-    0% {
-        box-shadow: 
-            0 0 30px rgba(107, 221, 248, 0.6),    /* Celestial Azure */
-            0 0 60px rgba(138, 181, 255, 0.4),    /* Soft Blue */
-            0 0 90px rgba(186, 176, 255, 0.3),    /* Lavender */
-            0 0 120px rgba(255, 183, 255, 0.2);   /* Cosmic Pink */
-        transform: translate(-50%, -50%) scale(0.8);
-        filter: hue-rotate(0deg);
+    # --- MODIFICAÇÃO DO LOGO E TÍTULO ---
+    st.markdown("""
+    <style>
+    .logo-container {
+        display: flex;
+        align-items: center;
+        margin-bottom: 1rem;
     }
-    25% {
-        box-shadow: 
-            0 0 35px rgba(138, 181, 255, 0.7),
-            0 0 70px rgba(186, 176, 255, 0.5),
-            0 0 105px rgba(255, 183, 255, 0.4),
-            0 0 140px rgba(255, 215, 94, 0.3);
-        transform: translate(-50%, -50%) scale(1.0);
-        filter: hue-rotate(90deg);
+    
+    .logo-wrapper {
+        position: relative;
+        margin-right: 20px;
     }
-    50% {
-        box-shadow: 
-            0 0 40px rgba(186, 176, 255, 0.8),
-            0 0 80px rgba(255, 183, 255, 0.6),
-            0 0 120px rgba(255, 215, 94, 0.4),
-            0 0 160px rgba(107, 221, 248, 0.3);
-        transform: translate(-50%, -50%) scale(1.1);
-        filter: hue-rotate(180deg);
+    
+    .logo-image {
+        width: 200px;
+        height: auto;
+        position: relative;
+        z-index: 10;
+        border-radius: 10px;
     }
-    75% {
-        box-shadow: 
-            0 0 45px rgba(255, 183, 255, 0.7),
-            0 0 90px rgba(255, 215, 94, 0.5),
-            0 0 135px rgba(107, 221, 248, 0.4),
-            0 0 180px rgba(138, 181, 255, 0.3);
-        transform: translate(-50%, -50%) scale(1.2);
-        filter: hue-rotate(270deg);
+    
+    .celestial-aura {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 120px;
+        height: 120px;
+        background: radial-gradient(circle, 
+            rgba(107, 221, 248, 0.8) 0%,     /* Celestial Azure */
+            rgba(138, 181, 255, 0.6) 20%,   /* Soft Blue */
+            rgba(186, 176, 255, 0.4) 40%,   /* Lavender */
+            rgba(255, 183, 255, 0.3) 60%,   /* Cosmic Pink */
+            rgba(255, 215, 94, 0.2) 80%,    /* Cosmic Gold */
+            transparent 100%);
+        border-radius: 50%;
+        z-index: 1;
+        animation: celestialGlow 4s ease-in-out infinite alternate;
     }
-    100% {
-        box-shadow: 
-            0 0 50px rgba(255, 215, 94, 0.8),     /* Cosmic Gold */
-            0 0 100px rgba(107, 221, 248, 0.6),   /* Celestial Azure */
-            0 0 150px rgba(138, 181, 255, 0.4),   /* Soft Blue */
-            0 0 200px rgba(186, 176, 255, 0.3);   /* Lavender */
-        transform: translate(-50%, -50%) scale(1.3);
-        filter: hue-rotate(360deg);
+    
+    @keyframes celestialGlow {
+        0% {
+            box-shadow: 
+                0 0 30px rgba(107, 221, 248, 0.6),    /* Celestial Azure */
+                0 0 60px rgba(138, 181, 255, 0.4),    /* Soft Blue */
+                0 0 90px rgba(186, 176, 255, 0.3),    /* Lavender */
+                0 0 120px rgba(255, 183, 255, 0.2);   /* Cosmic Pink */
+            transform: translate(-50%, -50%) scale(0.8);
+            filter: hue-rotate(0deg);
+        }
+        25% {
+            box-shadow: 
+                0 0 35px rgba(138, 181, 255, 0.7),
+                0 0 70px rgba(186, 176, 255, 0.5),
+                0 0 105px rgba(255, 183, 255, 0.4),
+                0 0 140px rgba(255, 215, 94, 0.3);
+            transform: translate(-50%, -50%) scale(1.0);
+            filter: hue-rotate(90deg);
+        }
+        50% {
+            box-shadow: 
+                0 0 40px rgba(186, 176, 255, 0.8),
+                0 0 80px rgba(255, 183, 255, 0.6),
+                0 0 120px rgba(255, 215, 94, 0.4),
+                0 0 160px rgba(107, 221, 248, 0.3);
+            transform: translate(-50%, -50%) scale(1.1);
+            filter: hue-rotate(180deg);
+        }
+        75% {
+            box-shadow: 
+                0 0 45px rgba(255, 183, 255, 0.7),
+                0 0 90px rgba(255, 215, 94, 0.5),
+                0 0 135px rgba(107, 221, 248, 0.4),
+                0 0 180px rgba(138, 181, 255, 0.3);
+            transform: translate(-50%, -50%) scale(1.2);
+            filter: hue-rotate(270deg);
+        }
+        100% {
+            box-shadow: 
+                0 0 50px rgba(255, 215, 94, 0.8),     /* Cosmic Gold */
+                0 0 100px rgba(107, 221, 248, 0.6),   /* Celestial Azure */
+                0 0 150px rgba(138, 181, 255, 0.4),   /* Soft Blue */
+                0 0 200px rgba(186, 176, 255, 0.3);   /* Lavender */
+            transform: translate(-50%, -50%) scale(1.3);
+            filter: hue-rotate(360deg);
+        }
     }
-}
-
-.title-container {
-    /* O título e subtítulo ficam aqui */
-}
-
-.title-main {
-    margin: 0; 
-    padding: 0;
-    line-height: 1.2;
-}
-
-.title-sub {
-    margin: 0; 
-    font-size: 14px; 
-    color: gray; 
-    padding: 0;
-    line-height: 1.2;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# Usar HTML para controle fino do layout
-st.markdown(f"""
-<div class="logo-container">
-    <div class="logo-wrapper">
-        <div class="celestial-aura"></div>
-        <img src="https://raw.githubusercontent.com/lucasricardocs/clipsburger/refs/heads/main/logo.png" class="logo-image" alt="Clips Burger Logo">
+    
+    .title-container {
+        /* O título e subtítulo ficam aqui */
+    }
+    
+    .title-main {
+        margin: 0; 
+        padding: 0;
+        line-height: 1.2;
+    }
+    
+    .title-sub {
+        margin: 0; 
+        font-size: 14px; 
+        color: gray; 
+        padding: 0;
+        line-height: 1.2;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # Usar HTML para controle fino do layout
+    st.markdown(f"""
+    <div class="logo-container">
+        <div class="logo-wrapper">
+            <div class="celestial-aura"></div>
+            <img src="https://raw.githubusercontent.com/lucasricardocs/clipsburger/refs/heads/main/logo.png" class="logo-image" alt="Clips Burger Logo">
+        </div>
+        <div class="title-container">
+            <h1 class="title-main">SISTEMA FINANCEIRO - CLIP'S BURGER</h1>
+            <p class="title-sub">Gestão inteligente de vendas com análise financeira em tempo real - {datetime.now().year}</p>
+        </div>
     </div>
-    <div class="title-container">
-        <h1 class="title-main">SISTEMA FINANCEIRO - CLIP'S BURGER</h1>
-        <p class="title-sub">Gestão inteligente de vendas com análise financeira em tempo real - {datetime.now().year}</p>
-    </div>
-</div>
-""", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
 
     df_raw = read_sales_data()
