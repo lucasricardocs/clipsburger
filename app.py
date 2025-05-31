@@ -1082,10 +1082,6 @@ def main():
     .logo-wrapper {
         position: relative;
         margin-right: 20px;
-        overflow: hidden;
-        border-radius: 10px;
-        width: 200px;
-        height: auto;
     }
     
     .logo-image {
@@ -1094,25 +1090,6 @@ def main():
         position: relative;
         z-index: 10;
         border-radius: 10px;
-        display: block;
-    }
-    
-    .celestial-aura {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        width: 180px;
-        height: 180px;
-        background: radial-gradient(circle, 
-            rgba(107, 221, 248, 0.6) 0%,
-            rgba(138, 181, 255, 0.4) 20%,
-            rgba(186, 176, 255, 0.3) 40%,
-            rgba(255, 183, 255, 0.2) 60%,
-            rgba(255, 215, 94, 0.1) 80%,
-            transparent 100%);
-        border-radius: 50%;
-        z-index: 1;
         animation: celestialGlow 4s ease-in-out infinite alternate;
     }
     
@@ -1121,40 +1098,40 @@ def main():
             box-shadow: 
                 0 0 20px rgba(107, 221, 248, 0.4),
                 0 0 40px rgba(138, 181, 255, 0.3),
-                0 0 60px rgba(186, 176, 255, 0.2);
-            transform: translate(-50%, -50%) scale(0.8);
+                0 0 60px rgba(186, 176, 255, 0.2),
+                0 0 80px rgba(255, 183, 255, 0.1);
             filter: hue-rotate(0deg);
         }
         25% {
             box-shadow: 
-                0 0 25px rgba(138, 181, 255, 0.5),
-                0 0 50px rgba(186, 176, 255, 0.4),
-                0 0 75px rgba(255, 183, 255, 0.3);
-            transform: translate(-50%, -50%) scale(0.9);
+                0 0 30px rgba(138, 181, 255, 0.5),
+                0 0 60px rgba(186, 176, 255, 0.4),
+                0 0 90px rgba(255, 183, 255, 0.3),
+                0 0 120px rgba(255, 215, 94, 0.2);
             filter: hue-rotate(90deg);
         }
         50% {
             box-shadow: 
-                0 0 30px rgba(186, 176, 255, 0.6),
-                0 0 60px rgba(255, 183, 255, 0.5),
-                0 0 90px rgba(255, 215, 94, 0.4);
-            transform: translate(-50%, -50%) scale(1.0);
+                0 0 40px rgba(186, 176, 255, 0.6),
+                0 0 80px rgba(255, 183, 255, 0.5),
+                0 0 120px rgba(255, 215, 94, 0.4),
+                0 0 160px rgba(107, 221, 248, 0.3);
             filter: hue-rotate(180deg);
         }
         75% {
             box-shadow: 
-                0 0 35px rgba(255, 183, 255, 0.5),
-                0 0 70px rgba(255, 215, 94, 0.4),
-                0 0 105px rgba(107, 221, 248, 0.3);
-            transform: translate(-50%, -50%) scale(0.9);
+                0 0 50px rgba(255, 183, 255, 0.5),
+                0 0 100px rgba(255, 215, 94, 0.4),
+                0 0 150px rgba(107, 221, 248, 0.3),
+                0 0 200px rgba(138, 181, 255, 0.2);
             filter: hue-rotate(270deg);
         }
         100% {
             box-shadow: 
-                0 0 40px rgba(255, 215, 94, 0.6),
-                0 0 80px rgba(107, 221, 248, 0.5),
-                0 0 120px rgba(138, 181, 255, 0.4);
-            transform: translate(-50%, -50%) scale(0.8);
+                0 0 60px rgba(255, 215, 94, 0.6),
+                0 0 120px rgba(107, 221, 248, 0.5),
+                0 0 180px rgba(138, 181, 255, 0.4),
+                0 0 240px rgba(186, 176, 255, 0.3);
             filter: hue-rotate(360deg);
         }
     }
@@ -1183,7 +1160,6 @@ def main():
     st.markdown(f"""
     <div class="logo-container">
         <div class="logo-wrapper">
-            <div class="celestial-aura"></div>
             <img src="https://raw.githubusercontent.com/lucasricardocs/clipsburger/refs/heads/main/logo.png" class="logo-image" alt="Clips Burger Logo">
         </div>
         <div class="title-container">
