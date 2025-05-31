@@ -809,7 +809,6 @@ def create_financial_dashboard_altair(resultados):
                 range=[CORES_MODO_ESCURO[1], CORES_MODO_ESCURO[3], CORES_MODO_ESCURO[2], CORES_MODO_ESCURO[4], CORES_MODO_ESCURO[0]]
             ),
             legend=None
-            )
         ),
         tooltip=[
             alt.Tooltip('Categoria:N', title='Categoria'),
