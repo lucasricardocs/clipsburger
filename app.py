@@ -746,7 +746,7 @@ def create_dre_textual(resultados, df_processed, selected_anos_filter):
         st.markdown("**-**")
     
     # Linha de separação
-    st.markdown("---")
+    #st.markdown("---")
     
     # RESULTADO LÍQUIDO - destacado
     col1, col2 = st.columns([6, 2])
@@ -1623,14 +1623,14 @@ def main():
                  # Passa df_processed para ter acesso a todos os dados do ano
                 create_dre_textual(resultados_filtrados, df_processed, selected_anos_filter)
 
-            st.markdown("---")
+            #st.markdown("---")
 
             # === DASHBOARD VISUAL (Período Filtrado) ===
             financial_dashboard = create_financial_dashboard_altair(resultados_filtrados)
             if financial_dashboard:
                 st.altair_chart(financial_dashboard, use_container_width=True)
 
-            st.markdown("---")
+            #st.markdown("---")
 
             # === ANÁLISE DE MARGENS (Período Filtrado) ===
             with st.container(border=True):
@@ -1674,7 +1674,7 @@ def main():
                         help="(CPV / Receita Bruta) * 100"
                     )
 
-            st.markdown("---")
+            #st.markdown("---")
 
             # === RESUMO EXECUTIVO (Período Filtrado) ===
             with st.container(border=True):
