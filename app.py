@@ -15,7 +15,6 @@ warnings.filterwarnings('ignore', category=FutureWarning, message='.*observed=Fa
 # --- Configurações Globais e Constantes ---
 SPREADSHEET_ID = '1NTScbiIna-iE7roQ9XBdjUOssRihTFFby4INAAQNXTg'
 WORKSHEET_NAME = 'Vendas'
-LOGO_URL = "https://raw.githubusercontent.com/lucasricardocs/clipsburger/refs/heads/main/logo.png"
 
 # Configuração da página Streamlit
 st.set_page_config(page_title="Sistema Financeiro - Clips Burger", layout="wide", page_icon="🍔")
@@ -30,33 +29,32 @@ CORES_MODO_ESCURO = ['#4c78a8', '#54a24b', '#f58518', '#e45756', '#72b7b2', '#ff
 dias_semana_ordem = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"]
 meses_ordem = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
 
-# CSS para melhorar a aparência e adicionar logo/aura
+# CSS para melhorar a aparência
 def inject_css():
-    st.markdown(f"""
+    st.markdown("""
     <style>
-    /* Estilos Gerais (Originais) */
-    .stSelectbox label, .stNumberInput label {{
+    .stSelectbox label, .stNumberInput label {
         font-weight: bold;
         color: #4c78a8;
-    }}
+    }
     
-    .stNumberInput input::placeholder {{
+    .stNumberInput input::placeholder {
         color: #888;
         font-style: italic;
-    }}
+    }
     
-    .stButton > button {{
+    .stButton > button {
         height: 3rem;
         font-size: 1.2rem;
         font-weight: bold;
         width: 100%;
-    }}
+    }
     
-    .element-container {{
+    .element-container {
         margin-bottom: 0.5rem;
-    }}
+    }
     
-    .stMetric {{
+    .stMetric {
         background-color: rgba(255, 255, 255, 0.05);
         padding: 1rem;
         border-radius: 0.5rem;
@@ -65,108 +63,29 @@ def inject_css():
         display: flex;
         flex-direction: column;
         justify-content: center;
-    }}
+    }
     
-    /* Dashboard Premium Styles (Originais) */
-    .stApp {{
+    /* Dashboard Premium Styles */
+    .stApp {
         background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%);
-    }}
+    }
     
-    /* Grid para gráficos do dashboard premium (Originais) */
-    .premium-charts-grid {{
+    /* Grid para gráficos do dashboard premium */
+    .premium-charts-grid {
         display: grid;
         grid-template-columns: 2fr 1fr;
         gap: 2rem;
         margin: 2rem 0;
-    }}
+    }
     
-    .premium-chart-full {{
+    .premium-chart-full {
         grid-column: 1 / -1;
         margin: 2rem 0;
-    }}
-
-    /* --- NOVOS ESTILOS PARA LOGO/TÍTULO/AURA --- */
-    .title-logo-container {{
-        display: flex;
-        align-items: center; /* Alinha verticalmente logo e título */
-        margin-bottom: 1rem; /* Espaço abaixo do título/logo */
-        position: relative; /* Contexto para z-index se necessário */
-    }}
-
-    .logo-wrapper {{
-        position: relative; /* Para posicionar a aura */
-        margin-right: 1.5rem; /* Espaço entre logo e título */
-        width: 200px; /* Largura fixa da logo */
-        height: auto; /* Altura automática */
-        flex-shrink: 0; /* Impede que a logo encolha */
-    }}
-
-    .logo-image {{
-        display: block; /* Remove espaço extra abaixo da imagem */
-        width: 100%; /* Faz a imagem preencher o wrapper */
-        height: auto;
-        position: relative; /* Garante que a imagem fique sobre a aura */
-        z-index: 1;
-    }}
-
-    .logo-aura {{
-        position: absolute;
-        width: 100%; /* Começa do tamanho da logo */
-        height: 100%;
-        top: 50%;
-        left: 50%;
-        /* Começa pequeno e centralizado */
-        transform: translate(-50%, -50%) scale(0.1);
-        border-radius: 50%; /* Forma da aura */
-        z-index: 0; /* Atrás da logo */
-        /* Animação de expansão */
-        animation: expand-aura 3s infinite ease-out;
-        pointer-events: none; /* Impede que a aura interfira com cliques */
-        opacity: 0; /* Começa invisível */
-    }}
-
-    .main-title {{
-         /* Estilos para replicar st.title aproximadamente */
-        font-size: 2.25rem; 
-        font-weight: 600;
-        color: #ffffff; /* Cor do título no tema escuro */
-        padding: 0.5rem 0rem;
-        margin: 0;
-        line-height: 1.4;
-    }}
-
-    /* --- ANIMAÇÃO DA AURA EXPANDINDO --- */
-    @keyframes expand-aura {{
-        0% {{
-            transform: translate(-50%, -50%) scale(0.1);
-            box-shadow: 0 0 5px 2px rgba(255, 255, 255, 0.1);
-            opacity: 0;
-        }}
-        50% {{
-            /* Expande um pouco além da logo e fica mais visível */
-            transform: translate(-50%, -50%) scale(1.15);
-            box-shadow: 0 0 25px 10px rgba(255, 255, 255, 0.5), 
-                        0 0 40px 20px rgba(255, 255, 255, 0.3);
-            opacity: 0.8;
-        }}
-        90% {{
-             /* Começa a desaparecer enquanto ainda está expandida */
-            transform: translate(-50%, -50%) scale(1.25);
-             box-shadow: 0 0 30px 15px rgba(255, 255, 255, 0.3), 
-                        0 0 50px 25px rgba(255, 255, 255, 0.1);
-            opacity: 0.2;
-        }}
-        100% {{
-            /* Totalmente desaparecida e pronta para recomeçar */
-            transform: translate(-50%, -50%) scale(1.3);
-            box-shadow: 0 0 35px 20px rgba(255, 255, 255, 0.1);
-            opacity: 0;
-        }}
-    }}
-    /* --- FIM DOS NOVOS ESTILOS --- */
-
+    }
     </style>
     """, unsafe_allow_html=True)
+
+inject_css()
 
 # --- Funções de Cache para Acesso ao Google Sheets ---
 @st.cache_resource
@@ -1203,7 +1122,7 @@ def main():
         "📝 Registrar Venda", 
         "📈 Análise Detalhada", 
         "💡 Estatísticas", 
-        "💰 Análise Contábil"
+        "💰 Análise Contábil",
     ])
 
     with tab1:
