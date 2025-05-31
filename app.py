@@ -1183,27 +1183,17 @@ def main():
     </style>
     """, unsafe_allow_html=True)
 
-# --- Layout Principal do Streamlit ---
-
-# Injeta o CSS (incluindo estilos da logo/aura)
-inject_css()
-
-# --- MODIFICADO: Título Principal com Logo e Aura ---
-st.markdown(f"""
-<div class="title-logo-container">
-    <div class="logo-wrapper">
-        <div class="logo-aura"></div>
-        <img src="{LOGO_URL}" alt="Clips Burger Logo" class="logo-image">
+    # Usar HTML para controle fino do layout
+    st.markdown("""
+    <div class="logo-container">
+        <img src="logo.png" class="logo-image" alt="Clips Burger Logo">
+        <div class="title-container">
+            <h1 class="title-main">SISTEMA FINANCEIRO - CLIP'S BURGER</h1>
+            <p class="title-sub">Gestão inteligente de vendas com análise financeira em tempo real - {datetime.now().year}</p>
+        </div>
     </div>
-    <h1 class="main-title">📊 Dashboard Financeiro - Clips Burger</h1>
-</div>
-""", unsafe_allow_html=True)
-# st.title("Sistema Financeiro - Clips Burger") # Linha original substituída
-st.markdown("--- ") # Linha separadora mantida
-# --- FIM DA MODIFICAÇÃO DO TÍTULO ---
-
-    df_raw = read_sales_data()
-    df_processed = process_data(df_raw)
+    """, unsafe_allow_html=True)
+    # --- FIM DA MODIFICAÇÃO DO LOGO E TÍTULO ---
 
     # Criar 5 tabs incluindo o Dashboard Premium
     tab1, tab2, tab3, tab4 = st.tabs([
