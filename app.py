@@ -1291,17 +1291,17 @@ def main():
             
             st.markdown("---")
 
-            # Coluna 1: Gráfico Acumulado e Heatmap
+            # Coluna 1: Gráfico Acumulado
             
             st.subheader("Gráfico de Área Acumulado")
-                with st.container():
-                    # Gráfico de Área Acumulado (Modificado)
-                    cumulative_chart = create_cumulative_area_chart(df_filtered)
-                    if cumulative_chart:
-                        st.altair_chart(cumulative_chart, use_container_width=True)
-                    else:
-                        st.info("Sem dados suficientes para o gráfico de evolução acumulada.")
-            st.divider()
+            cumulative_chart = create_cumulative_area_chart(df_filtered)
+            if cumulative_chart:
+                st.altair_chart(cumulative_chart, use_container_width=True)
+            else:
+                st.info("Sem dados suficientes para o gráfico de evolução acumulada.")
+            # --- FIM DA INTEGRAÇÃO DO GRAFICO DE MONHATANHA ---
+            
+            st.markdown("---")
 
             # Seção de métodos de pagamento com cards lado a lado
             st.subheader("💳 Métodos de Pagamento (Visão Geral)")
