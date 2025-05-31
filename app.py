@@ -494,7 +494,7 @@ def create_enhanced_weekday_analysis(df):
             fontSize=18,
             anchor='start'
         ),
-        height=500,
+        height=600,
         width=1000,
         padding={'bottom': 100}
     ).configure_view(
@@ -543,7 +543,7 @@ def create_sales_histogram(df, title="Distribuição dos Valores de Venda Diári
             fontSize=18,
             anchor='start'
         ),
-        height=500,
+        height=600,
         width=1000,
         padding={'bottom': 100}
     ).configure_view(
@@ -1249,28 +1249,6 @@ def main():
                 st.dataframe(df_display_tab2[cols_existentes_tab2], use_container_width=True, height=600, hide_index=True)
             else: 
                 st.info("Colunas necessárias para a tabela de dados filtrados não estão disponíveis.")
-
-            daily_chart = create_advanced_daily_sales_chart(df_filtered)
-            if daily_chart:
-                st.altair_chart(daily_chart, use_container_width=True)
-            else:
-                st.info("Sem dados de vendas diárias para exibir o gráfico nos filtros selecionados.")
-
-            # MUDANÇA: Usar area chart com gradiente em vez de montanha
-            area_chart = create_area_chart_with_gradient(df_filtered)
-            if area_chart:
-                st.altair_chart(area_chart, use_container_width=True)
-            else:
-                st.info("Não foi possível gerar o gráfico de área.")
-        else:
-             if df_processed.empty and df_raw.empty and get_worksheet() is None: 
-                 st.warning("Não foi possível carregar os dados. Verifique configurações e credenciais.")
-             elif df_processed.empty: 
-                 st.info("Não há dados processados para exibir. Verifique a planilha de origem.")
-             elif df_filtered.empty: 
-                 st.info("Nenhum dado corresponde aos filtros selecionados.")
-             else: 
-                 st.info("Não há dados para exibir na Análise Detalhada. Pode ser um problema no processamento.")
 
     with tab3:
         st.header("💡 Estatísticas e Tendências de Vendas")
