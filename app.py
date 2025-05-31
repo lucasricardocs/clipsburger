@@ -1082,6 +1082,10 @@ def main():
     .logo-wrapper {
         position: relative;
         margin-right: 20px;
+        overflow: hidden;
+        border-radius: 10px;
+        width: 200px;
+        height: auto;
     }
     
     .logo-image {
@@ -1090,6 +1094,7 @@ def main():
         position: relative;
         z-index: 10;
         border-radius: 10px;
+        display: block;
     }
     
     .celestial-aura {
@@ -1097,14 +1102,14 @@ def main():
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        width: 120px;
-        height: 120px;
+        width: 180px;
+        height: 180px;
         background: radial-gradient(circle, 
-            rgba(107, 221, 248, 0.8) 0%,     /* Celestial Azure */
-            rgba(138, 181, 255, 0.6) 20%,   /* Soft Blue */
-            rgba(186, 176, 255, 0.4) 40%,   /* Lavender */
-            rgba(255, 183, 255, 0.3) 60%,   /* Cosmic Pink */
-            rgba(255, 215, 94, 0.2) 80%,    /* Cosmic Gold */
+            rgba(107, 221, 248, 0.6) 0%,
+            rgba(138, 181, 255, 0.4) 20%,
+            rgba(186, 176, 255, 0.3) 40%,
+            rgba(255, 183, 255, 0.2) 60%,
+            rgba(255, 215, 94, 0.1) 80%,
             transparent 100%);
         border-radius: 50%;
         z-index: 1;
@@ -1114,47 +1119,42 @@ def main():
     @keyframes celestialGlow {
         0% {
             box-shadow: 
-                0 0 30px rgba(107, 221, 248, 0.6),    /* Celestial Azure */
-                0 0 60px rgba(138, 181, 255, 0.4),    /* Soft Blue */
-                0 0 90px rgba(186, 176, 255, 0.3),    /* Lavender */
-                0 0 120px rgba(255, 183, 255, 0.2);   /* Cosmic Pink */
-            transform: translate(-50%, -50%) scale(0.8);
+                0 0 15px rgba(107, 221, 248, 0.4),
+                0 0 30px rgba(138, 181, 255, 0.3),
+                0 0 45px rgba(186, 176, 255, 0.2);
+            transform: translate(-50%, -50%) scale(0.9);
             filter: hue-rotate(0deg);
         }
         25% {
             box-shadow: 
-                0 0 35px rgba(138, 181, 255, 0.7),
-                0 0 70px rgba(186, 176, 255, 0.5),
-                0 0 105px rgba(255, 183, 255, 0.4),
-                0 0 140px rgba(255, 215, 94, 0.3);
+                0 0 20px rgba(138, 181, 255, 0.5),
+                0 0 40px rgba(186, 176, 255, 0.4),
+                0 0 60px rgba(255, 183, 255, 0.3);
             transform: translate(-50%, -50%) scale(1.0);
             filter: hue-rotate(90deg);
         }
         50% {
             box-shadow: 
-                0 0 40px rgba(186, 176, 255, 0.8),
-                0 0 80px rgba(255, 183, 255, 0.6),
-                0 0 120px rgba(255, 215, 94, 0.4),
-                0 0 160px rgba(107, 221, 248, 0.3);
+                0 0 25px rgba(186, 176, 255, 0.6),
+                0 0 50px rgba(255, 183, 255, 0.5),
+                0 0 75px rgba(255, 215, 94, 0.4);
             transform: translate(-50%, -50%) scale(1.1);
             filter: hue-rotate(180deg);
         }
         75% {
             box-shadow: 
-                0 0 45px rgba(255, 183, 255, 0.7),
-                0 0 90px rgba(255, 215, 94, 0.5),
-                0 0 135px rgba(107, 221, 248, 0.4),
-                0 0 180px rgba(138, 181, 255, 0.3);
-            transform: translate(-50%, -50%) scale(1.2);
+                0 0 30px rgba(255, 183, 255, 0.5),
+                0 0 60px rgba(255, 215, 94, 0.4),
+                0 0 90px rgba(107, 221, 248, 0.3);
+            transform: translate(-50%, -50%) scale(1.0);
             filter: hue-rotate(270deg);
         }
         100% {
             box-shadow: 
-                0 0 50px rgba(255, 215, 94, 0.8),     /* Cosmic Gold */
-                0 0 100px rgba(107, 221, 248, 0.6),   /* Celestial Azure */
-                0 0 150px rgba(138, 181, 255, 0.4),   /* Soft Blue */
-                0 0 200px rgba(186, 176, 255, 0.3);   /* Lavender */
-            transform: translate(-50%, -50%) scale(1.3);
+                0 0 35px rgba(255, 215, 94, 0.6),
+                0 0 70px rgba(107, 221, 248, 0.5),
+                0 0 105px rgba(138, 181, 255, 0.4);
+            transform: translate(-50%, -50%) scale(0.9);
             filter: hue-rotate(360deg);
         }
     }
