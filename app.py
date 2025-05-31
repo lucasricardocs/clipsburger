@@ -977,8 +977,8 @@ def create_activity_heatmap(df_input):
         align='center', # Centralizado acima da semana
         baseline='bottom',
         fontSize=15,
-        dy=-5,
-        dx=-20, # Espaço acima do heatmap
+        dy=-1,
+        dx=-30, # Espaço acima do heatmap
         color='#A9A9A9' # Cor cinza claro para meses
     ).encode(
         x=alt.X('week_corrected:O', axis=None), # Usar semana corrigida
@@ -990,8 +990,8 @@ def create_activity_heatmap(df_input):
     # Gráfico principal (heatmap)
     heatmap = alt.Chart(full_df).mark_rect(
         stroke='#ffffff', # Borda branca fina
-        strokeWidth=1.1,
-        cornerRadius=1 # Leve arredondamento
+        strokeWidth=2,
+        cornerRadius=0.1 # Leve arredondamento
     ).encode(
         x=alt.X('week_corrected:O', # Usar semana corrigida
                 title=None, 
@@ -1003,10 +1003,10 @@ def create_activity_heatmap(df_input):
         color=alt.Color('Total:Q',
             scale=alt.Scale(
                 # Usar cores do tema escuro, adaptadas para heatmap
-                range=['#2d333b', '#0e4429', '#006d32', '#26a641', '#39d353'], # Cinza escuro -> Verdes
+                range=['#f0f0f0', '#9be9a8', '#40c463', '#30a14e', '#216e39'], # Cinza escuro -> Verdes
                 # range=['#f0f0f0', '#9be9a8', '#40c463', '#30a14e', '#216e39'], # Esquema original GitHub claro
                 type='threshold',
-                domain=[0.01, 1000, 2000, 3000] # Ajustar domínios conforme necessidade
+                domain=[0.01, 1500, 2500, 3500] # Ajustar domínios conforme necessidade
             ),
             legend=None), # Legenda pode ser adicionada separadamente se desejado
         tooltip=[
