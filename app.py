@@ -1615,7 +1615,7 @@ def main():
                     key="fornecedores_tab4"
                 )
 
-        st.markdown("---")
+        #st.markdown("---")
 
         if df_filtered.empty or 'Total' not in df_filtered.columns:
             st.warning("📊 **Não há dados suficientes para análise contábil.** Ajuste os filtros ou registre vendas.")
