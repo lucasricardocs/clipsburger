@@ -480,7 +480,7 @@ def create_enhanced_weekday_analysis(df):
             fontSize=18,
             anchor='start'
         ),
-        height=600,
+        height=500,
         width=1000,
         padding={'bottom': 100}
     ).configure_view(
@@ -1562,7 +1562,7 @@ def main():
 
             sales_histogram_chart = create_sales_histogram(df_filtered)
             if sales_histogram_chart: 
-                st.altair_chart(sales_histogram_chart, use_container_width=True)
+                st.altair_chart(sales_histogram_chart, use_container_width=False)
             else: 
                 st.info("Dados insuficientes para o Histograma de Vendas.")
         else:
