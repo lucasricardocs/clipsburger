@@ -297,11 +297,6 @@ def create_radial_plot(df):
         stroke='white', 
         strokeWidth=2
     ).properties(
-        title=alt.TitleParams(
-            text='Gráfico Radial de Métodos de Pagamento', 
-            fontSize=16,
-            anchor='start'
-        ),
         width=500,
         height=500,
         padding={'bottom': 100}
