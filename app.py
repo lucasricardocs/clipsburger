@@ -1195,6 +1195,9 @@ def main():
     """, unsafe_allow_html=True)
     # --- FIM DA MODIFICAÇÃO DO LOGO E TÍTULO ---
 
+    df_raw = read_sales_data()
+    df_processed = process_data(df_raw)
+
     # Criar 5 tabs incluindo o Dashboard Premium
     tab1, tab2, tab3, tab4 = st.tabs([
         "📝 Registrar Venda", 
