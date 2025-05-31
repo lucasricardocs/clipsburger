@@ -1070,7 +1070,7 @@ def format_brl(value):
 # --- Interface Principal da Aplicação ---
 def main():
     # --- MODIFICAÇÃO DO LOGO E TÍTULO ---
-    # --- MODIFICAÇÃO DO LOGO E TÍTULO ---
+   # --- MODIFICAÇÃO DO LOGO E TÍTULO ---
     st.markdown("""
     <style>
     .logo-container {
@@ -1079,56 +1079,63 @@ def main():
         margin-bottom: 1rem;
     }
     
-    .logo-image {
+    .logo-wrapper {
+        position: relative;
+        margin-right: 20px;
         width: 200px;
         height: auto;
-        position: relative;
-        z-index: 10;
-        border-radius: 10px;
-        margin-right: 20px;
-        animation: celestialGlow 4s ease-in-out infinite alternate;
     }
     
-    @keyframes celestialGlow {
+    .logo-background {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 200px;
+        height: auto;
+        background-image: url('https://raw.githubusercontent.com/lucasricardocs/clipsburger/refs/heads/main/logo.png');
+        background-size: contain;
+        background-repeat: no-repeat;
+        background-position: center;
+        filter: blur(15px) saturate(2) brightness(1.5);
+        z-index: 1;
+        animation: celestialPulse 3s ease-in-out infinite alternate;
+    }
+    
+    .logo-image {
+        position: relative;
+        width: 200px;
+        height: auto;
+        z-index: 10;
+        border-radius: 10px;
+        padding: 20px;
+        margin: -20px;
+    }
+    
+    @keyframes celestialPulse {
         0% {
-            box-shadow: 
-                0 0 20px rgba(107, 221, 248, 0.4),
-                0 0 40px rgba(138, 181, 255, 0.3),
-                0 0 60px rgba(186, 176, 255, 0.2),
-                0 0 80px rgba(255, 183, 255, 0.1);
-            filter: hue-rotate(0deg);
+            filter: blur(15px) saturate(2) brightness(1.5) hue-rotate(0deg);
+            transform: scale(1.1);
+            opacity: 0.8;
         }
         25% {
-            box-shadow: 
-                0 0 30px rgba(138, 181, 255, 0.5),
-                0 0 60px rgba(186, 176, 255, 0.4),
-                0 0 90px rgba(255, 183, 255, 0.3),
-                0 0 120px rgba(255, 215, 94, 0.2);
-            filter: hue-rotate(90deg);
+            filter: blur(18px) saturate(2.5) brightness(1.8) hue-rotate(90deg);
+            transform: scale(1.15);
+            opacity: 0.9;
         }
         50% {
-            box-shadow: 
-                0 0 40px rgba(186, 176, 255, 0.6),
-                0 0 80px rgba(255, 183, 255, 0.5),
-                0 0 120px rgba(255, 215, 94, 0.4),
-                0 0 160px rgba(107, 221, 248, 0.3);
-            filter: hue-rotate(180deg);
+            filter: blur(20px) saturate(3) brightness(2) hue-rotate(180deg);
+            transform: scale(1.2);
+            opacity: 1;
         }
         75% {
-            box-shadow: 
-                0 0 50px rgba(255, 183, 255, 0.5),
-                0 0 100px rgba(255, 215, 94, 0.4),
-                0 0 150px rgba(107, 221, 248, 0.3),
-                0 0 200px rgba(138, 181, 255, 0.2);
-            filter: hue-rotate(270deg);
+            filter: blur(18px) saturate(2.5) brightness(1.8) hue-rotate(270deg);
+            transform: scale(1.15);
+            opacity: 0.9;
         }
         100% {
-            box-shadow: 
-                0 0 60px rgba(255, 215, 94, 0.6),
-                0 0 120px rgba(107, 221, 248, 0.5),
-                0 0 180px rgba(138, 181, 255, 0.4),
-                0 0 240px rgba(186, 176, 255, 0.3);
-            filter: hue-rotate(360deg);
+            filter: blur(22px) saturate(3.5) brightness(2.2) hue-rotate(360deg);
+            transform: scale(1.25);
+            opacity: 0.7;
         }
     }
     
@@ -1155,7 +1162,10 @@ def main():
     # Usar HTML para controle fino do layout
     st.markdown(f"""
     <div class="logo-container">
-        <img src="https://raw.githubusercontent.com/lucasricardocs/clipsburger/refs/heads/main/logo.png" class="logo-image" alt="Clips Burger Logo">
+        <div class="logo-wrapper">
+            <div class="logo-background"></div>
+            <img src="https://raw.githubusercontent.com/lucasricardocs/clipsburger/refs/heads/main/logo.png" class="logo-image" alt="Clips Burger Logo">
+        </div>
         <div class="title-container">
             <h1 class="title-main">SISTEMA FINANCEIRO - CLIP'S BURGER</h1>
             <p class="title-sub">Gestão inteligente de vendas com análise financeira em tempo real - {datetime.now().year}</p>
