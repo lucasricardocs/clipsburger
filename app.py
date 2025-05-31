@@ -17,7 +17,7 @@ SPREADSHEET_ID = '1NTScbiIna-iE7roQ9XBdjUOssRihTFFby4INAAQNXTg'
 WORKSHEET_NAME = 'Vendas'
 
 # Configuração da página Streamlit
-st.set_page_config(page_title="Sistema Financeiro - Clips Burger", layout="wide", page_icon="🍔")
+st.set_page_config(page_title="Sistema Financeiro - Clips Burger", layout="centered", page_icon="🍔")
 
 # Configuração de tema para gráficos mais bonitos
 alt.data_transformers.enable('json')
