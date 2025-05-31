@@ -1736,19 +1736,7 @@ def main():
                 else:
                     st.info("Gráfico radial de pagamentos indisponível.")
             
-            st.markdown("---")
-            
-            # Gráfico de área com gradiente em tela cheia
-            st.subheader("📈 Evolução Geral das Vendas")
-            area_chart = create_area_chart_with_gradient(df_filtered)
-            if area_chart:
-                st.altair_chart(area_chart, use_container_width=True)
-            else:
-                 st.info("Gráfico de evolução indisponível.")
-            
-            st.markdown("---")
-            
-            
+            st.markdown("---")       
         else:
             st.warning("⚠️ Sem dados disponíveis. Ajuste os filtros na sidebar ou registre algumas vendas para visualizar o dashboard premium.")
 
