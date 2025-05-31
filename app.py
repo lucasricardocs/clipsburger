@@ -407,6 +407,8 @@ def create_advanced_daily_sales_chart(df):
     
     bars = alt.Chart(df_melted).mark_bar(
         size=20
+        stroke='white',     # Cor da borda
+        strokeWidth=1.5     # Espessura da borda
     ).encode(
         x=alt.X(
             'Data:T',
