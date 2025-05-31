@@ -654,10 +654,6 @@ def create_dre_textual(resultados, df_processed, selected_anos_filter):
     <div style="text-align: center; margin-bottom: 30px;">
         <h3 style="margin: 0; font-weight: normal;">DEMONSTRAÇÃO DO RESULTADO DO EXERCÍCIO</h3>
         <p style="margin: 5px 0; font-style: italic;">Clips Burger - Exercício {ano_dre}</p>
-    </div>
-    <div style="text-align: center; margin-bottom: 20px;">
-        <p style="margin: 0; font-size: 14px; font-weight: bold;">Em R$</p>
-    </div>
     """, unsafe_allow_html=True)
 
     # Criar 2 colunas - descrição e valor
