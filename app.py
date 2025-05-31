@@ -921,12 +921,21 @@ def create_premium_kpi_cards(df):
             )
 # --- NOVA FUNÇÃO: Gráfico Heatmap de Atividade ---
 def create_activity_heatmap(df_input):
-    """Cria um gráfico de heatmap estilo GitHub para a atividade de vendas."""
+    """Cria um gráfico de heatmap estilo GitHub para a atividade de vendas - IGNORA FILTRO DE MÊS."""
     if df_input.empty or 'Data' not in df_input.columns or 'Total' not in df_input.columns:
         st.info("Dados insuficientes para gerar o heatmap de atividade.")
         return None
 
-    df = df_input.copy()
+    # MODIFICAÇÃO: Recarregar dados completos ignorando filtros
+    df_completo = read_sales_data()  # Busca dados completos da planilha
+    if df_completo.empty:
+        st.info("Sem dados disponíveis para o heatmap.")
+        return None
+    
+    # Processar os dados completos
+    df_completo = process_data(df_completo)
+    
+    df = df_completo.copy()
     df['Data'] = pd.to_datetime(df['Data'], errors='coerce')
     df.dropna(subset=['Data'], inplace=True)
     
@@ -934,8 +943,7 @@ def create_activity_heatmap(df_input):
         st.info("Dados insuficientes após processamento para gerar o heatmap de atividade.")
         return None
 
-    # Determinar o ano (ou anos) a ser exibido
-    # Por simplicidade, vamos pegar o ano mais recente dos dados filtrados
+    # Determinar o ano atual ou mais recente dos dados
     current_year = df['Data'].dt.year.max()
     df = df[df['Data'].dt.year == current_year]
 
