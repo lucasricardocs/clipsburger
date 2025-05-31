@@ -1424,7 +1424,7 @@ def main():
             # Análise melhorada de dias da semana com percentuais
             weekday_chart, best_day = create_enhanced_weekday_analysis(df_filtered)
             if weekday_chart:
-                st.altair_chart(weekday_chart, use_container_width=True)
+                st.altair_chart(weekday_chart, use_container_width=False)
                 
                 # Análise detalhada dos dias da semana
                 if not df_filtered.empty and 'DiaSemana' in df_filtered.columns:
