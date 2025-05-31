@@ -1397,7 +1397,7 @@ def main():
             else: 
                 st.info("Sem dados de pagamento para exibir o resumo nesta seção.")
             
-            st.divider()
+            #st.divider()
 
              # Gráficos lado a lado - 2/3 para vendas diárias, 1/3 para radial
             #st.subheader("📊 Análise Diária e Métodos de Pagamento")
