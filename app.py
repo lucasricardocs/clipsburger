@@ -662,13 +662,13 @@ def create_dre_textual(resultados, df_processed, selected_anos_filter):
 
     # Criar 2 colunas - descrição e valor
     col1, col2 = st.columns([6, 2])
-
     with col1:
         st.markdown("")
     with col2:
-        st.makdown("**Em R$**")
+        st.markdown("**Em R$**")
     
     # RECEITA BRUTA
+    col1, col2 = st.columns([6, 2])
     with col1:
         st.markdown("**RECEITA BRUTA**")
     with col2:
