@@ -978,7 +978,7 @@ def create_activity_heatmap(df_input):
         baseline='bottom',
         fontSize=15,
         dy=-1,
-        dx=-30, # Espaço acima do heatmap
+        dx=-25, # Espaço acima do heatmap
         color='#A9A9A9' # Cor cinza claro para meses
     ).encode(
         x=alt.X('week_corrected:O', axis=None), # Usar semana corrigida
@@ -991,7 +991,7 @@ def create_activity_heatmap(df_input):
     heatmap = alt.Chart(full_df).mark_rect(
         stroke='#ffffff', # Borda branca fina
         strokeWidth=2,
-        cornerRadius=0.1 # Leve arredondamento
+        cornerRadius=0.5 # Leve arredondamento
     ).encode(
         x=alt.X('week_corrected:O', # Usar semana corrigida
                 title=None, 
@@ -999,7 +999,7 @@ def create_activity_heatmap(df_input):
         y=alt.Y('day_display_name:N', 
                 sort=['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'],
                 title=None,
-                axis=alt.Axis(labelAngle=0, labelFontSize=10, ticks=False, domain=False, grid=False, labelColor='#A9A9A9')),
+                axis=alt.Axis(labelAngle=0, labelFontSize=15, ticks=False, domain=False, grid=False, labelColor='#A9A9A9')),
         color=alt.Color('Total:Q',
             scale=alt.Scale(
                 # Usar cores do tema escuro, adaptadas para heatmap
@@ -1026,7 +1026,7 @@ def create_activity_heatmap(df_input):
     final_chart = alt.vconcat(
         months_chart,
         heatmap,
-        spacing=5 # Pequeno espaço entre meses e heatmap
+        spacing=2 # Pequeno espaço entre meses e heatmap
     ).configure_view(
         strokeWidth=0 # Sem borda ao redor do gráfico combinado
     ).configure_concat(
