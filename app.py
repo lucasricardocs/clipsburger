@@ -1079,17 +1079,13 @@ def main():
         margin-bottom: 1rem;
     }
     
-    .logo-wrapper {
-        position: relative;
-        margin-right: 20px;
-    }
-    
     .logo-image {
         width: 200px;
         height: auto;
         position: relative;
         z-index: 10;
         border-radius: 10px;
+        margin-right: 20px;
         animation: celestialGlow 4s ease-in-out infinite alternate;
     }
     
@@ -1159,16 +1155,13 @@ def main():
     # Usar HTML para controle fino do layout
     st.markdown(f"""
     <div class="logo-container">
-        <div class="logo-wrapper">
-            <img src="https://raw.githubusercontent.com/lucasricardocs/clipsburger/refs/heads/main/logo.png" class="logo-image" alt="Clips Burger Logo">
-        </div>
+        <img src="https://raw.githubusercontent.com/lucasricardocs/clipsburger/refs/heads/main/logo.png" class="logo-image" alt="Clips Burger Logo">
         <div class="title-container">
             <h1 class="title-main">SISTEMA FINANCEIRO - CLIP'S BURGER</h1>
             <p class="title-sub">Gestão inteligente de vendas com análise financeira em tempo real - {datetime.now().year}</p>
         </div>
     </div>
     """, unsafe_allow_html=True)
-
 
     df_raw = read_sales_data()
     df_processed = process_data(df_raw)
