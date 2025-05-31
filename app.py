@@ -1298,6 +1298,17 @@ def main():
             
             st.divider()
 
+            # --- INTEGRAÇÃO DO HEATMAP --- 
+            st.subheader("📅 Heatmap de Atividade Anual")
+            heatmap_chart = create_activity_heatmap(df_filtered) # Passa dados filtrados
+            if heatmap_chart:
+                st.altair_chart(heatmap_chart, use_container_width=True)
+            else:
+                st.info("Não foi possível gerar o heatmap de atividade para o período/ano selecionado.")
+            # --- FIM DA INTEGRAÇÃO DO HEATMAP ---
+            
+            st.markdown("---")
+
             # Seção de métodos de pagamento com cards lado a lado
             st.subheader("💳 Métodos de Pagamento (Visão Geral)")
             cartao_total = df_filtered['Cartão'].sum() if 'Cartão' in df_filtered else 0
