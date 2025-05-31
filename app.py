@@ -1070,7 +1070,7 @@ def format_brl(value):
 # --- Interface Principal da Aplicação ---
 def main():
     # --- MODIFICAÇÃO DO LOGO E TÍTULO ---
-   # --- MODIFICAÇÃO DO LOGO E TÍTULO ---
+    # --- MODIFICAÇÃO DO LOGO E TÍTULO ---
     st.markdown("""
     <style>
     .logo-container {
@@ -1082,21 +1082,25 @@ def main():
     .logo-wrapper {
         position: relative;
         margin-right: 20px;
-        width: 200px;
-        height: auto;
+        width: 240px;
+        height: 240px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
     
     .logo-background {
         position: absolute;
-        top: 0;
-        left: 0;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
         width: 200px;
-        height: auto;
+        height: 200px;
         background-image: url('https://raw.githubusercontent.com/lucasricardocs/clipsburger/refs/heads/main/logo.png');
         background-size: contain;
         background-repeat: no-repeat;
         background-position: center;
-        filter: blur(15px) saturate(2) brightness(1.5);
+        filter: blur(20px) brightness(1.8) saturate(2.5);
         z-index: 1;
         animation: celestialPulse 3s ease-in-out infinite alternate;
     }
@@ -1107,35 +1111,33 @@ def main():
         height: auto;
         z-index: 10;
         border-radius: 10px;
-        padding: 20px;
-        margin: -20px;
     }
     
     @keyframes celestialPulse {
         0% {
-            filter: blur(15px) saturate(2) brightness(1.5) hue-rotate(0deg);
-            transform: scale(1.1);
-            opacity: 0.8;
+            filter: blur(20px) brightness(1.8) saturate(2.5) hue-rotate(0deg);
+            transform: translate(-50%, -50%) scale(1.1);
+            opacity: 0.7;
         }
         25% {
-            filter: blur(18px) saturate(2.5) brightness(1.8) hue-rotate(90deg);
-            transform: scale(1.15);
-            opacity: 0.9;
+            filter: blur(22px) brightness(2.0) saturate(3.0) hue-rotate(90deg);
+            transform: translate(-50%, -50%) scale(1.15);
+            opacity: 0.8;
         }
         50% {
-            filter: blur(20px) saturate(3) brightness(2) hue-rotate(180deg);
-            transform: scale(1.2);
-            opacity: 1;
-        }
-        75% {
-            filter: blur(18px) saturate(2.5) brightness(1.8) hue-rotate(270deg);
-            transform: scale(1.15);
+            filter: blur(25px) brightness(2.2) saturate(3.5) hue-rotate(180deg);
+            transform: translate(-50%, -50%) scale(1.2);
             opacity: 0.9;
         }
+        75% {
+            filter: blur(22px) brightness(2.0) saturate(3.0) hue-rotate(270deg);
+            transform: translate(-50%, -50%) scale(1.15);
+            opacity: 0.8;
+        }
         100% {
-            filter: blur(22px) saturate(3.5) brightness(2.2) hue-rotate(360deg);
-            transform: scale(1.25);
-            opacity: 0.7;
+            filter: blur(28px) brightness(2.4) saturate(4.0) hue-rotate(360deg);
+            transform: translate(-50%, -50%) scale(1.25);
+            opacity: 0.6;
         }
     }
     
