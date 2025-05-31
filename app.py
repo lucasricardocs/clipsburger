@@ -1118,12 +1118,11 @@ def main():
     df_processed = process_data(df_raw)
 
     # Criar 5 tabs incluindo o Dashboard Premium
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4 = st.tabs([
         "📝 Registrar Venda", 
         "📈 Análise Detalhada", 
         "💡 Estatísticas", 
         "💰 Análise Contábil",
-        "🚀 Dashboard Premium"
     ])
 
     with tab1:
@@ -1694,51 +1693,6 @@ def main():
             💡 **Nota Importante:** A DRE Textual acima é sempre anual. As demais análises (Gráfico Financeiro, Margens, Resumo Executivo) referem-se ao **período selecionado nos filtros**. 
             Para decisões estratégicas, consulte sempre um contador qualificado.
             """)
-
-    # --- TAB5: DASHBOARD PREMIUM ---
-    with tab5:
-        st.header("🚀 Dashboard Premium")
-        
-        if not df_filtered.empty:
-            # KPIs Premium
-            create_premium_kpi_cards(df_filtered)
-            
-            st.markdown("---")
-            
-            # --- INTEGRAÇÃO DO HEATMAP --- 
-            st.subheader("📅 Heatmap de Atividade Anual")
-            heatmap_chart = create_activity_heatmap(df_filtered) # Passa dados filtrados
-            if heatmap_chart:
-                st.altair_chart(heatmap_chart, use_container_width=True)
-            else:
-                st.info("Não foi possível gerar o heatmap de atividade para o período/ano selecionado.")
-            # --- FIM DA INTEGRAÇÃO DO HEATMAP ---
-            
-            st.markdown("---")
-            
-            # Gráficos lado a lado - 2/3 para vendas diárias, 1/3 para radial
-            st.subheader("📊 Análise Diária e Métodos de Pagamento")
-            col_chart1, col_chart2 = st.columns([2, 1])
-            
-            with col_chart1:
-                # Gráfico de vendas diárias (2/3 do espaço)
-                daily_chart = create_advanced_daily_sales_chart(df_filtered)
-                if daily_chart:
-                    st.altair_chart(daily_chart, use_container_width=True)
-                else:
-                    st.info("Gráfico de vendas diárias indisponível.")
-            
-            with col_chart2:
-                # Gráfico radial (1/3 do espaço)
-                radial_chart = create_radial_plot(df_filtered)
-                if radial_chart:
-                    st.altair_chart(radial_chart, use_container_width=True)
-                else:
-                    st.info("Gráfico radial de pagamentos indisponível.")
-            
-            st.markdown("---")       
-        else:
-            st.warning("⚠️ Sem dados disponíveis. Ajuste os filtros na sidebar ou registre algumas vendas para visualizar o dashboard premium.")
 
 # --- Ponto de Entrada da Aplicação ---
 if __name__ == "__main__":
