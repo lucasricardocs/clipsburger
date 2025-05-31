@@ -444,11 +444,6 @@ def create_advanced_daily_sales_chart(df):
             alt.Tooltip('Valor:Q', title='Valor (R$)', format=',.2f')
         ]
     ).properties(
-        title=alt.TitleParams(
-            text="Vendas Diárias por Método de Pagamento",
-            fontSize=16,
-            anchor='start'
-        ),
         height=500,
         width=1000,
         padding={'bottom': 100}
