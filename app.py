@@ -1036,8 +1036,8 @@ def create_activity_heatmap(df_input):
             alt.Tooltip('Pix:Q', title='Pix (R$)', format=',.2f')
         ]
     ).properties(
-        width=800, # Ajustar largura
-        height=200  # Ajustar altura
+        width=1000, # Ajustar largura
+        height=50p  # Ajustar altura
     )
 
     # Combinar gráfico final
