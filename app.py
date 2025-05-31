@@ -272,19 +272,7 @@ def create_radial_plot(df):
         color=alt.Color(
             'Método:N', 
             scale=alt.Scale(range=CORES_MODO_ESCURO[:3]),
-            legend=alt.Legend(
-                title="Método de Pagamento",
-                orient='bottom',
-                direction='horizontal',
-                titleFontSize=14,
-                labelFontSize=12,
-                symbolSize=100,
-                symbolStrokeWidth=2,
-                titlePadding=10,
-                padding=10,
-                rowPadding=5,
-                columnPadding=15
-            )
+            legend=None
         ),
         tooltip=[
             alt.Tooltip('Método:N', title='Método'),
