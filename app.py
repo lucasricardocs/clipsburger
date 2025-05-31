@@ -1355,14 +1355,27 @@ def main():
             
             st.divider()
 
-            # MUDANÇA: Usar gráfico radial em vez de pizza
-            radial_chart = create_radial_plot(df_filtered)
-            if radial_chart:
-                st.altair_chart(radial_chart, use_container_width=True)
-            else:
-                st.info("Sem dados de pagamento para exibir o gráfico radial nos filtros selecionados.")
-
-            st.divider()
+             # Gráficos lado a lado - 2/3 para vendas diárias, 1/3 para radial
+            st.subheader("📊 Análise Diária e Métodos de Pagamento")
+            col_chart1, col_chart2 = st.columns([2, 1])
+            
+            with col_chart1:
+                # Gráfico de vendas diárias (2/3 do espaço)
+                daily_chart = create_advanced_daily_sales_chart(df_filtered)
+                if daily_chart:
+                    st.altair_chart(daily_chart, use_container_width=True)
+                else:
+                    st.info("Gráfico de vendas diárias indisponível.")
+            
+            with col_chart2:
+                # Gráfico radial (1/3 do espaço)
+                radial_chart = create_radial_plot(df_filtered)
+                if radial_chart:
+                    st.altair_chart(radial_chart, use_container_width=True)
+                else:
+                    st.info("Gráfico radial de pagamentos indisponível.")
+            
+            st.markdown("---")
 
             # Análise melhorada de dias da semana com percentuais
             weekday_chart, best_day = create_enhanced_weekday_analysis(df_filtered)
