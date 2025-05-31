@@ -1037,7 +1037,7 @@ def create_activity_heatmap(df_input):
         ]
     ).properties(
         width=1000, # Ajustar largura
-        height=500  # Ajustar altura
+        height=250  # Ajustar altura
     )
 
     # Combinar gráfico final
