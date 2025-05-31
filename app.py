@@ -1328,7 +1328,7 @@ def main():
             with col_metrics3:
                 st.metric("📈 Média por Registro", format_brl(media_por_registro))
             
-            st.divider()
+           # st.divider()
 
             # --- INTEGRAÇÃO DO HEATMAP --- 
             st.subheader("📅 Heatmap de Atividade Anual")
@@ -1472,7 +1472,7 @@ def main():
                                     st.error(f"🔻 **Último lugar:** {ultimo}")
                                     st.write(f"   Média: {format_brl(medias_por_dia.loc[ultimo, 'mean'])} ({int(medias_por_dia.loc[ultimo, 'count'])} dias)")
                             
-                            st.divider()
+                            #st.divider()
                             
                             # Análise de frequência de trabalho
                             st.subheader("📅 Análise de Frequência de Trabalho")
@@ -1558,7 +1558,7 @@ def main():
             else:
                 st.info("📊 Dados insuficientes para calcular a análise por dia da semana.")
             
-            st.divider()
+            #st.divider()
 
             sales_histogram_chart = create_sales_histogram(df_filtered)
             if sales_histogram_chart: 
