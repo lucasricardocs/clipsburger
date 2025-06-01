@@ -351,10 +351,7 @@ def create_cumulative_area_chart(df):
             alt.Tooltip('Total_Acumulado:Q', title='Total Acumulado (R$)', format=',.2f')
         ]
     ).properties(
-        title=alt.TitleParams(
-            #text='Evolução Acumulada das Venda',
-            fontSize=18,
-            anchor='start' # Alinha o título ao início (esquerda)
+        title=None
         ),
         height=500,
         # width=1000 # Removido para usar use_container_width
