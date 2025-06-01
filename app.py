@@ -1135,7 +1135,7 @@ def main():
             <img src="https://raw.githubusercontent.com/lucasricardocs/clipsburger/refs/heads/main/logo.png" class="logo-image" alt="Clips Burger Logo">
         </div>
         <div class="title-container">
-            <h1 class="title-main">SISTEMA FINANCEIRO - CLIP'S BURGER</h1>
+            <h1 class="title-main">CLIP'S BURGER</h1>
             <p class="title-sub">Gestão inteligente de vendas com análise financeira em tempo real - {datetime.now().year}</p>
         </div>
     </div>
