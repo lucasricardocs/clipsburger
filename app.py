@@ -1,5 +1,4 @@
-# -*- coding: utf-8 -*-
-import streamlit as st
+mport streamlit as st
 import gspread
 import pandas as pd
 import altair as alt
