@@ -928,14 +928,26 @@ def create_activity_heatmap(df_input):
         else:
             full_df[col] = full_df[col].fillna(0)
 
-    # Ajuste para o estilo GitHub
-    full_df['day_of_week'] = full_df['Data'].dt.dayofweek # Seg=0, Dom=6
-    full_df['day_name'] = full_df['Data'].dt.strftime('%a') # Abreviação do dia
-    # Mapear para ordem correta no gráfico (Dom=0)
-    day_order_map = {'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6, 'Sun': 0}
-    full_df['day_sort_order'] = full_df['Data'].dt.weekday.map(lambda x: (x + 1) % 7) # Dom=0, Seg=1...
-    day_name_map = {0: 'Dom', 1: 'Seg', 2: 'Ter', 3: 'Qua', 4: 'Qui', 5: 'Sex', 6: 'Sáb'}
-    full_df['day_display_name'] = full_df['day_sort_order'].map(day_name_map)
+    # CORREÇÃO: Obter o dia da semana do primeiro dia do ano (0=segunda, 6=domingo)
+    first_day_weekday = pd.Timestamp(f'{current_year}-01-01').weekday()
+
+    # Criar coluna com dia da semana original (0=segunda, 6=domingo)
+    full_df['day_of_week'] = full_df['Data'].dt.weekday
+
+    # Mapear os nomes dos dias para exibição
+    day_name_map = {0: 'Seg', 1: 'Ter', 2: 'Qua', 3: 'Qui', 4: 'Sex', 5: 'Sáb', 6: 'Dom'}
+
+    # Criar a ordem correta dos dias começando pelo dia da semana do 01/01
+    days_order = list(range(7))  # [0, 1, 2, 3, 4, 5, 6]
+    reordered_days = days_order[first_day_weekday:] + days_order[:first_day_weekday]
+
+    # Criar mapeamento para a nova ordem de exibição
+    order_map = {day: i for i, day in enumerate(reordered_days)}
+    full_df['day_sort_order'] = full_df['day_of_week'].map(order_map)
+
+    # Criar os nomes dos dias na ordem correta para exibição
+    day_display_names = [day_name_map[day] for day in reordered_days]
+    full_df['day_display_name'] = full_df['day_sort_order'].map(lambda x: day_display_names[x])
     
     full_df['week'] = full_df['Data'].dt.isocalendar().week
     full_df['month'] = full_df['Data'].dt.month
@@ -981,7 +993,7 @@ def create_activity_heatmap(df_input):
                 title=None, 
                 axis=None),
         y=alt.Y('day_display_name:N', 
-                sort=['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'],
+                sort=day_display_names,  # CORREÇÃO: Usar a lista dinâmica
                 title=None,
                 axis=alt.Axis(labelAngle=0, labelFontSize=12, ticks=False, domain=False, grid=False, labelColor='#A9A9A9')),
         color=alt.Color('Total:Q',
@@ -1028,6 +1040,7 @@ def create_activity_heatmap(df_input):
     )
 
     return final_chart
+
 
 # Função para formatar valores em moeda brasileira
 def format_brl(value):
