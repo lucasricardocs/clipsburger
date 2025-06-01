@@ -1083,27 +1083,27 @@ def main():
         0% {
             filter: blur(20px) brightness(1.8) saturate(2.5) hue-rotate(0deg);
             transform: translate(-50%, -50%) scale(1.1);
-            opacity: 0.7;
+            opacity: 0.2;
         }
         25% {
             filter: blur(22px) brightness(2.0) saturate(3.0) hue-rotate(90deg);
             transform: translate(-50%, -50%) scale(1.15);
-            opacity: 0.8;
+            opacity: 0.2;
         }
         50% {
             filter: blur(25px) brightness(2.2) saturate(3.5) hue-rotate(180deg);
             transform: translate(-50%, -50%) scale(1.2);
-            opacity: 0.9;
+            opacity: 0.2;
         }
         75% {
             filter: blur(22px) brightness(2.0) saturate(3.0) hue-rotate(270deg);
             transform: translate(-50%, -50%) scale(1.15);
-            opacity: 0.8;
+            opacity: 0.2;
         }
         100% {
             filter: blur(28px) brightness(2.4) saturate(4.0) hue-rotate(360deg);
             transform: translate(-50%, -50%) scale(1.25);
-            opacity: 0.6;
+            opacity: 0.2;
         }
     }
     
