@@ -350,10 +350,9 @@ def create_cumulative_area_chart(df):
             alt.Tooltip('Total:Q', title='Venda do Dia (R$)', format=',.2f'),
             alt.Tooltip('Total_Acumulado:Q', title='Total Acumulado (R$)', format=',.2f')
         ]
-    ).height=500,
-        # width=1000 # Removido para usar use_container_width
-    ).configure_view(
-        stroke=None # Remove a borda ao redor da visualização do gráfico
+    ).properties(
+        height=500,
+        # width=1000, # Removido para usar use_container_width
     ).configure(
         background='transparent' # Torna o fundo do gráfico transparente
     )
