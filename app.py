@@ -902,7 +902,7 @@ def create_activity_heatmap(df_input):
         st.info(f"Sem dados para o ano {current_year} para gerar o heatmap.")
         return None
 
-    # CORREÇÃO: Obter o dia da semana do primeiro dia do ano (0=segunda, 6=domingo)
+    # Obter o dia da semana do primeiro dia do ano (0=segunda, 6=domingo)
     first_day_of_year = pd.Timestamp(f'{current_year}-01-01')
     first_day_weekday = first_day_of_year.weekday()  # 0=segunda, 6=domingo
     
@@ -931,28 +931,21 @@ def create_activity_heatmap(df_input):
     cols_present = [col for col in cols_to_merge if col in df.columns]
     full_df = full_df.merge(df[cols_present], on='Data', how='left')
     
-    # Preencher NaNs e garantir colunas
+    # CORREÇÃO: Preencher NaNs corretamente
     for col in ['Total', 'Cartao', 'Dinheiro', 'Pix']:
         if col not in full_df.columns:
             full_df[col] = 0
         else:
             full_df[col] = full_df[col].fillna(0)
     
-    # Para dias que não são do ano atual, zerar os valores (deixar vazio visualmente)
+    # CORREÇÃO: Para dias que não são do ano atual, definir como None apenas para visualização
+    # mas manter valores 0 para os tooltips funcionarem corretamente
+    full_df['display_total'] = full_df['Total'].copy()
     mask_not_current_year = ~full_df['is_current_year']
-    full_df.loc[mask_not_current_year, ['Total', 'Cartao', 'Dinheiro', 'Pix']] = None
+    full_df.loc[mask_not_current_year, 'display_total'] = None
 
-    # NOVO: Identificar dias que faltaram (Total = 0 e é do ano atual e não é domingo)
-    full_df['day_of_week'] = full_df['Data'].dt.weekday  # 0=segunda, 6=domingo
-    full_df['is_sunday'] = full_df['day_of_week'] == 6
-    full_df['is_absent'] = (full_df['Total'] == 0) & full_df['is_current_year'] & (~full_df['is_sunday'])
-    
-    # CORREÇÃO: Adicionar colunas de status para tooltip
-    full_df['status'] = 'Normal'
-    full_df.loc[full_df['is_absent'], 'status'] = 'Dia sem vendas'
-    full_df.loc[full_df['is_sunday'] & full_df['is_current_year'], 'status'] = 'Domingo - Folga'
-    
     # Mapear os nomes dos dias (ordem fixa)
+    full_df['day_of_week'] = full_df['Data'].dt.weekday  # 0=segunda, 6=domingo
     day_name_map = {0: 'Seg', 1: 'Ter', 2: 'Qua', 3: 'Qui', 4: 'Sex', 5: 'Sáb', 6: 'Dom'}
     full_df['day_display_name'] = full_df['day_of_week'].map(day_name_map)
     
@@ -985,7 +978,7 @@ def create_activity_heatmap(df_input):
         text='month_name:N'
     )
 
-    # Gráfico principal (heatmap)
+    # Gráfico principal (heatmap) - USANDO display_total para coloração
     heatmap = alt.Chart(full_df).mark_rect(
         stroke='#ffffff',
         strokeWidth=2,
@@ -998,7 +991,7 @@ def create_activity_heatmap(df_input):
                 sort=day_display_names,
                 title=None,
                 axis=alt.Axis(labelAngle=0, labelFontSize=12, ticks=False, domain=False, grid=False, labelColor='#A9A9A9')),
-        color=alt.Color('Total:Q',
+        color=alt.Color('display_total:Q',
             scale=alt.Scale(
                 range=['#f0f0f0', '#9be9a8', '#40c463', '#30a14e', '#216e39'],
                 type='threshold',
@@ -1011,56 +1004,16 @@ def create_activity_heatmap(df_input):
             alt.Tooltip('Total:Q', title='Total Vendas (R$)', format=',.2f'),
             alt.Tooltip('Cartao:Q', title='Cartão (R$)', format=',.2f'),
             alt.Tooltip('Dinheiro:Q', title='Dinheiro (R$)', format=',.2f'),
-            alt.Tooltip('Pix:Q', title='Pix (R$)', format=',.2f'),
-            alt.Tooltip('status:N', title='Status')
+            alt.Tooltip('Pix:Q', title='Pix (R$)', format=',.2f')
         ]
     ).properties(
         height=250
     )
 
-    # CORREÇÃO: Adicionar X vermelho para dias que faltaram
-    absent_marks = alt.Chart(full_df[full_df['is_absent']]).mark_text(
-        text='✗',
-        color='red',
-        fontSize=16,
-        fontWeight='bold'
-    ).encode(
-        x=alt.X('week_corrected:O'),
-        y=alt.Y('day_display_name:N', sort=day_display_names),
-        tooltip=[
-            alt.Tooltip('Data:T', title='Data', format='%d/%m/%Y'),
-            alt.Tooltip('day_display_name:N', title='Dia'),
-            alt.Tooltip('status:N', title='Status')
-        ]
-    )
-
-    # CORREÇÃO: Adicionar emoji para domingos (folga)
-    sunday_marks = alt.Chart(full_df[full_df['is_sunday'] & full_df['is_current_year']]).mark_text(
-        text='😴',
-        fontSize=14
-    ).encode(
-        x=alt.X('week_corrected:O'),
-        y=alt.Y('day_display_name:N', sort=day_display_names),
-        tooltip=[
-            alt.Tooltip('Data:T', title='Data', format='%d/%m/%Y'),
-            alt.Tooltip('day_display_name:N', title='Dia'),
-            alt.Tooltip('status:N', title='Status')
-        ]
-    )
-
-    # Combinar todos os elementos
-    combined_heatmap = alt.layer(
-        heatmap,
-        absent_marks,
-        sunday_marks
-    ).resolve_scale(
-        color='independent'
-    )
-
     # Combinar gráfico final
     final_chart = alt.vconcat(
         months_chart,
-        combined_heatmap,
+        heatmap,
         spacing=1
     ).configure_view(
         strokeWidth=0
