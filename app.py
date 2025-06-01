@@ -108,24 +108,6 @@ def inject_css():
         justify-content: center;
         border: 1px solid rgba(135, 206, 235, 0.3);
     }
-    
-    /* Tabs com estilo personalizado */
-    .stTabs [data-baseweb="tab-list"] {
-        background: rgba(30, 60, 114, 0.3);
-        border-radius: 10px;
-    }
-    
-    .stTabs [data-baseweb="tab"] {
-        background: rgba(135, 206, 235, 0.1);
-        color: #87CEEB;
-        border-radius: 5px;
-        margin: 2px;
-    }
-    
-    .stTabs [aria-selected="true"] {
-        background: linear-gradient(45deg, #4c78a8, #87CEEB);
-        color: white;
-    }
     """
     
     # CSS da logo animada (integrado)
