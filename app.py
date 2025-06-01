@@ -1308,19 +1308,29 @@ def main():
                         meses_opcoes_dict = {m_num: meses_ordem[m_num-1] for m_num in meses_numeros_disponiveis if 1 <= m_num <= 12}
                         meses_opcoes_display = [f"{m_num} - {m_nome}" for m_num, m_nome in meses_opcoes_dict.items()]
                         
-                        # Default para o mês atual apenas se estiver nas opções e se apenas um ano (o atual) estiver selecionado
+                        # NOVA LÓGICA: Sempre priorizar o mês atual quando o ano atual está selecionado
                         default_meses_selecionados = []
-                        if len(selected_anos_filter) == 1 and selected_anos_filter[0] == datetime.now().year:
-                            default_mes_num = datetime.now().month
-                            default_mes_str = f"{default_mes_num} - {meses_ordem[default_mes_num-1]}" if 1 <= default_mes_num <= 12 and default_mes_num in meses_opcoes_dict else None
-                            if default_mes_str and default_mes_str in meses_opcoes_display:
-                                default_meses_selecionados = [default_mes_str]
-                            else: # Se mês atual não tem dados, seleciona todos
-                                default_meses_selecionados = meses_opcoes_display
-                        else: # Se múltiplos anos ou ano diferente do atual, seleciona todos
+                        ano_atual = datetime.now().year
+                        mes_atual = datetime.now().month
+                        
+                        if ano_atual in selected_anos_filter:
+                            mes_atual_str = f"{mes_atual} - {meses_ordem[mes_atual-1]}"
+                            
+                            # Adicionar mês atual mesmo sem dados
+                            if mes_atual_str not in meses_opcoes_display:
+                                meses_opcoes_display.append(mes_atual_str)
+                                meses_opcoes_display = sorted(meses_opcoes_display, key=lambda x: int(x.split(" - ")[0]))
+                            
+                            default_meses_selecionados = [mes_atual_str]
+                        else:
                             default_meses_selecionados = meses_opcoes_display
                             
-                        selected_meses_str = st.multiselect("📆 Mês(es):", options=meses_opcoes_display, default=default_meses_selecionados)
+                        selected_meses_str = st.multiselect(
+                            "📆 Mês(es):", 
+                            options=meses_opcoes_display, 
+                            default=default_meses_selecionados,
+                            help="💡 O mês atual é selecionado automaticamente. Você pode alterar conforme necessário."
+                        )
                         selected_meses_filter = [int(m.split(" - ")[0]) for m in selected_meses_str]
             else: 
                 st.info("📊 Nenhum ano disponível para filtro.")
