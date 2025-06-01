@@ -1318,7 +1318,7 @@ def create_activity_heatmap(df_input):
         tooltip_fields.append(alt.Tooltip('Cartão:Q', title='Cartão (R$)', format=',.2f'))
     if 'Dinheiro' in full_df.columns and full_df['Dinheiro'].sum() > 0:
         tooltip_fields.append(alt.Tooltip('Dinheiro:Q', title='Dinheiro (R$)', format=',.2f'))
-        if 'Pix' in full_df.columns and full_df['Pix'].sum() > 0:
+    if 'Pix' in full_df.columns and full_df['Pix'].sum() > 0:
         tooltip_fields.append(alt.Tooltip('Pix:Q', title='Pix (R$)', format=',.2f'))
 
     # Gráfico principal (heatmap)
