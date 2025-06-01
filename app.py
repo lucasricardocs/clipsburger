@@ -285,7 +285,7 @@ def create_radial_plot(df):
         stroke='white', 
         strokeWidth=2
     ).properties(
-        width=500,
+        # width=500, # Removido para usar use_container_width
         height=500,
         padding={'bottom': 100}
     ).configure_view(
@@ -357,7 +357,7 @@ def create_cumulative_area_chart(df):
             anchor='start' # Alinha o título ao início (esquerda)
         ),
         height=500,
-        width=1000 # Considere usar a largura 'container' no Streamlit para responsividade
+        # width=1000 # Removido para usar use_container_width
     ).configure_view(
         stroke=None # Remove a borda ao redor da visualização do gráfico
     ).configure(
@@ -416,7 +416,7 @@ def create_advanced_daily_sales_chart(df):
         ]
     ).properties(
         height=500,
-        width=1000,
+        # width=1000, # Removido para usar use_container_width
         padding={'bottom': 100}
     ).configure_view(
         stroke=None
@@ -481,7 +481,7 @@ def create_enhanced_weekday_analysis(df):
             anchor='start'
         ),
         height=500,
-        width=1000,
+        # width=1000, # Removido para usar use_container_width
         padding={'bottom': 100}
     ).configure_view(
         stroke=None
@@ -530,7 +530,7 @@ def create_sales_histogram(df, title="Distribuição dos Valores de Venda Diári
             anchor='start'
         ),
         height=600,
-        width=1000,
+        # width=1000, # Removido para usar use_container_width
         padding={'bottom': 100}
     ).configure_view(
         stroke=None
@@ -654,6 +654,7 @@ def create_dre_textual(resultados, df_processed, selected_anos_filter):
     <div style="text-align: center; margin-bottom: 30px;">
         <h3 style="margin: 0; font-weight: normal;">DEMONSTRAÇÃO DO RESULTADO DO EXERCÍCIO</h3>
         <p style="margin: 5px 0; font-style: italic;">Clips Burger - Exercício {ano_dre}</p>
+    </div>
     """, unsafe_allow_html=True)
 
     # Criar 2 colunas - descrição e valor
@@ -822,7 +823,7 @@ def create_financial_dashboard_altair(resultados):
             anchor='start'
         ),
         height=500,
-        width=1000,
+        # width=1000, # Removido para usar use_container_width
         padding={'bottom': 100}
     ).configure_view(
         stroke=None
@@ -967,7 +968,7 @@ def create_activity_heatmap(df_input):
         x=alt.X('week_corrected:O', axis=None), # Usar semana corrigida
         text='month_name:N'
     ).properties(
-        width=800 # Ajustar largura se necessário
+        # width=800 # Removido para usar use_container_width
     )
 
     # Gráfico principal (heatmap)
@@ -1001,7 +1002,7 @@ def create_activity_heatmap(df_input):
             alt.Tooltip('Pix:Q', title='Pix (R$)', format=',.2f')
         ]
     ).properties(
-        width=1000, # Ajustar largura
+        # width=1000, # Removido para usar use_container_width
         height=250  # Ajustar altura
     )
 
@@ -1413,7 +1414,7 @@ def main():
             # Análise melhorada de dias da semana com percentuais
             weekday_chart, best_day = create_enhanced_weekday_analysis(df_filtered)
             if weekday_chart:
-                st.altair_chart(weekday_chart, use_container_width=False)
+                st.altair_chart(weekday_chart, use_container_width=True) # Modificado para True# Modificado para True
                 
                 # Análise detalhada dos dias da semana
                 if not df_filtered.empty and 'DiaSemana' in df_filtered.columns:
@@ -1551,8 +1552,7 @@ def main():
 
             sales_histogram_chart = create_sales_histogram(df_filtered)
             if sales_histogram_chart: 
-                st.altair_chart(sales_histogram_chart, use_container_width=False)
-            else: 
+                st.altair_chart(sales_histogram_chart, use_container_width=True) # Modificado para True            else: 
                 st.info("Dados insuficientes para o Histograma de Vendas.")
         else:
             if df_processed.empty and df_raw.empty and get_worksheet() is None: 
