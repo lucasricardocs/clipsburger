@@ -352,7 +352,7 @@ def create_cumulative_area_chart(df):
         ]
     ).properties(
         title=alt.TitleParams(
-            text='Evolução Acumulada das Vendas',
+            #text='Evolução Acumulada das Venda',
             fontSize=18,
             anchor='start' # Alinha o título ao início (esquerda)
         ),
