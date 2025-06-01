@@ -894,6 +894,9 @@ def create_activity_heatmap(df_input):
         st.info("Dados insuficientes após processamento para gerar o heatmap de atividade.")
         return None
 
+    # DEBUG: Verificar colunas disponíveis
+    print("Colunas disponíveis:", df.columns.tolist())
+
     # Determinar o ano atual ou mais recente dos dados
     current_year = df['Data'].dt.year.max()
     df = df[df['Data'].dt.year == current_year]
@@ -926,20 +929,67 @@ def create_activity_heatmap(df_input):
     # Marcar quais datas são do ano atual
     full_df['is_current_year'] = full_df['Data'].dt.year == current_year
     
+    # CORREÇÃO: Verificar e mapear nomes de colunas corretos
+    # Possíveis variações do nome da coluna Cartão
+    possible_cartao_names = ['Cartao', 'Cartão', 'cartao', 'cartão', 'CARTAO', 'CARTÃO']
+    cartao_col = None
+    for col_name in possible_cartao_names:
+        if col_name in df.columns:
+            cartao_col = col_name
+            break
+    
+    # Possíveis variações do nome da coluna Dinheiro
+    possible_dinheiro_names = ['Dinheiro', 'dinheiro', 'DINHEIRO']
+    dinheiro_col = None
+    for col_name in possible_dinheiro_names:
+        if col_name in df.columns:
+            dinheiro_col = col_name
+            break
+    
+    # Possíveis variações do nome da coluna Pix
+    possible_pix_names = ['Pix', 'PIX', 'pix']
+    pix_col = None
+    for col_name in possible_pix_names:
+        if col_name in df.columns:
+            pix_col = col_name
+            break
+
     # Certificar que as colunas existem antes de mergear
-    cols_to_merge = ['Data', 'Total', 'Cartao', 'Dinheiro', 'Pix']
+    cols_to_merge = ['Data', 'Total']
+    if cartao_col:
+        cols_to_merge.append(cartao_col)
+    if dinheiro_col:
+        cols_to_merge.append(dinheiro_col)
+    if pix_col:
+        cols_to_merge.append(pix_col)
+    
     cols_present = [col for col in cols_to_merge if col in df.columns]
     full_df = full_df.merge(df[cols_present], on='Data', how='left')
     
-    # CORREÇÃO: Preencher NaNs corretamente
-    for col in ['Total', 'Cartao', 'Dinheiro', 'Pix']:
-        if col not in full_df.columns:
-            full_df[col] = 0
-        else:
-            full_df[col] = full_df[col].fillna(0)
+    # CORREÇÃO: Preencher NaNs e padronizar nomes das colunas
+    # Garantir que as colunas existem com nomes padronizados
+    if cartao_col and cartao_col in full_df.columns:
+        full_df['Cartao'] = full_df[cartao_col].fillna(0)
+    else:
+        full_df['Cartao'] = 0
+    
+    if dinheiro_col and dinheiro_col in full_df.columns:
+        full_df['Dinheiro'] = full_df[dinheiro_col].fillna(0)
+    else:
+        full_df['Dinheiro'] = 0
+    
+    if pix_col and pix_col in full_df.columns:
+        full_df['Pix'] = full_df[pix_col].fillna(0)
+    else:
+        full_df['Pix'] = 0
+    
+    # Garantir que Total existe
+    if 'Total' not in full_df.columns:
+        full_df['Total'] = 0
+    else:
+        full_df['Total'] = full_df['Total'].fillna(0)
     
     # CORREÇÃO: Para dias que não são do ano atual, definir como None apenas para visualização
-    # mas manter valores 0 para os tooltips funcionarem corretamente
     full_df['display_total'] = full_df['Total'].copy()
     mask_not_current_year = ~full_df['is_current_year']
     full_df.loc[mask_not_current_year, 'display_total'] = None
@@ -958,6 +1008,11 @@ def create_activity_heatmap(df_input):
 
     # Recalcular week baseado na primeira data (que agora é uma segunda-feira)
     full_df['week_corrected'] = ((full_df['Data'] - start_date).dt.days // 7)
+    
+    # DEBUG: Verificar se as colunas estão corretas
+    print("Colunas no full_df:", full_df.columns.tolist())
+    print("Amostra dos dados:")
+    print(full_df[['Data', 'Total', 'Cartao', 'Dinheiro', 'Pix']].head())
     
     # Encontrar a primeira semana de cada mês para os rótulos (apenas para meses do ano atual)
     month_labels = full_df[full_df['is_current_year']].groupby('month').agg(
@@ -978,7 +1033,22 @@ def create_activity_heatmap(df_input):
         text='month_name:N'
     )
 
-    # Gráfico principal (heatmap) - USANDO display_total para coloração
+    # CORREÇÃO: Construir tooltip dinamicamente baseado nas colunas disponíveis
+    tooltip_fields = [
+        alt.Tooltip('Data:T', title='Data', format='%d/%m/%Y'),
+        alt.Tooltip('day_display_name:N', title='Dia'),
+        alt.Tooltip('Total:Q', title='Total Vendas (R$)', format=',.2f')
+    ]
+    
+    # Adicionar campos de pagamento apenas se existirem
+    if 'Cartao' in full_df.columns:
+        tooltip_fields.append(alt.Tooltip('Cartao:Q', title='Cartão (R$)', format=',.2f'))
+    if 'Dinheiro' in full_df.columns:
+        tooltip_fields.append(alt.Tooltip('Dinheiro:Q', title='Dinheiro (R$)', format=',.2f'))
+    if 'Pix' in full_df.columns:
+        tooltip_fields.append(alt.Tooltip('Pix:Q', title='Pix (R$)', format=',.2f'))
+
+    # Gráfico principal (heatmap)
     heatmap = alt.Chart(full_df).mark_rect(
         stroke='#ffffff',
         strokeWidth=2,
@@ -998,14 +1068,7 @@ def create_activity_heatmap(df_input):
                 domain=[0.01, 1500, 2500, 3500]
             ),
             legend=None),
-        tooltip=[
-            alt.Tooltip('Data:T', title='Data', format='%d/%m/%Y'),
-            alt.Tooltip('day_display_name:N', title='Dia'),
-            alt.Tooltip('Total:Q', title='Total Vendas (R$)', format=',.2f'),
-            alt.Tooltip('Cartao:Q', title='Cartão (R$)', format=',.2f'),
-            alt.Tooltip('Dinheiro:Q', title='Dinheiro (R$)', format=',.2f'),
-            alt.Tooltip('Pix:Q', title='Pix (R$)', format=',.2f')
-        ]
+        tooltip=tooltip_fields
     ).properties(
         height=250
     )
@@ -1032,7 +1095,6 @@ def create_activity_heatmap(df_input):
     )
 
     return final_chart
-
 
 # Função para formatar valores em moeda brasileira
 def format_brl(value):
