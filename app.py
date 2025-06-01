@@ -37,21 +37,13 @@ meses_ordem = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julh
 
 # CSS para melhorar a aparência e adicionar background
 def inject_css():
-    # Base CSS styles com background em degradê azul celestial escuro
+    # Base CSS styles com background cyberpunk
     base_css = """
-    /* Background principal em degradê azul celestial escuro */
+    /* Background principal cyberpunk com efeito inset */
     .stApp {
-        background: linear-gradient(135deg, #ff4500 0%, #dc143c 25%, #8b0000 50%, #2d0000 75%, #000000 100%);
+        background: linear-gradient(135deg, #0c0c0c 0%, #1a0033 50%, #000000 100%);
+        box-shadow: inset 0 0 100px rgba(138, 43, 226, 0.1);
         background-attachment: fixed;
-        background-size: 400% 400%;
-        animation: gradientShift 15s ease infinite;
-    }
-    
-    /* Animação do degradê */
-    @keyframes gradientShift {
-        0% { background-position: 0% 50%; }
-        50% { background-position: 100% 50%; }
-        100% { background-position: 0% 50%; }
     }
     
     /* Header transparente */
@@ -109,6 +101,7 @@ def inject_css():
         border: 1px solid rgba(135, 206, 235, 0.3);
     }
     """
+
     
     # CSS da logo animada (integrado)
     fire_logo_css = """
