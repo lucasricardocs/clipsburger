@@ -44,7 +44,7 @@ def inject_css():
         background: linear-gradient(135deg, #0f172a 0%, #1e293b 25%, #334155 50%, #1e1e1e 75%, #000000 100%);
         background-attachment: fixed;
         background-size: 400% 400%;
-        animation: gradientShift 5s ease infinite;
+        animation: gradientShift 15s ease infinite;
     }
     
     /* Animação do degradê */
