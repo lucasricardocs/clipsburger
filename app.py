@@ -942,8 +942,10 @@ def create_activity_heatmap(df_input):
     mask_not_current_year = ~full_df['is_current_year']
     full_df.loc[mask_not_current_year, ['Total', 'Cartao', 'Dinheiro', 'Pix']] = None
 
-    # CORREÇÃO: Manter ordem fixa dos dias (Segunda a Domingo)
+    # NOVO: Identificar dias que faltaram (Total = 0 e é do ano atual e não é domingo)
     full_df['day_of_week'] = full_df['Data'].dt.weekday  # 0=segunda, 6=domingo
+    full_df['is_sunday'] = full_df['day_of_week'] == 6
+    full_df['is_absent'] = (full_df['Total'] == 0) & full_df['is_current_year'] & (~full_df['is_sunday'])
     
     # Mapear os nomes dos dias (ordem fixa)
     day_name_map = {0: 'Seg', 1: 'Ter', 2: 'Qua', 3: 'Qui', 4: 'Sex', 5: 'Sáb', 6: 'Dom'}
@@ -988,7 +990,7 @@ def create_activity_heatmap(df_input):
                 title=None, 
                 axis=None),
         y=alt.Y('day_display_name:N', 
-                sort=day_display_names,  # Ordem fixa: Seg, Ter, Qua, Qui, Sex, Sáb, Dom
+                sort=day_display_names,
                 title=None,
                 axis=alt.Axis(labelAngle=0, labelFontSize=12, ticks=False, domain=False, grid=False, labelColor='#A9A9A9')),
         color=alt.Color('Total:Q',
@@ -1010,10 +1012,49 @@ def create_activity_heatmap(df_input):
         height=250
     )
 
+    # NOVO: Adicionar X vermelho para dias que faltaram
+    absent_marks = alt.Chart(full_df[full_df['is_absent']]).mark_text(
+        text='✗',
+        color='red',
+        fontSize=16,
+        fontWeight='bold'
+    ).encode(
+        x=alt.X('week_corrected:O'),
+        y=alt.Y('day_display_name:N', sort=day_display_names),
+        tooltip=[
+            alt.Tooltip('Data:T', title='Data', format='%d/%m/%Y'),
+            alt.Tooltip('day_display_name:N', title='Dia'),
+            alt.Value('Dia sem vendas')
+        ]
+    )
+
+    # NOVO: Adicionar emoji para domingos (folga)
+    sunday_marks = alt.Chart(full_df[full_df['is_sunday'] & full_df['is_current_year']]).mark_text(
+        text='😴',
+        fontSize=14
+    ).encode(
+        x=alt.X('week_corrected:O'),
+        y=alt.Y('day_display_name:N', sort=day_display_names),
+        tooltip=[
+            alt.Tooltip('Data:T', title='Data', format='%d/%m/%Y'),
+            alt.Tooltip('day_display_name:N', title='Dia'),
+            alt.Value('Domingo - Folga')
+        ]
+    )
+
+    # Combinar todos os elementos
+    combined_heatmap = alt.layer(
+        heatmap,
+        absent_marks,
+        sunday_marks
+    ).resolve_scale(
+        color='independent'
+    )
+
     # Combinar gráfico final
     final_chart = alt.vconcat(
         months_chart,
-        heatmap,
+        combined_heatmap,
         spacing=1
     ).configure_view(
         strokeWidth=0
