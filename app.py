@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from google.oauth2.service_account import Credentials
 from gspread.exceptions import SpreadsheetNotFound
 import warnings
+import time
 
 # Suprimir warnings específicos do pandas
 warnings.filterwarnings('ignore', category=FutureWarning, message='.*observed=False.*')
@@ -17,7 +18,12 @@ SPREADSHEET_ID = '1NTScbiIna-iE7roQ9XBdjUOssRihTFFby4INAAQNXTg'
 WORKSHEET_NAME = 'Vendas'
 
 # Configuração da página Streamlit
-st.set_page_config(page_title="Clips Burger", layout="wide", page_icon="🍔")
+st.set_page_config(
+    page_title="Clips Burger", 
+    layout="wide", 
+    page_icon="🍔",
+    initial_sidebar_state="expanded"
+)
 
 # Configuração de tema para gráficos mais bonitos
 alt.data_transformers.enable('json')
@@ -29,13 +35,46 @@ CORES_MODO_ESCURO = ['#4c78a8', '#54a24b', '#f58518', '#e45756', '#72b7b2', '#ff
 dias_semana_ordem = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"]
 meses_ordem = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
 
-# CSS para melhorar a aparência
+# CSS para melhorar a aparência e adicionar background
 def inject_css():
-    # Base CSS styles
+    # Base CSS styles com background em degradê azul celestial escuro
     base_css = """
+    /* Background principal em degradê azul celestial escuro */
+    .stApp {
+        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 25%, #1e3c72 50%, #0f2027 75%, #203a43 100%);
+        background-attachment: fixed;
+        background-size: 400% 400%;
+        animation: gradientShift 15s ease infinite;
+    }
+    
+    /* Animação do degradê */
+    @keyframes gradientShift {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+    }
+    
+    /* Header transparente */
+    .stApp > header {
+        background-color: transparent;
+    }
+    
+    /* Sidebar com fundo semi-transparente */
+    .css-1d391kg {
+        background: rgba(30, 60, 114, 0.8);
+        backdrop-filter: blur(10px);
+    }
+    
+    /* Containers com fundo semi-transparente */
+    .stContainer {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 10px;
+        backdrop-filter: blur(5px);
+    }
+    
     .stSelectbox label, .stNumberInput label {
         font-weight: bold;
-        color: #4c78a8;
+        color: #87CEEB;
     }
     .stNumberInput input::placeholder {
         color: #888;
@@ -46,12 +85,20 @@ def inject_css():
         font-size: 1.2rem;
         font-weight: bold;
         width: 100%;
+        background: linear-gradient(45deg, #4c78a8, #87CEEB);
+        border: none;
+        color: white;
+    }
+    .stButton > button:hover {
+        background: linear-gradient(45deg, #87CEEB, #4c78a8);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.3);
     }
     .element-container {
         margin-bottom: 0.5rem;
     }
     .stMetric {
-        background-color: rgba(255, 255, 255, 0.05);
+        background-color: rgba(135, 206, 235, 0.1);
         padding: 1rem;
         border-radius: 0.5rem;
         margin-bottom: 0.5rem;
@@ -59,8 +106,26 @@ def inject_css():
         display: flex;
         flex-direction: column;
         justify-content: center;
+        border: 1px solid rgba(135, 206, 235, 0.3);
     }
-    /* Estilos premium removidos */
+    
+    /* Tabs com estilo personalizado */
+    .stTabs [data-baseweb="tab-list"] {
+        background: rgba(30, 60, 114, 0.3);
+        border-radius: 10px;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        background: rgba(135, 206, 235, 0.1);
+        color: #87CEEB;
+        border-radius: 5px;
+        margin: 2px;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(45deg, #4c78a8, #87CEEB);
+        color: white;
+    }
     """
     
     # CSS da logo animada (integrado)
@@ -564,12 +629,10 @@ def create_radial_plot(df):
 
 def create_cumulative_area_chart(df):
     """Cria gráfico de área ACUMULADO com gradiente."""
-    # Validação da entrada: Verifica se o DataFrame está vazio ou se as colunas necessárias estão ausentes
     if df.empty or 'Data' not in df.columns or 'Total' not in df.columns:
         st.warning("Dados insuficientes ou colunas 'Data'/'Total' ausentes para gerar o gráfico de evolução acumulada.")
         return None
 
-    # Garante que a coluna 'Data' esteja no formato datetime
     df_copy = df.copy()
     try:
         df_copy['Data'] = pd.to_datetime(df_copy['Data'])
@@ -577,17 +640,14 @@ def create_cumulative_area_chart(df):
         st.error(f"Erro ao converter a coluna 'Data' para datetime: {e}")
         return None
 
-    # Ordena por 'Data' para o cálculo cumulativo correto e renderização do gráfico
     df_sorted = df_copy.sort_values('Data')
 
     if df_sorted.empty:
         st.warning("DataFrame vazio após ordenação para o gráfico de evolução acumulada.")
         return None
 
-    # Calcula o total acumulado
     df_sorted['Total_Acumulado'] = df_sorted['Total'].cumsum()
 
-    # Cria o gráfico Altair
     area_chart = alt.Chart(df_sorted).mark_area(
         interpolate='monotone',
         line={'color': CORES_MODO_ESCURO[0], 'strokeWidth': 2},
@@ -1390,11 +1450,10 @@ def main():
                 formatted_date = data_input.strftime("%d/%m/%Y")
                 worksheet_obj = get_worksheet()
                 if worksheet_obj and add_data_to_sheet(formatted_date, cartao_val, dinheiro_val, pix_val, worksheet_obj):
-                    # Limpar caches relevantes após adicionar dados
-                    get_worksheet.clear()
+                    # Limpar apenas o cache de dados, não todos
                     read_sales_data.clear()
-                    process_data.clear()
-                    st.success("✅ Venda registrada e dados recarregados!")
+                    st.success("✅ Venda registrada!")
+                    time.sleep(1)
                     st.rerun()
                 elif not worksheet_obj: 
                     st.error("❌ Falha ao conectar à planilha. Venda não registrada.")
@@ -1886,4 +1945,3 @@ def main():
 # --- Ponto de Entrada da Aplicação ---
 if __name__ == "__main__":
     main()
-
