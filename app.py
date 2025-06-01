@@ -909,13 +909,30 @@ def create_activity_heatmap(df_input):
         st.info(f"Sem dados para o ano {current_year} para gerar o heatmap.")
         return None
 
-    # Criar todas as datas do ano selecionado
-    start_date = datetime(current_year, 1, 1)
+    # CORREÇÃO: Obter o dia da semana do primeiro dia do ano (0=segunda, 6=domingo)
+    first_day_of_year = pd.Timestamp(f'{current_year}-01-01')
+    first_day_weekday = first_day_of_year.weekday()  # 0=segunda, 6=domingo
+    
+    # Calcular quantos dias antes do 01/01 precisamos adicionar para começar na segunda-feira
+    days_before = first_day_weekday  # Se 01/01 é quarta (2), precisamos de 2 dias antes
+    
+    # Criar range de datas começando na segunda-feira da semana do 01/01
+    start_date = first_day_of_year - pd.Timedelta(days=days_before)
     end_date = datetime(current_year, 12, 31)
+    
+    # Garantir que terminamos no domingo da última semana
+    days_after = 6 - end_date.weekday()  # Quantos dias faltam para chegar ao domingo
+    if days_after < 6:  # Se não é domingo, adicionar dias
+        end_date = end_date + pd.Timedelta(days=days_after)
+    
     all_dates = pd.date_range(start=start_date, end=end_date, freq='D')
 
-    # DataFrame com todas as datas
+    # DataFrame com todas as datas (incluindo dias antes do 01/01)
     full_df = pd.DataFrame({'Data': all_dates})
+    
+    # Marcar quais datas são do ano atual
+    full_df['is_current_year'] = full_df['Data'].dt.year == current_year
+    
     # Certificar que as colunas existem antes de mergear
     cols_to_merge = ['Data', 'Total', 'Cartao', 'Dinheiro', 'Pix']
     cols_present = [col for col in cols_to_merge if col in df.columns]
@@ -927,84 +944,67 @@ def create_activity_heatmap(df_input):
             full_df[col] = 0
         else:
             full_df[col] = full_df[col].fillna(0)
+    
+    # Para dias que não são do ano atual, zerar os valores (deixar vazio visualmente)
+    mask_not_current_year = ~full_df['is_current_year']
+    full_df.loc[mask_not_current_year, ['Total', 'Cartao', 'Dinheiro', 'Pix']] = None
 
-    # CORREÇÃO: Obter o dia da semana do primeiro dia do ano (0=segunda, 6=domingo)
-    first_day_weekday = pd.Timestamp(f'{current_year}-01-01').weekday()
-
-    # Criar coluna com dia da semana original (0=segunda, 6=domingo)
-    full_df['day_of_week'] = full_df['Data'].dt.weekday
-
-    # Mapear os nomes dos dias para exibição
+    # CORREÇÃO: Manter ordem fixa dos dias (Segunda a Domingo)
+    full_df['day_of_week'] = full_df['Data'].dt.weekday  # 0=segunda, 6=domingo
+    
+    # Mapear os nomes dos dias (ordem fixa)
     day_name_map = {0: 'Seg', 1: 'Ter', 2: 'Qua', 3: 'Qui', 4: 'Sex', 5: 'Sáb', 6: 'Dom'}
-
-    # Criar a ordem correta dos dias começando pelo dia da semana do 01/01
-    days_order = list(range(7))  # [0, 1, 2, 3, 4, 5, 6]
-    reordered_days = days_order[first_day_weekday:] + days_order[:first_day_weekday]
-
-    # Criar mapeamento para a nova ordem de exibição
-    order_map = {day: i for i, day in enumerate(reordered_days)}
-    full_df['day_sort_order'] = full_df['day_of_week'].map(order_map)
-
-    # Criar os nomes dos dias na ordem correta para exibição
-    day_display_names = [day_name_map[day] for day in reordered_days]
-    full_df['day_display_name'] = full_df['day_sort_order'].map(lambda x: day_display_names[x])
+    full_df['day_display_name'] = full_df['day_of_week'].map(day_name_map)
+    
+    # Ordem fixa dos dias para exibição (sempre a mesma)
+    day_display_names = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
     
     full_df['week'] = full_df['Data'].dt.isocalendar().week
     full_df['month'] = full_df['Data'].dt.month
     full_df['month_name'] = full_df['Data'].dt.strftime('%b')
 
-    # Corrigir semanas de dezembro que aparecem como 1 no isocalendar
-    full_df.loc[(full_df['Data'].dt.month == 12) & (full_df['week'] <= 4), 'week'] = full_df['week'].max() + 1
-    # Corrigir semanas de janeiro que aparecem como 52/53
-    full_df.loc[(full_df['Data'].dt.month == 1) & (full_df['week'] >= 52), 'week'] = 0
+    # Recalcular week baseado na primeira data (que agora é uma segunda-feira)
+    full_df['week_corrected'] = ((full_df['Data'] - start_date).dt.days // 7)
     
-    # Recalcular week para garantir ordem correta após ajustes
-    first_day_of_year = pd.Timestamp(f'{current_year}-01-01')
-    full_df['week_corrected'] = ((full_df['Data'] - first_day_of_year).dt.days // 7)
-    
-    # Encontrar a primeira semana (corrigida) de cada mês para os rótulos
-    month_labels = full_df.groupby('month').agg(
+    # Encontrar a primeira semana de cada mês para os rótulos (apenas para meses do ano atual)
+    month_labels = full_df[full_df['is_current_year']].groupby('month').agg(
         week_corrected=('week_corrected', 'min'),
         month_name=('month_name', 'first')
     ).reset_index()
 
     # Labels dos meses
     months_chart = alt.Chart(month_labels).mark_text(
-        align='center', # Centralizado acima da semana
+        align='center',
         baseline='bottom',
         fontSize=12,
         dy=-1,
-        dx=-30, # Espaço acima do heatmap
-        color='#A9A9A9' # Cor cinza claro para meses
+        dx=-30,
+        color='#A9A9A9'
     ).encode(
-        x=alt.X('week_corrected:O', axis=None), # Usar semana corrigida
+        x=alt.X('week_corrected:O', axis=None),
         text='month_name:N'
-    ).properties(
-        # width=800 # Removido para usar use_container_width
     )
 
     # Gráfico principal (heatmap)
     heatmap = alt.Chart(full_df).mark_rect(
-        stroke='#ffffff', # Borda branca fina
+        stroke='#ffffff',
         strokeWidth=2,
-        cornerRadius=0.5 # Leve arredondamento
+        cornerRadius=0.5
     ).encode(
-        x=alt.X('week_corrected:O', # Usar semana corrigida
+        x=alt.X('week_corrected:O',
                 title=None, 
                 axis=None),
         y=alt.Y('day_display_name:N', 
-                sort=day_display_names,  # CORREÇÃO: Usar a lista dinâmica
+                sort=day_display_names,  # Ordem fixa: Seg, Ter, Qua, Qui, Sex, Sáb, Dom
                 title=None,
                 axis=alt.Axis(labelAngle=0, labelFontSize=12, ticks=False, domain=False, grid=False, labelColor='#A9A9A9')),
         color=alt.Color('Total:Q',
             scale=alt.Scale(
-                # Usar cores do tema escuro, adaptadas para heatmap
-                range=['#f0f0f0', '#9be9a8', '#40c463', '#30a14e', '#216e39'], # Cinza escuro -> Verdes
-                # range=['#f0f0f0', '#9be9a8', '#40c463', '#30a14e', '#216e39'], # Esquema original GitHub claro
+                range=['#f0f0f0', '#9be9a8', '#40c463', '#30a14e', '#216e39'],
                 type='threshold',
-                domain=[0.01, 1500, 2500, 3500] # Ajustar domínios conforme necessidade
+                domain=[0.01, 1500, 2500, 3500]
             ),
-            legend=None), # Legenda pode ser adicionada separadamente se desejado
+            legend=None),
         tooltip=[
             alt.Tooltip('Data:T', title='Data', format='%d/%m/%Y'),
             alt.Tooltip('day_display_name:N', title='Dia'),
@@ -1014,17 +1014,16 @@ def create_activity_heatmap(df_input):
             alt.Tooltip('Pix:Q', title='Pix (R$)', format=',.2f')
         ]
     ).properties(
-        # width=1000, # Removido para usar use_container_width
-        height=250  # Ajustar altura
+        height=250
     )
 
     # Combinar gráfico final
     final_chart = alt.vconcat(
         months_chart,
         heatmap,
-        spacing=1 # Pequeno espaço entre meses e heatmap
+        spacing=1
     ).configure_view(
-        strokeWidth=0 # Sem borda ao redor do gráfico combinado
+        strokeWidth=0
     ).configure_concat(
         spacing=5
     ).properties(
@@ -1032,11 +1031,11 @@ def create_activity_heatmap(df_input):
             text=f'Atividade de Vendas - {current_year}',
             fontSize=18,
             anchor='start',
-            color='white', # Cor do título para tema escuro
-            dy=-10 # Ajustar posição vertical do título
+            color='white',
+            dy=-10
         )
     ).configure(
-        background='transparent' # Fundo transparente para integrar ao app
+        background='transparent'
     )
 
     return final_chart
