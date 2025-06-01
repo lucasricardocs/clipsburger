@@ -31,29 +31,25 @@ meses_ordem = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julh
 
 # CSS para melhorar a aparência
 def inject_css():
-    st.markdown("""
-    <style>
+    # Base CSS styles
+    base_css = """
     .stSelectbox label, .stNumberInput label {
         font-weight: bold;
         color: #4c78a8;
     }
-    
     .stNumberInput input::placeholder {
         color: #888;
         font-style: italic;
     }
-    
     .stButton > button {
         height: 3rem;
         font-size: 1.2rem;
         font-weight: bold;
         width: 100%;
     }
-    
     .element-container {
         margin-bottom: 0.5rem;
     }
-    
     .stMetric {
         background-color: rgba(255, 255, 255, 0.05);
         padding: 1rem;
@@ -64,26 +60,19 @@ def inject_css():
         flex-direction: column;
         justify-content: center;
     }
+    /* Estilos premium removidos */
+    """
     
-    /* Dashboard Premium Styles */
-    .stApp {
-        background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%);
-    }
-    
-    /* Grid para gráficos do dashboard premium */
-    .premium-charts-grid {
-        display: grid;
-        grid-template-columns: 2fr 1fr;
-        gap: 2rem;
-        margin: 2rem 0;
-    }
-    
-    .premium-chart-full {
-        grid-column: 1 / -1;
-        margin: 2rem 0;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+    # Read fire logo CSS from file
+    try:
+        with open("/home/ubuntu/fire_logo.css", "r") as f:
+            fire_logo_css = f.read()
+    except FileNotFoundError:
+        fire_logo_css = "/* fire_logo.css not found */"
+        st.warning("CSS da logo animada não encontrado.")
+
+    # Combine and inject CSS
+    st.markdown(f"<style>{base_css}\n{fire_logo_css}</style>", unsafe_allow_html=True)
 
 inject_css()
 
@@ -826,51 +815,7 @@ def create_financial_dashboard_altair(resultados):
     
     return chart
 
-# --- Dashboard Premium Functions ---
-def create_premium_kpi_cards(df):
-    """Cria cards KPI premium com emoticons DENTRO dos boxes."""
-    if df.empty:
-        return
-    
-    total_vendas = df['Total'].sum()
-    media_diaria = df['Total'].mean()
-    melhor_dia = df.loc[df['Total'].idxmax(), 'DataFormatada'] if not df.empty and 'DataFormatada' in df.columns else "N/A"
-    crescimento = ((df['Total'].tail(7).mean() - df['Total'].head(7).mean()) / df['Total'].head(7).mean() * 100) if len(df) >= 14 and df['Total'].head(7).mean() != 0 else 0.0
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        with st.container():
-            st.metric(
-                label="💰 Faturamento Total",
-                value=format_brl(total_vendas),
-                delta=f"{crescimento:+.1f}% vs período anterior" if crescimento != 0 else None
-            )
-    
-    with col2:
-        with st.container():
-            st.metric(
-                label="📊 Média Diária",
-                value=format_brl(media_diaria),
-                # delta="+8.2% vs período anterior" # Placeholder delta
-            )
-    
-    with col3:
-        with st.container():
-            st.metric(
-                label="🏆 Melhor Dia",
-                value=melhor_dia,
-                delta="Maior faturamento" if melhor_dia != "N/A" else None
-            )
-    
-    with col4:
-        with st.container():
-            st.metric(
-                label="📈 Tendência (Últimas 2 Semanas)",
-                value=f"{crescimento:+.1f}%",
-                delta="Crescimento" if crescimento > 0 else "Estável/Declínio" if crescimento == 0 else "Declínio"
-            )
-# --- NOVA FUNÇÃO: Gráfico Heatmap de Atividade ---
+# --- Funções premium removidas ---
 def create_activity_heatmap(df_input):
     """Cria um gráfico de heatmap estilo GitHub para a atividade de vendas - IGNORA FILTRO DE MÊS."""
     if df_input.empty or 'Data' not in df_input.columns or 'Total' not in df_input.columns:
@@ -1102,122 +1047,38 @@ def format_brl(value):
 
 # --- Interface Principal da Aplicação ---
 def main():
-    # --- MODIFICAÇÃO DO LOGO E TÍTULO ---
-    # --- MODIFICAÇÃO DO LOGO E TÍTULO ---
-    st.markdown("""
-    <style>
-    .logo-container {
-        display: flex;
-        align-items: center;
-        margin-bottom: 1rem;
-    }
-    
-    .logo-wrapper {
-        position: relative;
-        margin-right: 20px;
-        width: 240px;
-        height: 240px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-    
-    .logo-background {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        width: 175px;
-        height: 175px;
-        background-image: url('https://raw.githubusercontent.com/lucasricardocs/clipsburger/refs/heads/main/logo.png');
-        background-size: contain;
-        background-repeat: no-repeat;
-        background-position: center;
-        filter: blur(20px) brightness(1.8) saturate(2.5);
-        z-index: 1;
-        animation: celestialPulse 12s ease-in-out infinite alternate;
-    }
-    
-    .logo-image {
-        position: relative;
-        width: 200px;
-        height: auto;
-        z-index: 10;
-        border-radius: 10px;
-    }
-    
-    @keyframes celestialPulse {
-        0% {
-            filter: blur(20px) brightness(1.8) saturate(2.5) hue-rotate(0deg);
-            transform: translate(-50%, -50%) scale(1.1);
-            opacity: 0.5;
-        }
-        25% {
-            filter: blur(22px) brightness(2.0) saturate(3.0) hue-rotate(90deg);
-            transform: translate(-50%, -50%) scale(1.15);
-            opacity: 0.5;
-        }
-        50% {
-            filter: blur(25px) brightness(2.2) saturate(3.5) hue-rotate(180deg);
-            transform: translate(-50%, -50%) scale(1.2);
-            opacity: 0.5;
-        }
-        75% {
-            filter: blur(22px) brightness(2.0) saturate(3.0) hue-rotate(270deg);
-            transform: translate(-50%, -50%) scale(1.15);
-            opacity: 0.5;
-        }
-        100% {
-            filter: blur(28px) brightness(2.4) saturate(4.0) hue-rotate(360deg);
-            transform: translate(-50%, -50%) scale(1.25);
-            opacity: 0.5;
-        }
-    }
-    
-    .title-container {
-        /* O título e subtítulo ficam aqui */
-    }
-    
-    .title-main {
-        margin: 0; 
-        padding: 0;
-        line-height: 1.2;
-    }
-    
-    .title-sub {
-        margin: 0; 
-        font-size: 14px; 
-        color: gray; 
-        padding: 0;
-        line-height: 1.2;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-    
-    # Usar HTML para controle fino do layout
+    # --- NOVA LOGO ANIMADA ---
+    LOGO_URL = "https://raw.githubusercontent.com/lucasricardocs/clips_dashboard/main/logo.png"
     st.markdown(f"""
-    <div class="logo-container">
-        <div class="logo-wrapper">
-            <div class="logo-background"></div>
-            <img src="https://raw.githubusercontent.com/lucasricardocs/clipsburger/refs/heads/main/logo.png" class="logo-image" alt="Clips Burger Logo">
-        </div>
-        <div class="title-container">
-            <h1 class="title-main">CLIP'S BURGER</h1>
-            <p class="title-sub">Gestão inteligente de vendas com análise financeira em tempo real - {datetime.now().year}</p>
+    <div class="logo-fire-container">
+        <img src="{LOGO_URL}" class="fire-logo" alt="Clips Burger Logo">
+        <div class="fire-container">
+            <div class="flame flame-red"></div>
+            <div class="flame flame-orange"></div>
+            <div class="flame flame-yellow"></div>
+            <div class="flame flame-white"></div>
+            <!-- Partículas -->
+            <div class="fire-particle small"></div>
+            <div class="fire-particle medium"></div>
+            <div class="fire-particle large"></div>
+            <div class="fire-particle small"></div>
+            <div class="fire-particle medium"></div>
+            <div class="fire-particle large"></div>
+            <div class="fire-particle small"></div>
+            <div class="fire-particle medium"></div>
+            <div class="fire-particle large"></div>
+            <div class="fire-particle small"></div>
+            <div class="fire-particle medium"></div>
+            <div class="fire-particle large"></div>
+            <div class="fire-particle small"></div>
+            <div class="fire-particle medium"></div>
+            <div class="fire-particle large"></div>
         </div>
     </div>
+    <div style="text-align: center; margin-top: -2rem; margin-bottom: 2rem;">
+        <p style="font-size: 14px; color: gray; line-height: 1.2;">Gestão inteligente de vendas com análise financeira em tempo real - {datetime.now().year}</p>
+    </div>
     """, unsafe_allow_html=True)
-
-    df_raw = read_sales_data()
-    df_processed = process_data(df_raw)
-
-    # Criar 5 tabs incluindo o Dashboard Premium
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "📝 Registrar Venda", 
-        "📈 Análise Detalhada", 
-        "💡 Estatísticas", 
-        "💰 Análise Contábil",
-    ])
 
     with tab1:
         st.header("📝 Registrar Nova Venda")
