@@ -41,7 +41,7 @@ def inject_css():
     base_css = """
     /* Background principal em degradê azul celestial escuro */
     .stApp {
-        background: linear-gradient(135deg, #1a237e 0%, #0d47a1 25%, #01579b 50%, #263238 75%, #000000 100%);
+        background: linear-gradient(135deg, #ff6b35 0%, #f7931e 25%, #c5282f 50%, #1a0000 75%, #000000 100%);
         background-attachment: fixed;
         background-size: 400% 400%;
         animation: gradientShift 15s ease infinite;
