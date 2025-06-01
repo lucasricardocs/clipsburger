@@ -947,6 +947,11 @@ def create_activity_heatmap(df_input):
     full_df['is_sunday'] = full_df['day_of_week'] == 6
     full_df['is_absent'] = (full_df['Total'] == 0) & full_df['is_current_year'] & (~full_df['is_sunday'])
     
+    # CORREÇÃO: Adicionar colunas de status para tooltip
+    full_df['status'] = 'Normal'
+    full_df.loc[full_df['is_absent'], 'status'] = 'Dia sem vendas'
+    full_df.loc[full_df['is_sunday'] & full_df['is_current_year'], 'status'] = 'Domingo - Folga'
+    
     # Mapear os nomes dos dias (ordem fixa)
     day_name_map = {0: 'Seg', 1: 'Ter', 2: 'Qua', 3: 'Qui', 4: 'Sex', 5: 'Sáb', 6: 'Dom'}
     full_df['day_display_name'] = full_df['day_of_week'].map(day_name_map)
@@ -1006,13 +1011,14 @@ def create_activity_heatmap(df_input):
             alt.Tooltip('Total:Q', title='Total Vendas (R$)', format=',.2f'),
             alt.Tooltip('Cartao:Q', title='Cartão (R$)', format=',.2f'),
             alt.Tooltip('Dinheiro:Q', title='Dinheiro (R$)', format=',.2f'),
-            alt.Tooltip('Pix:Q', title='Pix (R$)', format=',.2f')
+            alt.Tooltip('Pix:Q', title='Pix (R$)', format=',.2f'),
+            alt.Tooltip('status:N', title='Status')
         ]
     ).properties(
         height=250
     )
 
-    # NOVO: Adicionar X vermelho para dias que faltaram
+    # CORREÇÃO: Adicionar X vermelho para dias que faltaram
     absent_marks = alt.Chart(full_df[full_df['is_absent']]).mark_text(
         text='✗',
         color='red',
@@ -1024,11 +1030,11 @@ def create_activity_heatmap(df_input):
         tooltip=[
             alt.Tooltip('Data:T', title='Data', format='%d/%m/%Y'),
             alt.Tooltip('day_display_name:N', title='Dia'),
-            alt.Value('Dia sem vendas')
+            alt.Tooltip('status:N', title='Status')
         ]
     )
 
-    # NOVO: Adicionar emoji para domingos (folga)
+    # CORREÇÃO: Adicionar emoji para domingos (folga)
     sunday_marks = alt.Chart(full_df[full_df['is_sunday'] & full_df['is_current_year']]).mark_text(
         text='😴',
         fontSize=14
@@ -1038,7 +1044,7 @@ def create_activity_heatmap(df_input):
         tooltip=[
             alt.Tooltip('Data:T', title='Data', format='%d/%m/%Y'),
             alt.Tooltip('day_display_name:N', title='Dia'),
-            alt.Value('Domingo - Folga')
+            alt.Tooltip('status:N', title='Status')
         ]
     )
 
