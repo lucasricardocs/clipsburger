@@ -63,13 +63,291 @@ def inject_css():
     /* Estilos premium removidos */
     """
     
-    # Read fire logo CSS from file
-    try:
-        with open("/home/ubuntu/fire_logo.css", "r") as f:
-            fire_logo_css = f.read()
-    except FileNotFoundError:
-        fire_logo_css = "/* fire_logo.css not found */"
-        st.warning("CSS da logo animada não encontrado.")
+    # CSS da logo animada (integrado)
+    fire_logo_css = """
+    /* Logo Container com Efeito de Fogo */
+    .logo-fire-container {
+        position: relative;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin: 2rem auto;
+        height: 280px;
+        width: 100%;
+        max-width: 400px;
+        overflow: visible;
+    }
+
+    /* Logo Principal */
+    .fire-logo {
+        position: relative;
+        z-index: 10;
+        max-width: 200px;
+        width: auto;
+        height: auto;
+        object-fit: contain;
+        filter: drop-shadow(0 0 20px rgba(255, 69, 0, 0.8));
+        animation: logoFloat 3s ease-in-out infinite;
+        display: block;
+        margin: 0 auto;
+    }
+
+    /* Animação de Flutuação da Logo */
+    @keyframes logoFloat {
+        0%, 100% {
+            transform: translateY(0px) scale(1);
+            filter: drop-shadow(0 0 20px rgba(255, 69, 0, 0.8));
+        }
+        50% {
+            transform: translateY(-10px) scale(1.05);
+            filter: drop-shadow(0 0 30px rgba(255, 140, 0, 1));
+        }
+    }
+
+    /* Container das Chamas */
+    .fire-container {
+        position: absolute;
+        bottom: -30px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 300px;
+        height: 180px;
+        z-index: 1;
+        pointer-events: none;
+    }
+
+    /* Chamas Individuais */
+    .flame {
+        position: absolute;
+        bottom: 0;
+        border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+        transform-origin: center bottom;
+        animation: flicker 0.5s ease-in-out infinite alternate;
+    }
+
+    /* Chama Principal (Vermelha) */
+    .flame-red {
+        left: 50%;
+        transform: translateX(-50%);
+        width: 80px;
+        height: 120px;
+        background: radial-gradient(circle, #ff4500 0%, #ff6347 30%, #dc143c 70%, #8b0000 100%);
+        box-shadow: 0 0 30px #ff4500, 0 0 60px #ff6347, 0 0 90px #dc143c;
+        animation: flicker 0.8s ease-in-out infinite alternate;
+    }
+
+    /* Chama Laranja */
+    .flame-orange {
+        left: 45%;
+        transform: translateX(-50%);
+        width: 60px;
+        height: 90px;
+        background: radial-gradient(circle, #ffa500 0%, #ff8c00 50%, #ff4500 100%);
+        box-shadow: 0 0 25px #ffa500, 0 0 50px #ff8c00;
+        animation: flicker 0.6s ease-in-out infinite alternate;
+        animation-delay: 0.2s;
+    }
+
+    /* Chama Amarela */
+    .flame-yellow {
+        left: 55%;
+        transform: translateX(-50%);
+        width: 40px;
+        height: 70px;
+        background: radial-gradient(circle, #ffff00 0%, #ffd700 50%, #ffa500 100%);
+        box-shadow: 0 0 20px #ffff00, 0 0 40px #ffd700;
+        animation: flicker 0.4s ease-in-out infinite alternate;
+        animation-delay: 0.4s;
+    }
+
+    /* Chama Branca (Centro) */
+    .flame-white {
+        left: 50%;
+        transform: translateX(-50%);
+        width: 25px;
+        height: 50px;
+        background: radial-gradient(circle, #ffffff 0%, #ffff99 50%, #ffd700 100%);
+        box-shadow: 0 0 15px #ffffff, 0 0 30px #ffff99;
+        animation: flicker 0.3s ease-in-out infinite alternate;
+        animation-delay: 0.1s;
+    }
+
+    /* Partículas de Fogo */
+    .fire-particle {
+        position: absolute;
+        border-radius: 50%;
+        animation: particle-rise linear infinite;
+        pointer-events: none;
+    }
+
+    .fire-particle.small {
+        width: 3px;
+        height: 3px;
+        background: radial-gradient(circle, #ff6347 0%, #ff4500 100%);
+        box-shadow: 0 0 6px #ff6347;
+    }
+
+    .fire-particle.medium {
+        width: 5px;
+        height: 5px;
+        background: radial-gradient(circle, #ffa500 0%, #ff6347 100%);
+        box-shadow: 0 0 8px #ffa500;
+    }
+
+    .fire-particle.large {
+        width: 7px;
+        height: 7px;
+        background: radial-gradient(circle, #ffff00 0%, #ffa500 100%);
+        box-shadow: 0 0 10px #ffff00;
+    }
+
+    .fire-particle:nth-child(5) { left: 15%; animation-delay: 0s; animation-duration: 2.5s; }
+    .fire-particle:nth-child(6) { left: 25%; animation-delay: 0.3s; animation-duration: 2.2s; }
+    .fire-particle:nth-child(7) { left: 35%; animation-delay: 0.6s; animation-duration: 2.8s; }
+    .fire-particle:nth-child(8) { left: 45%; animation-delay: 0.9s; animation-duration: 2.0s; }
+    .fire-particle:nth-child(9) { left: 55%; animation-delay: 1.2s; animation-duration: 2.6s; }
+    .fire-particle:nth-child(10) { left: 65%; animation-delay: 1.5s; animation-duration: 2.3s; }
+    .fire-particle:nth-child(11) { left: 75%; animation-delay: 1.8s; animation-duration: 2.7s; }
+    .fire-particle:nth-child(12) { left: 85%; animation-delay: 2.1s; animation-duration: 2.1s; }
+    .fire-particle:nth-child(13) { left: 20%; animation-delay: 0.4s; animation-duration: 2.4s; }
+    .fire-particle:nth-child(14) { left: 30%; animation-delay: 0.7s; animation-duration: 2.9s; }
+    .fire-particle:nth-child(15) { left: 40%; animation-delay: 1.0s; animation-duration: 2.2s; }
+    .fire-particle:nth-child(16) { left: 50%; animation-delay: 1.3s; animation-duration: 2.5s; }
+    .fire-particle:nth-child(17) { left: 60%; animation-delay: 1.6s; animation-duration: 2.8s; }
+    .fire-particle:nth-child(18) { left: 70%; animation-delay: 1.9s; animation-duration: 2.1s; }
+    .fire-particle:nth-child(19) { left: 80%; animation-delay: 2.2s; animation-duration: 2.6s; }
+
+    /* Animações das Chamas */
+    @keyframes flicker {
+        0% {
+            transform: translateX(-50%) rotate(-2deg) scaleY(1);
+            opacity: 0.8;
+        }
+        25% {
+            transform: translateX(-50%) rotate(1deg) scaleY(1.1);
+            opacity: 0.9;
+        }
+        50% {
+            transform: translateX(-50%) rotate(-1deg) scaleY(0.95);
+            opacity: 1;
+        }
+        75% {
+            transform: translateX(-50%) rotate(2deg) scaleY(1.05);
+            opacity: 0.85;
+        }
+        100% {
+            transform: translateX(-50%) rotate(-1deg) scaleY(1);
+            opacity: 0.9;
+        }
+    }
+
+    /* Animações das Partículas */
+    @keyframes particle-rise {
+        0% {
+            bottom: 0;
+            opacity: 1;
+            transform: translateX(0) scale(1);
+        }
+        25% {
+            opacity: 0.8;
+            transform: translateX(5px) scale(1.1);
+        }
+        50% {
+            opacity: 0.6;
+            transform: translateX(-3px) scale(0.9);
+        }
+        75% {
+            opacity: 0.3;
+            transform: translateX(8px) scale(0.7);
+        }
+        100% {
+            bottom: 200px;
+            opacity: 0;
+            transform: translateX(15px) scale(0.3);
+        }
+    }
+
+    @keyframes particle-rise-alt {
+        0% {
+            bottom: 0;
+            opacity: 1;
+            transform: translateX(0) rotate(0deg) scale(1);
+        }
+        30% {
+            opacity: 0.9;
+            transform: translateX(-8px) rotate(45deg) scale(1.2);
+        }
+        60% {
+            opacity: 0.5;
+            transform: translateX(12px) rotate(90deg) scale(0.8);
+        }
+        100% {
+            bottom: 180px;
+            opacity: 0;
+            transform: translateX(-5px) rotate(180deg) scale(0.2);
+        }
+    }
+
+    .fire-particle:nth-child(even) {
+        animation-name: particle-rise-alt;
+    }
+
+    /* Responsividade para logo */
+    @media screen and (max-width: 768px) {
+        .logo-fire-container {
+            height: 240px;
+            max-width: 350px;
+        }
+        
+        .fire-logo {
+            max-width: 180px;
+        }
+        
+        .fire-container {
+            width: 250px;
+            height: 150px;
+            bottom: -20px;
+        }
+    }
+
+    @media screen and (max-width: 480px) {
+        .logo-fire-container {
+            height: 200px;
+            max-width: 300px;
+            margin: 1rem auto;
+        }
+        
+        .fire-logo {
+            max-width: 150px;
+        }
+        
+        .fire-container {
+            width: 200px;
+            height: 120px;
+            bottom: -15px;
+        }
+        
+        .flame-red {
+            width: 60px;
+            height: 90px;
+        }
+        
+        .flame-orange {
+            width: 45px;
+            height: 70px;
+        }
+        
+        .flame-yellow {
+            width: 30px;
+            height: 50px;
+        }
+        
+        .flame-white {
+            width: 20px;
+            height: 35px;
+        }
+    }
+    """
 
     # Combine and inject CSS
     st.markdown(f"<style>{base_css}\n{fire_logo_css}</style>", unsafe_allow_html=True)
@@ -1074,10 +1352,6 @@ def main():
             <div class="fire-particle medium"></div>
             <div class="fire-particle large"></div>
         </div>
-    </div>
-    <div style="text-align: center; margin-top: -2rem; margin-bottom: 2rem;">
-        <p style="font-size: 14px; color: gray; line-height: 1.2;">Gestão inteligente de vendas com análise financeira em tempo real - {datetime.now().year}</p>
-    </div>
     """, unsafe_allow_html=True)
 
     with tab1:
