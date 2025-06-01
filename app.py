@@ -1,4 +1,4 @@
-mport streamlit as st
+import streamlit as st
 import gspread
 import pandas as pd
 import altair as alt
