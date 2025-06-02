@@ -112,12 +112,12 @@ def inject_css():
         justify-content: center;
         align-items: center;
         margin: 2rem auto;
-        height: 280px;
+        height: 400px; /* Aumentado para acomodar partículas */
         width: 100%;
         max-width: 400px;
-        overflow: visible;
+        overflow: visible; /* Permite que partículas sejam visíveis */
     }
-
+    
     /* Logo Principal */
     .fire-logo {
         position: relative;
@@ -131,7 +131,7 @@ def inject_css():
         display: block;
         margin: 0 auto;
     }
-
+    
     /* Animação de Flutuação da Logo */
     @keyframes logoFloat {
         0%, 100% {
@@ -143,7 +143,7 @@ def inject_css():
             filter: drop-shadow(0 0 30px rgba(255, 140, 0, 1));
         }
     }
-
+    
     /* Container das Chamas */
     .fire-container {
         position: absolute;
@@ -151,11 +151,12 @@ def inject_css():
         left: 50%;
         transform: translateX(-50%);
         width: 300px;
-        height: 180px;
+        height: 400px; /* Aumentado para acomodar partículas */
         z-index: 1;
         pointer-events: none;
+        overflow: visible; /* Permite que partículas saiam do container */
     }
-
+    
     /* Chamas Individuais */
     .flame {
         position: absolute;
@@ -164,7 +165,17 @@ def inject_css():
         transform-origin: center bottom;
         animation: flicker 0.5s ease-in-out infinite alternate;
     }
-
+    
+    /* Animação das Chamas */
+    @keyframes flicker {
+        0% {
+            transform: scale(1) rotate(-2deg);
+        }
+        100% {
+            transform: scale(1.1) rotate(2deg);
+        }
+    }
+    
     /* Chama Principal (Vermelha) */
     .flame-red {
         left: 50%;
@@ -175,7 +186,7 @@ def inject_css():
         box-shadow: 0 0 30px #ff4500, 0 0 60px #ff6347, 0 0 90px #dc143c;
         animation: flicker 0.8s ease-in-out infinite alternate;
     }
-
+    
     /* Chama Laranja */
     .flame-orange {
         left: 45%;
@@ -187,7 +198,7 @@ def inject_css():
         animation: flicker 0.6s ease-in-out infinite alternate;
         animation-delay: 0.2s;
     }
-
+    
     /* Chama Amarela */
     .flame-yellow {
         left: 55%;
@@ -199,7 +210,7 @@ def inject_css():
         animation: flicker 0.4s ease-in-out infinite alternate;
         animation-delay: 0.4s;
     }
-
+    
     /* Chama Branca (Centro) */
     .flame-white {
         left: 50%;
@@ -211,7 +222,7 @@ def inject_css():
         animation: flicker 0.3s ease-in-out infinite alternate;
         animation-delay: 0.1s;
     }
-
+    
     /* Partículas de Fogo */
     .fire-particle {
         position: absolute;
@@ -219,43 +230,138 @@ def inject_css():
         animation: particle-rise linear infinite;
         pointer-events: none;
     }
-
+    
+    /* Animação das Partículas Subindo */
+    @keyframes particle-rise {
+        0% {
+            bottom: 0;
+            opacity: 1;
+            transform: translateX(0) scale(1);
+        }
+        50% {
+            opacity: 0.8;
+            transform: translateX(var(--random-x, 0)) scale(0.8);
+        }
+        100% {
+            bottom: 350px; /* Altura suficiente para passar da logo */
+            opacity: 0;
+            transform: translateX(var(--random-x, 0)) scale(0.3);
+        }
+    }
+    
     .fire-particle.small {
         width: 3px;
         height: 3px;
         background: radial-gradient(circle, #ff6347 0%, #ff4500 100%);
         box-shadow: 0 0 6px #ff6347;
     }
-
+    
     .fire-particle.medium {
         width: 5px;
         height: 5px;
         background: radial-gradient(circle, #ffa500 0%, #ff6347 100%);
         box-shadow: 0 0 8px #ffa500;
     }
-
+    
     .fire-particle.large {
         width: 7px;
         height: 7px;
         background: radial-gradient(circle, #ffff00 0%, #ffa500 100%);
         box-shadow: 0 0 10px #ffff00;
     }
+    
+    /* Posicionamento e Timing das Partículas */
+    .fire-particle:nth-child(5) { 
+        left: 15%; 
+        animation-delay: 0s; 
+        animation-duration: 2.5s;
+        --random-x: -10px;
+    }
+    .fire-particle:nth-child(6) { 
+        left: 25%; 
+        animation-delay: 0.3s; 
+        animation-duration: 2.2s;
+        --random-x: 15px;
+    }
+    .fire-particle:nth-child(7) { 
+        left: 35%; 
+        animation-delay: 0.6s; 
+        animation-duration: 2.8s;
+        --random-x: -5px;
+    }
+    .fire-particle:nth-child(8) { 
+        left: 45%; 
+        animation-delay: 0.9s; 
+        animation-duration: 2.0s;
+        --random-x: 8px;
+    }
+    .fire-particle:nth-child(9) { 
+        left: 55%; 
+        animation-delay: 1.2s; 
+        animation-duration: 2.6s;
+        --random-x: -12px;
+    }
+    .fire-particle:nth-child(10) { 
+        left: 65%; 
+        animation-delay: 1.5s; 
+        animation-duration: 2.3s;
+        --random-x: 6px;
+    }
+    .fire-particle:nth-child(11) { 
+        left: 75%; 
+        animation-delay: 1.8s; 
+        animation-duration: 2.7s;
+        --random-x: -8px;
+    }
+    .fire-particle:nth-child(12) { 
+        left: 85%; 
+        animation-delay: 2.1s; 
+        animation-duration: 2.1s;
+        --random-x: 12px;
+    }
+    .fire-particle:nth-child(13) { 
+        left: 20%; 
+        animation-delay: 0.4s; 
+        animation-duration: 2.4s;
+        --random-x: -6px;
+    }
+    .fire-particle:nth-child(14) { 
+        left: 30%; 
+        animation-delay: 0.7s; 
+        animation-duration: 2.9s;
+        --random-x: 10px;
+    }
+    .fire-particle:nth-child(15) { 
+        left: 40%; 
+        animation-delay: 1.0s; 
+        animation-duration: 2.2s;
+        --random-x: -4px;
+    }
+    .fire-particle:nth-child(16) { 
+        left: 50%; 
+        animation-delay: 1.3s; 
+        animation-duration: 2.5s;
+        --random-x: 7px;
+    }
+    .fire-particle:nth-child(17) { 
+        left: 60%; 
+        animation-delay: 1.6s; 
+        animation-duration: 2.8s;
+        --random-x: -9px;
+    }
+    .fire-particle:nth-child(18) { 
+        left: 70%; 
+        animation-delay: 1.9s; 
+        animation-duration: 2.1s;
+        --random-x: 11px;
+    }
+    .fire-particle:nth-child(19) { 
+        left: 80%; 
+        animation-delay: 2.2s; 
+        animation-duration: 2.6s;
+        --random-x: -7px;
+    }
 
-    .fire-particle:nth-child(5) { left: 15%; animation-delay: 0s; animation-duration: 2.5s; }
-    .fire-particle:nth-child(6) { left: 25%; animation-delay: 0.3s; animation-duration: 2.2s; }
-    .fire-particle:nth-child(7) { left: 35%; animation-delay: 0.6s; animation-duration: 2.8s; }
-    .fire-particle:nth-child(8) { left: 45%; animation-delay: 0.9s; animation-duration: 2.0s; }
-    .fire-particle:nth-child(9) { left: 55%; animation-delay: 1.2s; animation-duration: 2.6s; }
-    .fire-particle:nth-child(10) { left: 65%; animation-delay: 1.5s; animation-duration: 2.3s; }
-    .fire-particle:nth-child(11) { left: 75%; animation-delay: 1.8s; animation-duration: 2.7s; }
-    .fire-particle:nth-child(12) { left: 85%; animation-delay: 2.1s; animation-duration: 2.1s; }
-    .fire-particle:nth-child(13) { left: 20%; animation-delay: 0.4s; animation-duration: 2.4s; }
-    .fire-particle:nth-child(14) { left: 30%; animation-delay: 0.7s; animation-duration: 2.9s; }
-    .fire-particle:nth-child(15) { left: 40%; animation-delay: 1.0s; animation-duration: 2.2s; }
-    .fire-particle:nth-child(16) { left: 50%; animation-delay: 1.3s; animation-duration: 2.5s; }
-    .fire-particle:nth-child(17) { left: 60%; animation-delay: 1.6s; animation-duration: 2.8s; }
-    .fire-particle:nth-child(18) { left: 70%; animation-delay: 1.9s; animation-duration: 2.1s; }
-    .fire-particle:nth-child(19) { left: 80%; animation-delay: 2.2s; animation-duration: 2.6s; }
 
     /* Animações das Chamas */
     @keyframes flicker {
