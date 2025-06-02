@@ -247,7 +247,7 @@ def inject_css():
     /* Animação das Partículas Subindo - ALTURA DOBRADA */
     @keyframes particle-rise {
         0% {
-            bottom: 0;
+            bottom: 100px;
             opacity: 1;
             transform: translateX(0) scale(1);
         }
@@ -256,7 +256,7 @@ def inject_css():
             transform: translateX(var(--random-x, 0)) scale(0.8);
         }
         100% {
-            bottom: 800px; /* DOBRADO: de 400px para 800px */
+            bottom: 1000px; /* DOBRADO: de 400px para 800px */
             opacity: 0;
             transform: translateX(var(--random-x, 0)) scale(0.3);
         }
