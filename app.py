@@ -298,6 +298,31 @@ def inject_css():
     }
     
     /* Configuração das Partículas */
+    /* Configuração COMPLETA das Partículas - SEM PARTÍCULAS ESTÁTICAS */
+    .fire-particle:nth-child(1) { 
+        left: 5%; 
+        animation-delay: 0.2s; 
+        animation-duration: 4.5s;
+        --random-x: -12px;
+    }
+    .fire-particle:nth-child(2) { 
+        left: 15%; 
+        animation-delay: 0.7s; 
+        animation-duration: 4.8s;
+        --random-x: 18px;
+    }
+    .fire-particle:nth-child(3) { 
+        left: 25%; 
+        animation-delay: 1.2s; 
+        animation-duration: 4.2s;
+        --random-x: -8px;
+    }
+    .fire-particle:nth-child(4) { 
+        left: 35%; 
+        animation-delay: 1.7s; 
+        animation-duration: 5.1s;
+        --random-x: 14px;
+    }
     .fire-particle:nth-child(5) { 
         left: 10%; 
         animation-delay: 0s; 
@@ -352,6 +377,49 @@ def inject_css():
         animation-duration: 5.0s;
         --random-x: -14px;
     }
+    .fire-particle:nth-child(14) { 
+        left: 45%; 
+        animation-delay: 0.8s; 
+        animation-duration: 4.4s;
+        --random-x: -10px;
+    }
+    .fire-particle:nth-child(15) { 
+        left: 55%; 
+        animation-delay: 1.3s; 
+        animation-duration: 4.9s;
+        --random-x: 20px;
+    }
+    .fire-particle:nth-child(16) { 
+        left: 65%; 
+        animation-delay: 1.8s; 
+        animation-duration: 4.3s;
+        --random-x: -16px;
+    }
+    .fire-particle:nth-child(17) { 
+        left: 75%; 
+        animation-delay: 2.3s; 
+        animation-duration: 5.2s;
+        --random-x: 12px;
+    }
+    .fire-particle:nth-child(18) { 
+        left: 85%; 
+        animation-delay: 2.8s; 
+        animation-duration: 4.6s;
+        --random-x: -19px;
+    }
+    .fire-particle:nth-child(19) { 
+        left: 95%; 
+        animation-delay: 3.3s; 
+        animation-duration: 4.8s;
+        --random-x: 15px;
+    }
+    .fire-particle:nth-child(20) { 
+        left: 12%; 
+        animation-delay: 0.3s; 
+        animation-duration: 5.0s;
+        --random-x: -13px;
+    }
+
 
     
     /* Animações das Chamas */
