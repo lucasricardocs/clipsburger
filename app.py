@@ -229,6 +229,7 @@ def inject_css():
         border-radius: 50%;
         animation: particle-rise linear infinite;
         pointer-events: none;
+        z-index: 15;
     }
     
     /* Animação das Partículas Subindo - MODIFICADA */
