@@ -367,13 +367,13 @@ def inject_css():
     .fire-particle:nth-child(18) { 
         left: 70%; 
         animation-delay: 1.9s; 
-        animation-duration: 3.5s; /* Aumentado */
+        animation-duration: 5s; /* Aumentado */
         --random-x: 11px;
     }
     .fire-particle:nth-child(19) { 
-        left: 120%; 
+        left: 100%; 
         animation-delay: 2.2s; 
-        animation-duration: 3.9s; /* Aumentado */
+        animation-duration: 6s; /* Aumentado */
         --random-x: -7px;
     }
 
