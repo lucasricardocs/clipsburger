@@ -112,16 +112,16 @@ def inject_css():
         justify-content: center;
         align-items: center;
         margin: 2rem auto;
-        height: 280px; /* Volta ao tamanho original */
+        height: 280px;
         width: 100%;
         max-width: 400px;
-        overflow: visible; /* Permite que partículas sejam visíveis */
+        overflow: visible; /* Permite partículas saírem */
     }
     
     /* Logo Principal */
     .fire-logo {
         position: relative;
-        z-index: 10;
+        z-index: 5; /* Z-index menor que as partículas */
         max-width: 200px;
         width: auto;
         height: auto;
@@ -147,14 +147,14 @@ def inject_css():
     /* Container das Chamas */
     .fire-container {
         position: absolute;
-        bottom: -30px; /* Mantém posição original */
+        bottom: -30px;
         left: 50%;
         transform: translateX(-50%);
         width: 300px;
-        height: 180px; /* Volta ao tamanho original */
+        height: 180px;
         z-index: 1;
         pointer-events: none;
-        overflow: visible; /* Permite que partículas saiam do container */
+        overflow: visible; /* Permite partículas saírem */
     }
     
     /* Chamas Individuais */
@@ -226,41 +226,45 @@ def inject_css():
     /* Partículas de Fogo */
     .fire-particle {
         position: absolute;
-        border-radius: 100%;
+        bottom: 0; /* COMEÇA NO PONTO 0 (BASE DAS CHAMAS) */
+        border-radius: 50%;
         animation: particle-rise linear infinite;
         pointer-events: none;
-        z-index: 30;
+        z-index: 15; /* Z-index maior que a logo para passar por cima */
     }
-
-    .fire-effect-wrapper {
-        position: relative;
-        width: 100%;
-        height: 600px; /* Altura suficiente para ver as partículas */
-        overflow: visible;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-    }
-
     
-    /* Animação das Partículas Subindo - MODIFICADA */
-    /* Animação das Partículas Subindo - ALTURA DOBRADA */
+    /* Animação das Partículas - REFORMULADA */
     @keyframes particle-rise {
         0% {
-            bottom: 100px;
+            bottom: 0; /* PONTO DE PARTIDA: BASE DAS CHAMAS */
             opacity: 1;
             transform: translateX(0) scale(1);
         }
-        50% {
+        20% {
+            bottom: 100px; /* Passando pelas chamas */
+            opacity: 0.9;
+            transform: translateX(calc(var(--random-x, 0) * 0.3)) scale(0.95);
+        }
+        40% {
+            bottom: 200px; /* Chegando na altura da logo */
             opacity: 0.8;
-            transform: translateX(var(--random-x, 0)) scale(0.8);
+            transform: translateX(calc(var(--random-x, 0) * 0.6)) scale(0.8);
+        }
+        60% {
+            bottom: 350px; /* ACIMA DA LOGO */
+            opacity: 0.6;
+            transform: translateX(var(--random-x, 0)) scale(0.6);
+        }
+        80% {
+            bottom: 500px; /* BEM ACIMA DA LOGO */
+            opacity: 0.3;
+            transform: translateX(calc(var(--random-x, 0) * 1.2)) scale(0.4);
         }
         100% {
-            bottom: 1000px; /* DOBRADO: de 400px para 800px */
+            bottom: 600px; /* ALTURA MÁXIMA - BEM ACIMA DA LOGO */
             opacity: 0;
-            transform: translateX(var(--random-x, 0)) scale(0.3);
+            transform: translateX(calc(var(--random-x, 0) * 1.5)) scale(0.1);
         }
-
     }
     
     .fire-particle.small {
@@ -284,97 +288,96 @@ def inject_css():
         box-shadow: 0 0 10px #ffff00;
     }
     
-    /* Posicionamento e Timing das Partículas */
-    /* Posicionamento e Timing das Partículas - DURAÇÕES AUMENTADAS */
+    /* Posicionamento e Timing das Partículas - OTIMIZADO */
     .fire-particle:nth-child(5) { 
         left: 15%; 
         animation-delay: 0s; 
-        animation-duration: 4.0s; /* Aumentado */
-        --random-x: -10px;
+        animation-duration: 4.5s;
+        --random-x: -15px;
     }
     .fire-particle:nth-child(6) { 
         left: 25%; 
-        animation-delay: 0.3s; 
-        animation-duration: 3.8s; /* Aumentado */
-        --random-x: 15px;
+        animation-delay: 0.4s; 
+        animation-duration: 4.2s;
+        --random-x: 20px;
     }
     .fire-particle:nth-child(7) { 
         left: 35%; 
-        animation-delay: 0.6s; 
-        animation-duration: 4.2s; /* Aumentado */
-        --random-x: -5px;
+        animation-delay: 0.8s; 
+        animation-duration: 4.8s;
+        --random-x: -8px;
     }
     .fire-particle:nth-child(8) { 
         left: 45%; 
-        animation-delay: 0.9s; 
-        animation-duration: 3.5s; /* Aumentado */
-        --random-x: 8px;
+        animation-delay: 1.2s; 
+        animation-duration: 4.0s;
+        --random-x: 12px;
     }
     .fire-particle:nth-child(9) { 
         left: 55%; 
-        animation-delay: 1.2s; 
-        animation-duration: 4.1s; /* Aumentado */
-        --random-x: -12px;
+        animation-delay: 1.6s; 
+        animation-duration: 4.6s;
+        --random-x: -18px;
     }
     .fire-particle:nth-child(10) { 
         left: 65%; 
-        animation-delay: 1.5s; 
-        animation-duration: 3.7s; /* Aumentado */
-        --random-x: 6px;
+        animation-delay: 2.0s; 
+        animation-duration: 4.3s;
+        --random-x: 10px;
     }
     .fire-particle:nth-child(11) { 
         left: 75%; 
-        animation-delay: 1.8s; 
-        animation-duration: 4.0s; /* Aumentado */
-        --random-x: -8px;
+        animation-delay: 2.4s; 
+        animation-duration: 4.7s;
+        --random-x: -12px;
     }
     .fire-particle:nth-child(12) { 
         left: 85%; 
-        animation-delay: 2.1s; 
-        animation-duration: 3.6s; /* Aumentado */
-        --random-x: 12px;
+        animation-delay: 2.8s; 
+        animation-duration: 4.1s;
+        --random-x: 16px;
     }
     .fire-particle:nth-child(13) { 
         left: 20%; 
-        animation-delay: 0.4s; 
-        animation-duration: 3.9s; /* Aumentado */
-        --random-x: -6px;
+        animation-delay: 0.6s; 
+        animation-duration: 4.4s;
+        --random-x: -10px;
     }
     .fire-particle:nth-child(14) { 
         left: 30%; 
-        animation-delay: 0.7s; 
-        animation-duration: 4.3s; /* Aumentado */
-        --random-x: 10px;
+        animation-delay: 1.0s; 
+        animation-duration: 4.9s;
+        --random-x: 14px;
     }
     .fire-particle:nth-child(15) { 
         left: 40%; 
-        animation-delay: 1.0s; 
-        animation-duration: 3.4s; /* Aumentado */
-        --random-x: -4px;
+        animation-delay: 1.4s; 
+        animation-duration: 3.8s;
+        --random-x: -6px;
     }
     .fire-particle:nth-child(16) { 
         left: 50%; 
-        animation-delay: 1.3s; 
-        animation-duration: 3.8s; /* Aumentado */
-        --random-x: 7px;
+        animation-delay: 1.8s; 
+        animation-duration: 4.5s;
+        --random-x: 8px;
     }
     .fire-particle:nth-child(17) { 
         left: 60%; 
-        animation-delay: 1.6s; 
-        animation-duration: 4.1s; /* Aumentado */
-        --random-x: -9px;
+        animation-delay: 2.2s; 
+        animation-duration: 4.2s;
+        --random-x: -14px;
     }
     .fire-particle:nth-child(18) { 
         left: 70%; 
-        animation-delay: 1.9s; 
-        animation-duration: 5s; /* Aumentado */
-        --random-x: 11px;
+        animation-delay: 2.6s; 
+        animation-duration: 4.0s;
+        --random-x: 18px;
     }
     .fire-particle:nth-child(19) { 
-        left: 100%; 
-        animation-delay: 2.2s; 
-        animation-duration: 6s; /* Aumentado */
-        --random-x: -7px;
+        left: 80%; 
+        animation-delay: 3.0s; 
+        animation-duration: 4.6s;
+        --random-x: -11px;
     }
 
     
