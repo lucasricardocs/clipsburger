@@ -231,6 +231,17 @@ def inject_css():
         pointer-events: none;
         z-index: 30;
     }
+
+    .fire-effect-wrapper {
+        position: relative;
+        width: 100%;
+        height: 600px; /* Altura suficiente para ver as partículas */
+        overflow: visible;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+
     
     /* Animação das Partículas Subindo - MODIFICADA */
     /* Animação das Partículas Subindo - ALTURA DOBRADA */
@@ -360,7 +371,7 @@ def inject_css():
         --random-x: 11px;
     }
     .fire-particle:nth-child(19) { 
-        left: 80%; 
+        left: 120%; 
         animation-delay: 2.2s; 
         animation-duration: 3.9s; /* Aumentado */
         --random-x: -7px;
