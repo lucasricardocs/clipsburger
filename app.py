@@ -1603,15 +1603,32 @@ def main():
                 st.info("Sem dados de pagamento para exibir o resumo nesta seção.")
             
             # Gráficos lado a lado - 2/3 para vendas diárias, 1/3 para radial
+            # Gráficos lado a lado - 2/3 para análise de dias da semana, 1/3 para radial
             col_chart1, col_chart2 = st.columns([2, 1])
             
             with col_chart1:
-                # Gráfico de vendas diárias (2/3 do espaço)
-                daily_chart = create_advanced_daily_sales_chart(df_filtered)
-                if daily_chart:
-                    st.altair_chart(daily_chart, use_container_width=True)
+                # Análise melhorada de dias da semana (2/3 do espaço)
+                weekday_chart, best_day = create_enhanced_weekday_analysis(df_filtered)
+                if weekday_chart:
+                    st.altair_chart(weekday_chart, use_container_width=True)
+                    
+                    # Análise detalhada dos dias da semana
+                    if not df_filtered.empty and 'DiaSemana' in df_filtered.columns:
+                        df_weekday_analysis = df_filtered.copy()
+                        df_weekday_analysis['Total'] = pd.to_numeric(df_weekday_analysis['Total'], errors='coerce')
+                        df_weekday_analysis = df_weekday_analysis.dropna(subset=['Total', 'DiaSemana'])
+                        
+                        if not df_weekday_analysis.empty:
+                            # Calcular médias por dia da semana (excluindo domingo)
+                            dias_trabalho = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"]
+                            df_trabalho = df_weekday_analysis[df_weekday_analysis['DiaSemana'].isin(dias_trabalho)]
+                            
+                            if not df_trabalho.empty:
+                                medias_por_dia = df_trabalho.groupby('DiaSemana', observed=True)['Total'].agg(['mean', 'count']).round(2)
+                                medias_por_dia = medias_por_dia.reindex([d for d in dias_trabalho if d in medias_por_dia.index])
+                                medias_por_dia = medias_por_dia.sort_values('mean', ascending=False)
                 else:
-                    st.info("Gráfico de vendas diárias indisponível.")
+                    st.info("Gráfico de análise de dias da semana indisponível.")
             
             with col_chart2:
                 # Gráfico radial (1/3 do espaço)
@@ -1621,26 +1638,13 @@ def main():
                 else:
                     st.info("Gráfico radial de pagamentos indisponível.")
             
-            # Análise melhorada de dias da semana com percentuais
-            weekday_chart, best_day = create_enhanced_weekday_analysis(df_filtered)
-            if weekday_chart:
-                st.altair_chart(weekday_chart, use_container_width=True)
-                
-                # Análise detalhada dos dias da semana
-                if not df_filtered.empty and 'DiaSemana' in df_filtered.columns:
-                    df_weekday_analysis = df_filtered.copy()
-                    df_weekday_analysis['Total'] = pd.to_numeric(df_weekday_analysis['Total'], errors='coerce')
-                    df_weekday_analysis = df_weekday_analysis.dropna(subset=['Total', 'DiaSemana'])
-                    
-                    if not df_weekday_analysis.empty:
-                        # Calcular médias por dia da semana (excluindo domingo)
-                        dias_trabalho = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"]
-                        df_trabalho = df_weekday_analysis[df_weekday_analysis['DiaSemana'].isin(dias_trabalho)]
-                        
-                        if not df_trabalho.empty:
-                            medias_por_dia = df_trabalho.groupby('DiaSemana', observed=True)['Total'].agg(['mean', 'count']).round(2)
-                            medias_por_dia = medias_por_dia.reindex([d for d in dias_trabalho if d in medias_por_dia.index])
-                            medias_por_dia = medias_por_dia.sort_values('mean', ascending=False)
+            # Gráfico de vendas diárias movido para baixo (largura completa)
+            daily_chart = create_advanced_daily_sales_chart(df_filtered)
+            if daily_chart:
+                st.altair_chart(daily_chart, use_container_width=True)
+            else:
+                st.info("Gráfico de vendas diárias indisponível.")
+
                             
                             st.subheader("📊 Ranking dos Dias da Semana (Seg-Sáb)")
                             
