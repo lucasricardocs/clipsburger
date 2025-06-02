@@ -226,10 +226,10 @@ def inject_css():
     /* Partículas de Fogo */
     .fire-particle {
         position: absolute;
-        border-radius: 50%;
+        border-radius: 100%;
         animation: particle-rise linear infinite;
         pointer-events: none;
-        z-index: 15;
+        z-index: 30;
     }
     
     /* Animação das Partículas Subindo - MODIFICADA */
