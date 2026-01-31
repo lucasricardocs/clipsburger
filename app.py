@@ -1,1046 +1,620 @@
-# -*- coding: utf-8 -*-
 import streamlit as st
-import gspread
 import pandas as pd
 import altair as alt
+from datetime import datetime
+import random
+import os
 import numpy as np
-from datetime import datetime, timedelta
-from google.oauth2.service_account import Credentials
-from gspread.exceptions import SpreadsheetNotFound
-import warnings
+import time
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
+from reportlab.lib.units import inch, cm
+from reportlab.pdfgen import canvas
+from io import BytesIO
+import matplotlib.pyplot as plt
+import io
+import base64
 
-# Suprimir warnings específicos do pandas
-warnings.filterwarnings('ignore', category=FutureWarning, message='.*observed=False.*')
+# --- CONSTANTES E CONFIGURAÇÕES ---
+CONFIG = {
+    "page_title": "Gestão - Clips Burger",
+    "layout": "centered",
+    "sidebar_state": "expanded",
+    "excel_file": "recebimentos.xlsx",
+    "logo_path": "logo.png"
+}
 
-# --- Configurações Globais e Constantes ---
-SPREADSHEET_ID = '1NTScbiIna-iE7roQ9XBdjUOssRihTFFby4INAAQNXTg'
-WORKSHEET_NAME = 'Vendas'
-
-# Configuração da página Streamlit
-st.set_page_config(page_title="Sistema Financeiro - Clips Burger", layout="wide", page_icon="🍔")
-
-# Configuração de tema para gráficos mais bonitos
-alt.data_transformers.enable('json')
-
-# Paleta de cores otimizada para modo escuro
-CORES_MODO_ESCURO = ['#4c78a8', '#54a24b', '#f58518', '#e45756', '#72b7b2', '#ff9da6', '#9d755d', '#bab0ac']
-
-# Define a ordem correta dos dias da semana e meses
-dias_semana_ordem = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"]
-meses_ordem = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
-
-# CSS para melhorar a aparência
-def inject_css():
-    st.markdown("""
-    <style>
-    .stSelectbox label, .stNumberInput label {
-        font-weight: bold;
-        color: #4c78a8;
+CARDAPIOS = {
+    "sanduiches": {
+        "JBC (Junior Bacon Cheese)": 10.00,
+        "Double Cheese Burger": 15.00,
+        "Cebola Adicional": 0.50
+    },
+    "bebidas": {
+        "Refri Lata": 15.00
     }
-    
-    .stNumberInput input::placeholder {
-        color: #888;
-        font-style: italic;
-    }
-    
-    .stButton > button {
-        height: 3rem;
-        font-size: 1.2rem;
-        font-weight: bold;
-        width: 100%;
-    }
-    
-    .element-container {
-        margin-bottom: 0.5rem;
-    }
-    
-    .stMetric {
-        background-color: rgba(255, 255, 255, 0.05);
-        padding: 1rem;
-        border-radius: 0.5rem;
-        margin-bottom: 0.5rem;
-        min-height: 120px;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-    }
-    
-    /* Dashboard Premium Styles */
-    .stApp {
-        background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%);
-    }
-    
-    /* Grid para gráficos do dashboard premium */
-    .premium-charts-grid {
-        display: grid;
-        grid-template-columns: 2fr 1fr;
-        gap: 2rem;
-        margin: 2rem 0;
-    }
-    
-    .premium-chart-full {
-        grid-column: 1 / -1;
-        margin: 2rem 0;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+}
 
-inject_css()
+FORMAS_PAGAMENTO = {
+    'crédito à vista elo': 'Crédito Elo',
+    'crédito à vista mastercard': 'Crédito MasterCard',
+    'crédito à vista visa': 'Crédito Visa',
+    'crédito à vista american express': 'Crédito Amex',
+    'débito elo': 'Débito Elo',
+    'débito mastercard': 'Débito MasterCard',
+    'débito visa': 'Débito Visa',
+    'pix': 'PIX'
+}
 
-# --- Funções de Cache para Acesso ao Google Sheets ---
-@st.cache_resource
-def get_google_auth():
-    """Autoriza o acesso ao Google Sheets e retorna o cliente gspread."""
-    SCOPES = ['https://www.googleapis.com/auth/spreadsheets',
-              'https://www.googleapis.com/auth/spreadsheets.readonly',
-              'https://www.googleapis.com/auth/drive.readonly']
+# --- FUNÇÕES UTILITÁRIAS ---
+def format_currency(value):
+    if pd.isna(value) or value is None:
+        return "R$ -"
+    return f"R$ {float(value):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+def get_global_centered_styles():
+    return [
+        {'selector': 'th', 'props': [('text-align', 'center'), ('vertical-align', 'middle'), ('background-color', '#000033'), ('color', '#ffffff'), ('padding', '8px'), ('border', '1px solid #444')]},
+        {'selector': 'td', 'props': [('text-align', 'center'), ('vertical-align', 'middle'), ('padding', '8px'), ('color', '#e0e0e0'), ('background-color', '#1a1a4a')]},
+        {'selector': 'table', 'props': [('width', '100%'), ('margin-left', 'auto'), ('margin-right', 'auto')]}
+    ]
+
+def init_data_file():
+    if not os.path.exists(CONFIG["excel_file"]):
+        pd.DataFrame(columns=['Data', 'Dinheiro', 'Cartao', 'Pix']).to_excel(
+            CONFIG["excel_file"], index=False)
+
+def load_data():
     try:
-        if "google_credentials" not in st.secrets:
-            st.error("Credenciais do Google ('google_credentials') não encontradas em st.secrets. Configure o arquivo .streamlit/secrets.toml")
-            return None
-        
-        credentials_dict = st.secrets["google_credentials"]
-        if not credentials_dict:
-            st.error("As credenciais do Google em st.secrets estão vazias.")
-            return None
-            
-        creds = Credentials.from_service_account_info(credentials_dict, scopes=SCOPES)
-        gc = gspread.authorize(creds)
-        return gc
-    except Exception as e:
-        st.error(f"Erro de autenticação com Google: {e}")
-        return None
-
-@st.cache_resource
-def get_worksheet():
-    """Retorna o objeto worksheet da planilha especificada."""
-    gc = get_google_auth()
-    if gc:
-        try:
-            spreadsheet = gc.open_by_key(SPREADSHEET_ID)
-            worksheet = spreadsheet.worksheet(WORKSHEET_NAME)
-            return worksheet
-        except SpreadsheetNotFound:
-            st.error(f"Planilha com ID '{SPREADSHEET_ID}' não encontrada.")
-            return None
-        except Exception as e:
-            st.error(f"Erro ao acessar a planilha '{WORKSHEET_NAME}': {e}")
-            return None
-    return None
-
-@st.cache_data
-def read_sales_data():
-    """Lê todos os registros da planilha de vendas e retorna como DataFrame."""
-    worksheet = get_worksheet()
-    if worksheet:
-        try:
-            rows = worksheet.get_all_records()
-            if not rows:
-                st.info("A planilha de vendas está vazia.")
-                return pd.DataFrame()
-
-            df = pd.DataFrame(rows)
-            
-            for col in ['Cartão', 'Dinheiro', 'Pix']:
-                if col in df.columns:
-                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-                else:
-                    df[col] = 0
-            
-            if 'Data' not in df.columns:
-                df['Data'] = pd.NaT
-
-            return df
-        except Exception as e:
-            st.error(f"Erro ao ler dados da planilha: {e}")
-            return pd.DataFrame()
-    return pd.DataFrame()
-
-# --- Funções de Manipulação de Dados ---
-def add_data_to_sheet(date, cartao, dinheiro, pix, worksheet_obj):
-    """Adiciona uma nova linha de dados à planilha Google Sheets."""
-    if worksheet_obj is None:
-        st.error("Não foi possível acessar a planilha para adicionar dados.")
-        return False
-    try:
-        cartao_val = float(cartao) if cartao else 0.0
-        dinheiro_val = float(dinheiro) if dinheiro else 0.0
-        pix_val = float(pix) if pix else 0.0
-        
-        new_row = [date, cartao_val, dinheiro_val, pix_val]
-        worksheet_obj.append_row(new_row)
-        st.success("Dados registrados com sucesso! ✅")
-        return True
-    except ValueError as ve:
-        st.error(f"Erro ao converter valores para número: {ve}. Verifique os dados de entrada.")
-        return False
-    except Exception as e:
-        st.error(f"Erro ao adicionar dados na planilha: {e}")
-        return False
-
-@st.cache_data
-def process_data(df_input):
-    """Processa e prepara os dados de vendas para análise."""
-    df = df_input.copy()
-    
-    cols_to_ensure_numeric = ['Cartão', 'Dinheiro', 'Pix', 'Total']
-    cols_to_ensure_date_derived = ['Ano', 'Mês', 'MêsNome', 'AnoMês', 'DataFormatada', 'DiaSemana', 'DiaDoMes']
-    
-    if df.empty:
-        all_expected_cols = ['Data'] + cols_to_ensure_numeric + cols_to_ensure_date_derived
-        empty_df = pd.DataFrame(columns=all_expected_cols)
-        for col in cols_to_ensure_numeric:
-            empty_df[col] = pd.Series(dtype='float')
-        for col in cols_to_ensure_date_derived:
-            empty_df[col] = pd.Series(dtype='object' if col in ['MêsNome', 'AnoMês', 'DataFormatada', 'DiaSemana'] else 'float')
-        empty_df['Data'] = pd.Series(dtype='datetime64[ns]')
-        return empty_df
-
-    for col in ['Cartão', 'Dinheiro', 'Pix']:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-        else:
-            df[col] = 0
-
-    df['Total'] = df['Cartão'] + df['Dinheiro'] + df['Pix']
-
-    if 'Data' in df.columns and not df['Data'].isnull().all():
-        try:
-            if pd.api.types.is_string_dtype(df['Data']):
-                df['Data'] = pd.to_datetime(df['Data'], dayfirst=True, errors='coerce')
-                if df['Data'].isnull().all():
-                    df['Data'] = pd.to_datetime(df_input['Data'], errors='coerce')
-            elif not pd.api.types.is_datetime64_any_dtype(df['Data']):
-                df['Data'] = pd.to_datetime(df['Data'], errors='coerce')
-            
-            df.dropna(subset=['Data'], inplace=True)
-
+        if os.path.exists(CONFIG["excel_file"]):
+            df = pd.read_excel(CONFIG["excel_file"])
             if not df.empty:
-                df['Ano'] = df['Data'].dt.year
-                df['Mês'] = df['Data'].dt.month
-
-                try:
-                    df['MêsNome'] = df['Data'].dt.strftime('%B').str.capitalize()
-                    if not df['MêsNome'].dtype == 'object' or df['MêsNome'].str.isnumeric().any():
-                         df['MêsNome'] = df['Mês'].map(lambda x: meses_ordem[int(x)-1] if pd.notna(x) and 1 <= int(x) <= 12 else "Inválido")
-                except Exception:
-                    df['MêsNome'] = df['Mês'].map(lambda x: meses_ordem[int(x)-1] if pd.notna(x) and 1 <= int(x) <= 12 else "Inválido")
-
-                df['AnoMês'] = df['Data'].dt.strftime('%Y-%m')
-                df['DataFormatada'] = df['Data'].dt.strftime('%d/%m/%Y')
-                
-                day_map = {0: "Segunda-feira", 1: "Terça-feira", 2: "Quarta-feira", 3: "Quinta-feira", 4: "Sexta-feira", 5: "Sábado", 6: "Domingo"}
-                df['DiaSemana'] = df['Data'].dt.dayofweek.map(day_map)
-                df['DiaDoMes'] = df['Data'].dt.day
-
-                df['DiaSemana'] = pd.Categorical(df['DiaSemana'], categories=[d for d in dias_semana_ordem if d in df['DiaSemana'].unique()], ordered=True)
-            else:
-                for col in cols_to_ensure_date_derived:
-                    df[col] = pd.Series(dtype='object' if col in ['MêsNome', 'AnoMês', 'DataFormatada', 'DiaSemana'] else 'float')
-        except Exception as e:
-            st.error(f"Erro crítico ao processar a coluna 'Data': {e}. Verifique o formato das datas na planilha.")
-            for col in cols_to_ensure_date_derived:
-                df[col] = pd.Series(dtype='object' if col in ['MêsNome', 'AnoMês', 'DataFormatada', 'DiaSemana'] else 'float')
-    else:
-        if 'Data' not in df.columns:
-            st.warning("Coluna 'Data' não encontrada no DataFrame. Algumas análises temporais não estarão disponíveis.")
-            df['Data'] = pd.NaT
-        for col in cols_to_ensure_date_derived:
-            df[col] = pd.Series(dtype='object' if col in ['MêsNome', 'AnoMês', 'DataFormatada', 'DiaSemana'] else 'float')
-            
-    return df
-
-# --- Funções de Gráficos Interativos em Altair ---
-def create_radial_plot(df):
-    """Cria um gráfico radial plot substituindo o gráfico de pizza."""
-    if df.empty or not any(col in df.columns for col in ['Cartão', 'Dinheiro', 'Pix']):
-        return None
-    
-    payment_data = pd.DataFrame({
-        'Método': ['Cartão', 'Dinheiro', 'PIX'],
-        'Valor': [df['Cartão'].sum(), df['Dinheiro'].sum(), df['Pix'].sum()]
-    })
-    payment_data = payment_data[payment_data['Valor'] > 0]
-    
-    if payment_data.empty:
-        return None
-
-    # Criar gráfico radial plot usando Altair
-    base = alt.Chart(payment_data).encode(
-        theta=alt.Theta('Valor:Q', stack=True),
-        radius=alt.Radius('Valor:Q', scale=alt.Scale(type='sqrt', zero=True, rangeMin=20)),
-        color=alt.Color(
-            'Método:N', 
-            scale=alt.Scale(range=CORES_MODO_ESCURO[:3]),
-            legend=None
-        ),
-        tooltip=[
-            alt.Tooltip('Método:N', title='Método'),
-            alt.Tooltip('Valor:Q', title='Valor (R$)', format=',.2f')
-        ]
-    )
-
-    radial_plot = base.mark_arc(
-        innerRadius=20, 
-        stroke='white', 
-        strokeWidth=2
-    ).properties(
-        width=500,
-        height=500,
-        padding={'bottom': 100}
-    ).configure_view(
-        stroke=None
-    ).configure(
-        background='transparent'
-    )
-
-    return radial_plot
-
-def create_cumulative_area_chart(df):
-    """Cria gráfico de área ACUMULADO com gradiente.""" # Modificado
-    # Validação da entrada: Verifica se o DataFrame está vazio ou se as colunas necessárias estão ausentes
-    if df.empty or 'Data' not in df.columns or 'Total' not in df.columns:
-        st.warning("Dados insuficientes ou colunas 'Data'/'Total' ausentes para gerar o gráfico de evolução acumulada.")
-        return None # Retorna None se os dados forem inválidos
-
-    # Garante que a coluna 'Data' esteja no formato datetime
-    df_copy = df.copy() # Trabalha em uma cópia para evitar modificar o df original
-    try:
-        df_copy['Data'] = pd.to_datetime(df_copy['Data'])
+                df['Data'] = pd.to_datetime(df['Data'])
+                return df.sort_values('Data', ascending=False)
+        return pd.DataFrame(columns=['Data', 'Dinheiro', 'Cartao', 'Pix'])
     except Exception as e:
-        st.error(f"Erro ao converter a coluna 'Data' para datetime: {e}")
-        return None
+        st.error(f"Erro ao carregar dados: {e}")
+        return pd.DataFrame(columns=['Data', 'Dinheiro', 'Cartao', 'Pix'])
 
-    # Ordena por 'Data' para o cálculo cumulativo correto e renderização do gráfico
-    df_sorted = df_copy.sort_values('Data')
-
-    # Esta verificação pode ser redundante se o primeiro df.empty já cobrir, mas é seguro
-    if df_sorted.empty:
-        st.warning("DataFrame vazio após ordenação para o gráfico de evolução acumulada.")
-        return None
-
-    # Calcula o total acumulado
-    df_sorted['Total_Acumulado'] = df_sorted['Total'].cumsum()
-
-    # Cria o gráfico Altair
-    area_chart = alt.Chart(df_sorted).mark_area(
-        interpolate='monotone', # Suaviza a linha da área
-        line={'color': CORES_MODO_ESCURO[0], 'strokeWidth': 2}, # Estilo para a linha superior da área
-        color=alt.Gradient( # Define o preenchimento em gradiente
-            gradient='linear',
-            stops=[
-                alt.GradientStop(color=CORES_MODO_ESCURO[0], offset=0), # Cor inicial do gradiente
-                alt.GradientStop(color=CORES_MODO_ESCURO[4], offset=1)  # Cor final do gradiente
-            ],
-            x1=1, x2=1, y1=1, y2=0 # Direção do gradiente (vertical de baixo para cima)
-        )
-    ).encode(
-        x=alt.X(
-            'Data:T', # 'T' especifica o tipo de dado temporal
-            #title='Data',
-            axis=alt.Axis(format='%d/%m', labelAngle=-45, labelFontSize=12) # Formata os rótulos do eixo x
-        ),
-        y=alt.Y(
-            'Total_Acumulado:Q', # 'Q' especifica o tipo de dado quantitativo
-            #title='Total de Vendas Acumulado (R$)',
-            axis=alt.Axis(labelFontSize=12) # Formata os rótulos do eixo y
-        ),
-        tooltip=[ # Define o que aparece ao passar o mouse
-            alt.Tooltip('Data:T', title='Data', format='%d/%m/%Y'), # Formata a data no tooltip
-            alt.Tooltip('Total:Q', title='Venda do Dia (R$)', format=',.2f'),
-            alt.Tooltip('Total_Acumulado:Q', title='Total Acumulado (R$)', format=',.2f')
-        ]
-    ).properties(
-        title=alt.TitleParams(
-            text='Evolução Acumulada das Vendas',
-            fontSize=18,
-            anchor='start' # Alinha o título ao início (esquerda)
-        ),
-        height=500,
-        width=1000 # Considere usar a largura 'container' no Streamlit para responsividade
-    ).configure_view(
-        stroke=None # Remove a borda ao redor da visualização do gráfico
-    ).configure(
-        background='transparent' # Torna o fundo do gráfico transparente
-    )
-
-    return area_chart
-
-def create_advanced_daily_sales_chart(df):
-    """Cria um gráfico de vendas diárias sem animação."""
-    if df.empty or 'Data' not in df.columns:
-        return None
-    
-    df_sorted = df.sort_values('Data').copy()
-    
-    if df_sorted.empty:
-        return None
-    
-    df_melted = df_sorted.melt(
-        id_vars=['Data', 'DataFormatada', 'Total'],
-        value_vars=['Cartão', 'Dinheiro', 'Pix'],
-        var_name='Método',
-        value_name='Valor'
-    )
-    
-    df_melted = df_melted[df_melted['Valor'] > 0]
-    
-    if df_melted.empty:
-        return None
-    
-    bars = alt.Chart(df_melted).mark_bar(
-        size=20,
-        stroke='white',     # Cor da borda
-        strokeWidth=2     # Espessura da borda
-    ).encode(
-        x=alt.X(
-            'Data:T',
-            title='Data',
-            axis=alt.Axis(format='%d/%m', labelAngle=-45, labelFontSize=12)
-        ),
-        y=alt.Y(
-            'Valor:Q',
-            title='Valor (R$)',
-            stack='zero',
-            axis=alt.Axis(labelFontSize=12)
-        ),
-        color=alt.Color(
-            'Método:N',
-            scale=alt.Scale(range=CORES_MODO_ESCURO[:3]),
-            legend=None
-        ),
-        tooltip=[
-            alt.Tooltip('DataFormatada:N', title='Data'),
-            alt.Tooltip('Método:N', title='Método'),
-            alt.Tooltip('Valor:Q', title='Valor (R$)', format=',.2f')
-        ]
-    ).properties(
-        height=500,
-        width=1000,
-        padding={'bottom': 100}
-    ).configure_view(
-        stroke=None
-    ).configure(
-        background='transparent'
-    )
-    
-    return bars
-
-def create_enhanced_weekday_analysis(df):
-    """Cria análise de vendas por dia da semana sem animação."""
-    if df.empty or 'DiaSemana' not in df.columns or 'Total' not in df.columns:
-        return None, None
-    
-    df_copy = df.copy()
-    df_copy['Total'] = pd.to_numeric(df_copy['Total'], errors='coerce')
-    df_copy.dropna(subset=['Total', 'DiaSemana'], inplace=True)
-    
-    if df_copy.empty:
-        return None, None
-    
-    weekday_stats = df_copy.groupby('DiaSemana', observed=True).agg({
-        'Total': ['mean', 'sum', 'count']
-    }).round(2)
-    
-    weekday_stats.columns = ['Média', 'Total', 'Dias_Vendas']
-    weekday_stats = weekday_stats.reindex([d for d in dias_semana_ordem if d in weekday_stats.index])
-    weekday_stats = weekday_stats.reset_index()
-    
-    total_media_geral = weekday_stats['Média'].sum()
-    if total_media_geral > 0:
-        weekday_stats['Percentual_Media'] = (weekday_stats['Média'] / total_media_geral * 100).round(1)
-    else:
-        weekday_stats['Percentual_Media'] = 0
-    
-    chart = alt.Chart(weekday_stats).mark_bar(
-        color=CORES_MODO_ESCURO[0],
-        cornerRadiusTopLeft=5,
-        cornerRadiusTopRight=5
-    ).encode(
-        x=alt.X(
-            'DiaSemana:O',
-            title='Dia da Semana',
-            sort=dias_semana_ordem,
-            axis=alt.Axis(labelAngle=-45, labelFontSize=12)
-        ),
-        y=alt.Y(
-            'Média:Q',
-            title='Média de Vendas (R$)',
-            axis=alt.Axis(labelFontSize=12)
-        ),
-        tooltip=[
-            alt.Tooltip('DiaSemana:N', title='Dia'),
-            alt.Tooltip('Média:Q', title='Média (R$)', format=',.2f'),
-            alt.Tooltip('Percentual_Media:Q', title='% da Média Total', format='.1f'),
-            alt.Tooltip('Dias_Vendas:Q', title='Dias com Vendas')
-        ]
-    ).properties(
-        title=alt.TitleParams(
-            text="Média de Vendas por Dia da Semana",
-            fontSize=18,
-            anchor='start'
-        ),
-        height=500,
-        width=1000,
-        padding={'bottom': 100}
-    ).configure_view(
-        stroke=None
-    ).configure(
-        background='transparent'
-    )
-    
-    best_day = weekday_stats.loc[weekday_stats['Média'].idxmax(), 'DiaSemana'] if not weekday_stats.empty else "N/A"
-    
-    return chart, best_day
-
-def create_sales_histogram(df, title="Distribuição dos Valores de Venda Diários"):
-    """Histograma sem animação."""
-    if df.empty or 'Total' not in df.columns or df['Total'].isnull().all():
-        return None
-    
-    df_filtered_hist = df[df['Total'] > 0].copy()
-    if df_filtered_hist.empty:
-        return None
-    
-    histogram = alt.Chart(df_filtered_hist).mark_bar(
-        color=CORES_MODO_ESCURO[0],
-        opacity=0.8,
-        cornerRadiusTopLeft=5,
-        cornerRadiusTopRight=5
-    ).encode(
-        x=alt.X(
-            "Total:Q",
-            bin=alt.Bin(maxbins=20),
-            title="Faixa de Valor da Venda Diária (R$)",
-            axis=alt.Axis(labelFontSize=12)
-        ),
-        y=alt.Y(
-            'count():Q',
-            title='Número de Dias (Frequência)',
-            axis=alt.Axis(labelFontSize=12)
-        ),
-        tooltip=[
-            alt.Tooltip("Total:Q", bin=True, title="Faixa de Valor (R$)", format=",.0f"),
-            alt.Tooltip("count():Q", title="Número de Dias")
-        ]
-    ).properties(
-        title=alt.TitleParams(
-            text=title,
-            fontSize=18,
-            anchor='start'
-        ),
-        height=600,
-        width=1000,
-        padding={'bottom': 100}
-    ).configure_view(
-        stroke=None
-    ).configure(
-        background='transparent'
-    )
-    
-    return histogram
-
-def analyze_sales_by_weekday(df):
-    """Analisa vendas por dia da semana."""
-    if df.empty or 'DiaSemana' not in df.columns or 'Total' not in df.columns or df['DiaSemana'].isnull().all() or df['Total'].isnull().all():
-        return None, None
-    
+def save_data(df):
     try:
-        df_copy = df.copy()
-        df_copy['Total'] = pd.to_numeric(df_copy['Total'], errors='coerce')
-        df_copy.dropna(subset=['Total', 'DiaSemana'], inplace=True)
-        
-        if df_copy.empty:
-            return None, None
-        
-        avg_sales_weekday = df_copy.groupby('DiaSemana', observed=True)['Total'].mean().reindex(dias_semana_ordem).dropna()
-        
-        if not avg_sales_weekday.empty:
-            best_day = avg_sales_weekday.idxmax()
-            return best_day, avg_sales_weekday
-        else:
-            return None, avg_sales_weekday
+        df['Data'] = pd.to_datetime(df['Data'])
+        df.to_excel(CONFIG["excel_file"], index=False)
+        st.success("Dados salvos com sucesso!")
     except Exception as e:
-        st.error(f"Erro ao analisar vendas por dia da semana: {e}")
-        return None, None
+        st.error(f"Erro ao salvar dados: {e}")
 
-# --- Funções de Cálculos Financeiros ---
-def calculate_financial_results(df, salario_minimo, custo_contadora, custo_fornecedores_percentual):
-    """Calcula os resultados financeiros com base nos dados de vendas seguindo normas contábeis."""
-    results = {
-        'receita_bruta': 0, 'receita_tributavel': 0, 'receita_nao_tributavel': 0,
-        'impostos_sobre_vendas': 0, 'receita_liquida': 0, 'custo_produtos_vendidos': 0,
-        'lucro_bruto': 0, 'margem_bruta': 0, 'despesas_administrativas': 0,
-        'despesas_com_pessoal': 0, 'despesas_contabeis': custo_contadora,
-        'total_despesas_operacionais': 0, 'lucro_operacional': 0, 'margem_operacional': 0,
-        'lucro_antes_ir': 0, 'lucro_liquido': 0, 'margem_liquida': 0,
-        'diferenca_tributavel_nao_tributavel': 0
+def round_to_50_or_00(value):
+    return int(round(value))
+
+def calculate_combination_value(combination, item_prices):
+    return sum(item_prices.get(name, 0) * quantity for name, quantity in combination.items())
+
+# --- FUNÇÕES PARA ALGORITMO GENÉTICO COM RESTRIÇÃO DE COMBO ---
+def create_individual_combo(item_prices, max_combos=100):
+    """
+    Cria um indivíduo respeitando a regra do combo:
+    - Número de JBC = Número de Refri Lata
+    - Cebola pode variar livremente
+    """
+    num_combos = random.randint(1, max_combos)
+    num_cebolas = random.randint(0, 50)
+    
+    individual = {
+        "JBC (Junior Bacon Cheese)": num_combos,
+        "Refri Lata": num_combos,
+        "Cebola Adicional": num_cebolas
     }
     
-    if df.empty: 
-        return results
+    return individual
+
+def evaluate_fitness_combo(individual, target_value):
+    """Avalia fitness com penalização se JBC != Refri Lata"""
+    preco_jbc = CARDAPIOS["sanduiches"]["JBC (Junior Bacon Cheese)"]
+    preco_lata = CARDAPIOS["bebidas"]["Refri Lata"]
+    preco_cebola = CARDAPIOS["sanduiches"]["Cebola Adicional"]
     
-    results['receita_bruta'] = df['Total'].sum()
-    results['receita_tributavel'] = df['Cartão'].sum() + df['Pix'].sum()
-    results['receita_nao_tributavel'] = df['Dinheiro'].sum()
-    results['impostos_sobre_vendas'] = results['receita_tributavel'] * 0.06
-    results['receita_liquida'] = results['receita_bruta'] - results['impostos_sobre_vendas']
-    results['custo_produtos_vendidos'] = results['receita_bruta'] * (custo_fornecedores_percentual / 100)
-    results['lucro_bruto'] = results['receita_liquida'] - results['custo_produtos_vendidos']
+    qty_jbc = individual.get("JBC (Junior Bacon Cheese)", 0)
+    qty_lata = individual.get("Refri Lata", 0)
+    qty_cebola = individual.get("Cebola Adicional", 0)
     
-    if results['receita_liquida'] > 0:
-        results['margem_bruta'] = (results['lucro_bruto'] / results['receita_liquida']) * 100
+    # Penalização severa se JBC != Lata
+    if qty_jbc != qty_lata:
+        return 1_000_000 + abs(qty_jbc - qty_lata) * 1000
     
-    results['despesas_com_pessoal'] = salario_minimo * 1.55
-    results['despesas_contabeis'] = custo_contadora
-    results['despesas_administrativas'] = 0
-    results['total_despesas_operacionais'] = (
-        results['despesas_com_pessoal'] + 
-        results['despesas_contabeis'] + 
-        results['despesas_administrativas']
+    total = (preco_jbc * qty_jbc) + (preco_lata * qty_lata) + (preco_cebola * qty_cebola)
+    
+    if total > target_value:
+        return 1_000_000 + (total - target_value)
+    
+    score = target_value - total
+    return score
+
+def crossover_combo(parent1, parent2):
+    """Crossover mantendo a regra do combo"""
+    # Combos vêm de um dos pais
+    if random.random() < 0.5:
+        num_combos = parent1.get("JBC (Junior Bacon Cheese)", 0)
+    else:
+        num_combos = parent2.get("JBC (Junior Bacon Cheese)", 0)
+    
+    # Cebolas podem ser média ou de um dos pais
+    if random.random() < 0.5:
+        num_cebolas = (parent1.get("Cebola Adicional", 0) + parent2.get("Cebola Adicional", 0)) // 2
+    else:
+        num_cebolas = parent1.get("Cebola Adicional", 0) if random.random() < 0.5 else parent2.get("Cebola Adicional", 0)
+    
+    return {
+        "JBC (Junior Bacon Cheese)": num_combos,
+        "Refri Lata": num_combos,
+        "Cebola Adicional": num_cebolas
+    }
+
+def mutate_combo(individual, mutation_rate=0.3):
+    """Mutação mantendo a regra do combo"""
+    new_individual = individual.copy()
+    
+    # Mutar número de combos
+    if random.random() < mutation_rate:
+        change = random.choice([-5, -3, -1, 1, 3, 5])
+        new_combos = max(0, new_individual["JBC (Junior Bacon Cheese)"] + change)
+        new_individual["JBC (Junior Bacon Cheese)"] = new_combos
+        new_individual["Refri Lata"] = new_combos  # Mantém igual!
+    
+    # Mutar cebolas
+    if random.random() < mutation_rate:
+        change = random.choice([-3, -2, -1, 1, 2, 3])
+        new_cebolas = max(0, new_individual.get("Cebola Adicional", 0) + change)
+        new_individual["Cebola Adicional"] = new_cebolas
+    
+    return new_individual
+
+def genetic_algorithm_combo(target_value, population_size=50, generations=100, max_combos=100):
+    """Algoritmo genético com restrição de combo"""
+    if target_value <= 0:
+        return {}
+    
+    population = [create_individual_combo(CARDAPIOS, max_combos) for _ in range(population_size)]
+    best_individual = {}
+    best_fitness = float('inf')
+    
+    for generation in range(generations):
+        fitness_scores = [(individual, evaluate_fitness_combo(individual, target_value)) 
+                         for individual in population]
+        fitness_scores.sort(key=lambda x: x[1])
+        
+        if fitness_scores[0][1] < best_fitness:
+            best_individual = fitness_scores[0][0].copy()
+            best_fitness = fitness_scores[0][1]
+        
+        if best_fitness == 0:
+            break
+        
+        # Elitismo
+        elite_size = max(5, population_size // 10)
+        next_generation = [ind[0].copy() for ind in fitness_scores[:elite_size]]
+        
+        # Criar nova geração
+        while len(next_generation) < population_size:
+            tournament_size = 3
+            tournament = random.sample(fitness_scores, tournament_size)
+            tournament.sort(key=lambda x: x[1])
+            parent1 = tournament[0][0]
+            parent2 = random.choice(fitness_scores[:10])[0]
+            
+            child = crossover_combo(parent1, parent2)
+            child = mutate_combo(child)
+            next_generation.append(child)
+        
+        population = next_generation
+    
+    # Limpar valores zero
+    final_combination = {k: int(v) for k, v in best_individual.items() if v > 0}
+    
+    return final_combination
+
+def buscar_combinacao_combo(target_value, max_time_seconds=5, population_size=100, generations=200):
+    """Busca a melhor combinação respeitando a regra do combo"""
+    start_time = time.time()
+    best_global_individual = {}
+    best_global_diff = float('inf')
+    attempts = 0
+    
+    while (time.time() - start_time) < max_time_seconds:
+        attempts += 1
+        current_result = genetic_algorithm_combo(target_value, population_size, generations)
+        current_fitness = evaluate_fitness_combo(current_result, target_value)
+        
+        if current_fitness == 0:
+            return current_result, attempts
+        
+        if current_fitness < best_global_diff:
+            best_global_diff = current_fitness
+            best_global_individual = current_result
+    
+    return best_global_individual, attempts
+
+# --- FUNÇÕES PARA GERAR PDF ---
+def create_watermark(canvas, logo_path, width=400, height=400, opacity=0.1):
+    try:
+        if os.path.exists(logo_path):
+            canvas.saveState()
+            canvas.setFillColorRGB(255, 255, 255, alpha=opacity)
+            canvas.drawImage(logo_path, (A4[0] - width) / 2, (A4[1] - height) / 2, 
+                             width=width, height=height, mask='auto', preserveAspectRatio=True)
+            canvas.restoreState()
+    except Exception as e:
+        print(f"Erro ao adicionar marca d'água: {e}")
+
+def fig_to_buffer(fig):
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png', dpi=300, bbox_inches='tight')
+    buf.seek(0)
+    return buf
+
+def create_pdf_report(df, vendas, total_vendas, imposto_simples, custo_funcionario, 
+                    custo_contadora, total_custos, lucro_estimado, logo_path):
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=72)
+    styles = getSampleStyleSheet()
+    title_style = styles['Title']
+    heading_style = styles['Heading1']
+    subheading_style = styles['Heading2']
+    normal_style = styles['Normal']
+    elements = []
+    
+    try:
+        if os.path.exists(logo_path):
+            img = Image(logo_path, width=2*inch, height=1.5*inch)
+            img.hAlign = 'CENTER'
+            elements.append(img)
+            elements.append(Spacer(1, 0.5*inch))
+    except Exception as e:
+        print(f"Erro ao adicionar logo: {e}")
+    
+    elements.append(Paragraph("Relatório Financeiro - Clips Burger", title_style))
+    elements.append(Spacer(1, 0.5*inch))
+    elements.append(Paragraph(f"Data do relatório: {datetime.now().strftime('%d/%m/%Y')}", normal_style))
+    elements.append(Spacer(1, 0.25*inch))
+    elements.append(Paragraph("Resumo Financeiro", heading_style))
+    elements.append(Spacer(1, 0.1*inch))
+    
+    data = [
+        ["Métrica", "Valor"],
+        ["Faturamento Bruto", format_currency(total_vendas)],
+        ["Imposto Simples (6%)", format_currency(imposto_simples)],
+        ["Custo Funcionário CLT", format_currency(custo_funcionario)],
+        ["Custo Contadora", format_currency(custo_contadora)],
+        ["Total de Custos", format_currency(total_custos)],
+        ["Lucro Estimado", format_currency(lucro_estimado)]
+    ]
+    
+    table = Table(data, colWidths=[doc.width/2.5, doc.width/2.5])
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (1, 0), 'CENTER'),
+        ('FONTNAME', (0, 0), (1, 0), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0, 0), (1, 0), 12),
+        ('BACKGROUND', (0, -1), (1, -1), colors.lightgrey),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+    ]))
+    elements.append(table)
+    elements.append(Spacer(1, 0.5*inch))
+    
+    elements.append(Paragraph("Análise de Vendas", heading_style))
+    elements.append(Spacer(1, 0.1*inch))
+    
+    try:
+        fig, ax = plt.subplots(figsize=(8, 5))
+        vendas.plot(kind='bar', x='Forma', y='Valor', ax=ax, color='steelblue')
+        ax.set_title('Vendas por Forma de Pagamento')
+        ax.set_ylabel('Valor (R$)')
+        ax.set_xlabel('')
+        plt.tight_layout()
+        img_buf = fig_to_buffer(fig)
+        img = Image(img_buf, width=doc.width, height=4*inch)
+        elements.append(img)
+        elements.append(Spacer(1, 0.25*inch))
+        plt.close(fig)
+    except Exception as e:
+        elements.append(Paragraph(f"Erro ao gerar gráfico de vendas: {e}", normal_style))
+    
+    try:
+        custos_df = pd.DataFrame({
+            'Item': ['Impostos', 'Funcionário', 'Contadora'],
+            'Valor': [imposto_simples, custo_funcionario, custo_contadora]
+        })
+        fig, ax = plt.subplots(figsize=(8, 5))
+        ax.pie(custos_df['Valor'], labels=custos_df['Item'], autopct='%1.1f%%', startangle=90, shadow=True)
+        ax.set_title('Composição dos Custos')
+        plt.tight_layout()
+        img_buf = fig_to_buffer(fig)
+        img = Image(img_buf, width=doc.width, height=4*inch)
+        elements.append(img)
+        plt.close(fig)
+    except Exception as e:
+        elements.append(Paragraph(f"Erro ao gerar gráfico de custos: {e}", normal_style))
+    
+    elements.append(Spacer(1, 0.5*inch))
+    elements.append(Paragraph("Detalhamento por Forma de Pagamento", subheading_style))
+    elements.append(Spacer(1, 0.1*inch))
+    
+    data = [["Forma de Pagamento", "Valor"]]
+    for _, row in vendas.iterrows():
+        data.append([row['Forma'], format_currency(row['Valor'])])
+    
+    table = Table(data, colWidths=[doc.width/2, doc.width/4])
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+    ]))
+    elements.append(table)
+    elements.append(Spacer(1, inch))
+    footer_text = "Este relatório foi gerado automaticamente pelo Sistema de Gestão da Clips Burger."
+    elements.append(Paragraph(footer_text, normal_style))
+    
+    def add_watermark(canvas, doc):
+        create_watermark(canvas, logo_path, width=300, height=300, opacity=0.1)
+    
+    doc.build(elements, onFirstPage=add_watermark, onLaterPages=add_watermark)
+    buffer.seek(0)
+    return buffer
+
+def create_altair_chart(data, chart_type, x_col, y_col, color_col=None, title=None, interactive=True):
+    if chart_type == 'line':
+        chart = alt.Chart(data).mark_line(point=True).encode(
+            x=alt.X(f'{x_col}:T', title=x_col),
+            y=alt.Y(f'{y_col}:Q', title=y_col),
+            tooltip=[x_col, y_col]
+        )
+    elif chart_type == 'bar':
+        chart = alt.Chart(data).mark_bar().encode(
+            x=alt.X(f'{x_col}:N', title=x_col),
+            y=alt.Y(f'{y_col}:Q', title=y_col),
+            color=alt.Color(f'{color_col}:N') if color_col else alt.value('steelblue'),
+            tooltip=[x_col, y_col]
+        )
+    elif chart_type == 'pie':
+        chart = alt.Chart(data).mark_arc().encode(
+            theta=alt.Theta(f'{y_col}:Q', stack=True),
+            color=alt.Color(f'{x_col}:N', legend=alt.Legend(title=x_col)),
+            tooltip=[x_col, y_col]
+        )
+    
+    chart = chart.properties(
+        title=title if title else f'{y_col} por {x_col}',
+        width=700,
+        height=400
+    )
+    return chart.interactive() if interactive else chart
+
+# --- LÓGICA DE PROCESSAMENTO GENÉTICO (SEPARADA) ---
+def gerar_dados_geneticos_combo(valor_alvo_total, pop_size, n_gens):
+    """Gera dados usando o algoritmo genético com restrição de combo"""
+    combinacao, ciclos = buscar_combinacao_combo(
+        valor_alvo_total, 
+        max_time_seconds=5, 
+        population_size=pop_size, 
+        generations=n_gens
     )
     
-    results['lucro_operacional'] = results['lucro_bruto'] - results['total_despesas_operacionais']
-    if results['receita_liquida'] > 0:
-        results['margem_operacional'] = (results['lucro_operacional'] / results['receita_liquida']) * 100
+    # Separar sanduíches e bebidas
+    sanduiches = {}
+    bebidas = {}
     
-    results['lucro_antes_ir'] = results['lucro_operacional']
-    results['lucro_liquido'] = results['lucro_antes_ir']
-    if results['receita_liquida'] > 0:
-        results['margem_liquida'] = (results['lucro_liquido'] / results['receita_liquida']) * 100
+    for item, qty in combinacao.items():
+        if item in CARDAPIOS["sanduiches"]:
+            sanduiches[item] = qty
+        elif item in CARDAPIOS["bebidas"]:
+            bebidas[item] = qty
     
-    results['diferenca_tributavel_nao_tributavel'] = results['receita_nao_tributavel']
+    # Calcular valores
+    val_sand = sum(CARDAPIOS["sanduiches"][k] * v for k, v in sanduiches.items())
+    val_beb = sum(CARDAPIOS["bebidas"][k] * v for k, v in bebidas.items())
+    val_total = val_sand + val_beb
     
-    return results
+    return {
+        'sanduiches': sanduiches,
+        'bebidas': bebidas,
+        'val_sand': val_sand,
+        'val_beb': val_beb,
+        'val_total': val_total,
+        'alvo': valor_alvo_total,
+        'ciclos': ciclos
+    }
 
-def create_dre_textual(resultados, df_processed, selected_anos_filter):
-    """Cria uma apresentação textual do DRE no estilo tradicional contábil usando dados anuais."""
-    def format_val(value):
-        return f"{value:,.0f}".replace(",", ".")
-
-    def calc_percent(value, base):
-        if base == 0:
-            return 0
-        return (value / base) * 100
-
-    # Determinar o ano para o DRE
-    if selected_anos_filter and len(selected_anos_filter) == 1:
-        ano_dre = selected_anos_filter[0]
-    else:
-        ano_dre = datetime.now().year
-
-    # Filtrar dados APENAS por ano (ignorar filtro de mês)
-    if not df_processed.empty and 'Ano' in df_processed.columns:
-        df_ano = df_processed[df_processed['Ano'] == ano_dre].copy()
-        
-        # Recalcular resultados com dados do ano completo
-        if not df_ano.empty:
-            resultados_ano = calculate_financial_results(
-                df_ano, 
-                st.session_state.get('salario_tab4', 1550.0), 
-                st.session_state.get('contadora_tab4', 316.0) * 12, # Custo anual
-                st.session_state.get('fornecedores_tab4', 30.0)
-            )
+def renderizar_resultados(dados):
+    st.subheader(f"Valor Alvo: {format_currency(dados['alvo'])}")
+    st.caption(f"🤖 O algoritmo realizou {dados['ciclos']} ciclos completos de evolução.")
+    
+    # Verificar se a regra do combo foi respeitada
+    qty_jbc = dados['sanduiches'].get("JBC (Junior Bacon Cheese)", 0)
+    qty_lata = dados['bebidas'].get("Refri Lata", 0)
+    qty_cebola = dados['sanduiches'].get("Cebola Adicional", 0)
+    
+    if qty_jbc == qty_lata and qty_jbc > 0:
+        st.success(f"✅ **Combo 1 identificado:** {qty_jbc} unidades (JBC + Refri Lata)")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("### 🍔 Produtos")
+        if dados['sanduiches']:
+            df_s = pd.DataFrame({
+                'Produto': list(dados['sanduiches'].keys()),
+                'Qnt': list(dados['sanduiches'].values()),
+                'Preço Unitário': [CARDAPIOS["sanduiches"][k] for k in dados['sanduiches']],
+                'Subtotal': [CARDAPIOS["sanduiches"][k]*v for k,v in dados['sanduiches'].items()]
+            })
+            df_s = df_s.sort_values('Subtotal', ascending=False)
+            html_s = df_s.style.format({'Qnt':'{:.0f}', 'Preço Unitário':'R$ {:.2f}', 'Subtotal':'R$ {:.2f}'})\
+                .set_table_styles(get_global_centered_styles()).hide(axis='index').to_html()
+            st.markdown(html_s, unsafe_allow_html=True)
+            st.write("")
+            st.metric("Total Produtos", format_currency(dados['val_sand']))
         else:
-            # Se não houver dados para o ano, usar os resultados filtrados (pode ser de outro período)
-            # Ou zerar? Melhor usar os filtrados para não mostrar tudo zero.
-            resultados_ano = resultados # Mantém os resultados do filtro atual se não houver dados do ano
-            st.warning(f"⚠️ Não há dados de vendas registrados para o ano {ano_dre}. O DRE abaixo pode refletir um período diferente.")
-    else:
-        resultados_ano = resultados # Usa resultados filtrados se df_processed estiver vazio
+            st.warning("Sem itens")
 
-    # Cabeçalho centralizado
+    with col2:
+        st.markdown("### 🥤 Bebidas")
+        if dados['bebidas']:
+            df_b = pd.DataFrame({
+                'Produto': list(dados['bebidas'].keys()),
+                'Qnt': list(dados['bebidas'].values()),
+                'Preço Unitário': [CARDAPIOS["bebidas"][k] for k in dados['bebidas']],
+                'Subtotal': [CARDAPIOS["bebidas"][k]*v for k,v in dados['bebidas'].items()]
+            })
+            df_b = df_b.sort_values('Subtotal', ascending=False)
+            html_b = df_b.style.format({'Qnt':'{:.0f}', 'Preço Unitário':'R$ {:.2f}', 'Subtotal':'R$ {:.2f}'})\
+                .set_table_styles(get_global_centered_styles()).hide(axis='index').to_html()
+            st.markdown(html_b, unsafe_allow_html=True)
+            st.write("")
+            st.metric("Total Bebidas", format_currency(dados['val_beb']))
+        else:
+            st.warning("Sem itens")
+
+    diff = dados['alvo'] - dados['val_total']
+    
+    # FUNDOS TRANSPARENTES
+    cor_border = "#10b981" if diff == 0 else "#f97316"
+    cor_text = "#a7f3d0" if diff == 0 else "#fdba74" 
+    
+    st.markdown("---")
+    
+    # Informações do Combo - FUNDO TRANSPARENTE
+    if qty_jbc > 0 and qty_lata > 0:
+        valor_combos = qty_jbc * 25.00
+        valor_cebolas = qty_cebola * 0.50
+        
+        st.markdown(f"""
+        <div style="background-color: rgba(65, 105, 225, 0.1); border: 2px solid #4169E1; border-radius: 10px; padding: 15px; margin-bottom: 15px; backdrop-filter: blur(10px);">
+            <h4 style="margin:0; color: #87CEEB; text-align: center;">🎁 COMBO 1</h4>
+            <p style="text-align: center; color: #e5e7eb; margin: 5px 0;">
+                {qty_jbc} Combo(s) x R$ 25,00 = <b>{format_currency(valor_combos)}</b>
+            </p>
+            <p style="text-align: center; color: #e5e7eb; margin: 5px 0; font-size: 14px;">
+                (1 JBC + 1 Refri Lata por combo)
+            </p>
+            {f'<p style="text-align: center; color: #FFD700; margin: 5px 0; font-size: 14px;">+ {qty_cebola} Cebola(s) Adicional(is) x R$ 0,50 = <b>{format_currency(valor_cebolas)}</b></p>' if qty_cebola > 0 else ''}
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Box do valor total - FUNDO TRANSPARENTE
     st.markdown(f"""
-    <div style="text-align: center; margin-bottom: 30px;">
-        <h3 style="margin: 0; font-weight: normal;">DEMONSTRAÇÃO DO RESULTADO DO EXERCÍCIO</h3>
-        <p style="margin: 5px 0; font-style: italic;">Clips Burger - Exercício {ano_dre}</p>
+    <div style="background-color: rgba(0, 0, 51, 0.3); border: 3px solid {cor_border}; border-radius: 15px; padding: 25px; text-align: center; margin-top: 10px; margin-bottom: 20px; backdrop-filter: blur(10px);">
+        <h3 style="margin:0; color: {cor_text}; font-family: sans-serif;">💰 VALOR TOTAL DA COMBINAÇÃO</h3>
+        <p style="font-size: 45px; font-weight: 800; margin: 10px 0; color: {cor_text};">
+            {format_currency(dados['val_total'])}
+        </p>
+        <p style="font-size: 16px; margin: 0; color: #e5e7eb;">
+            Meta: <b>{format_currency(dados['alvo'])}</b> | Diferença: <b style="color: {'#fca5a5' if diff != 0 else '#86efac'}">{format_currency(abs(diff))}</b>
+        </p>
+    </div>
     """, unsafe_allow_html=True)
 
-    # Criar 2 colunas - descrição e valor
-    col1, col2 = st.columns([6, 2])
-    with col1:
-        st.markdown("")
-    with col2:
-        st.markdown("**Em R$**")
-    
-    # RECEITA BRUTA
-    col1, col2 = st.columns([6, 2])
-    with col1:
-        st.markdown("**RECEITA BRUTA**")
-    with col2:
-        st.markdown(f"**{format_val(resultados_ano['receita_bruta'])}**")
-    
-    # DEDUÇÕES
-    col1, col2 = st.columns([6, 2])
-    with col1:
-        st.markdown("**(-) DEDUÇÕES**")
-    with col2:
-        st.markdown("")
-    
-    col1, col2 = st.columns([6, 2])
-    with col1:
-        st.markdown("&nbsp;&nbsp;&nbsp;&nbsp;Simples Nacional")
-    with col2:
-        st.markdown(f"({format_val(resultados_ano['impostos_sobre_vendas'])})")
-    
-    # RECEITA LÍQUIDA
-    col1, col2 = st.columns([6, 2])
-    with col1:
-        st.markdown("**RECEITA LÍQUIDA**")
-    with col2:
-        st.markdown(f"**{format_val(resultados_ano['receita_liquida'])}**")
-    
-    # CUSTO DOS PRODUTOS VENDIDOS
-    col1, col2 = st.columns([6, 2])
-    with col1:
-        st.markdown("**(-) CUSTO DOS PRODUTOS VENDIDOS**")
-    with col2:
-        st.markdown(f"**({format_val(resultados_ano['custo_produtos_vendidos'])})**")
-    
-    # LUCRO BRUTO
-    col1, col2 = st.columns([6, 2])
-    with col1:
-        st.markdown("**LUCRO BRUTO**")
-    with col2:
-        st.markdown(f"**{format_val(resultados_ano['lucro_bruto'])}**")
-    
-    # DESPESAS OPERACIONAIS
-    col1, col2 = st.columns([6, 2])
-    with col1:
-        st.markdown("**(-) DESPESAS OPERACIONAIS**")
-    with col2:
-        st.markdown("")
-    
-    col1, col2 = st.columns([6, 2])
-    with col1:
-        st.markdown("&nbsp;&nbsp;&nbsp;&nbsp;Despesas com Pessoal")
-    with col2:
-        # Ajuste para mostrar despesa anual
-        st.markdown(f"({format_val(resultados_ano['despesas_com_pessoal'])})") 
-    
-    col1, col2 = st.columns([6, 2])
-    with col1:
-        st.markdown("&nbsp;&nbsp;&nbsp;&nbsp;Serviços Contábeis")
-    with col2:
-         # Ajuste para mostrar despesa anual
-        st.markdown(f"({format_val(resultados_ano['despesas_contabeis'])})")
-    
-    # LUCRO OPERACIONAL
-    col1, col2 = st.columns([6, 2])
-    with col1:
-        st.markdown("**LUCRO OPERACIONAL**")
-    with col2:
-        st.markdown(f"**{format_val(resultados_ano['lucro_operacional'])}**")
-    
-    # RESULTADO ANTES DO IMPOSTO DE RENDA
-    col1, col2 = st.columns([6, 2])
-    with col1:
-        st.markdown("**LUCRO ANTES DO IMPOSTO DE RENDA**")
-    with col2:
-        st.markdown(f"**{format_val(resultados_ano['lucro_antes_ir'])}**")
-    
-    col1, col2 = st.columns([6, 2])
-    with col1:
-        st.markdown("**(-) Provisão para Imposto de Renda**")
-    with col2:
-        st.markdown("**-**")
-    
-    # Linha de separação
-    #st.markdown("---")
-    
-    # RESULTADO LÍQUIDO - destacado
-    col1, col2 = st.columns([6, 2])
-    with col1:
-        st.markdown("## **RESULTADO LÍQUIDO DO EXERCÍCIO**")
-    with col2:
-        st.markdown(f"## **{format_val(resultados_ano['lucro_liquido'])}**")
-    
-    # Nota explicativa
-    st.info(f"📅 **Nota:** Este DRE apresenta os resultados consolidados do exercício {ano_dre}, independente do filtro de mês aplicado nas outras análises.")
+# --- CONFIGURAÇÃO DA PÁGINA ---
+st.set_page_config(
+    page_title=CONFIG["page_title"],
+    layout=CONFIG["layout"],
+    initial_sidebar_state=CONFIG["sidebar_state"]
+)
 
-def create_financial_dashboard_altair(resultados):
-    """Dashboard financeiro com legenda corrigida."""
-    financial_data = pd.DataFrame({
-        'Categoria': [
-            'Receita Bruta',
-            'Impostos s/ Vendas',
-            'Custo Produtos',
-            'Despesas Pessoal',
-            'Serviços Contábeis',
-            'Lucro Líquido'
-        ],
-        'Valor': [
-            resultados['receita_bruta'],
-            -resultados['impostos_sobre_vendas'],
-            -resultados['custo_produtos_vendidos'],
-            -resultados['despesas_com_pessoal'],
-            -resultados['despesas_contabeis'],
-            resultados['lucro_liquido']
-        ],
-        'Tipo': [
-            'Receita',
-            'Dedução',
-            'CPV',
-            'Despesa',
-            'Despesa',
-            'Resultado'
-        ]
-    })
-    
-    chart = alt.Chart(financial_data).mark_bar(
-        cornerRadiusTopRight=8,
-        cornerRadiusBottomRight=8
-    ).encode(
-        x=alt.X(
-            'Valor:Q',
-            title='Valor (R$)',
-            axis=alt.Axis(format=',.0f', labelFontSize=12)
-        ),
-        y=alt.Y(
-            'Categoria:O',
-            title=None,
-            sort=financial_data['Categoria'].tolist(),
-            axis=alt.Axis(labelFontSize=12)
-        ),
-        color=alt.Color(
-            'Tipo:N',
-            scale=alt.Scale(
-                domain=['Receita', 'Dedução', 'CPV', 'Despesa', 'Resultado'],
-                range=[CORES_MODO_ESCURO[1], CORES_MODO_ESCURO[3], CORES_MODO_ESCURO[2], CORES_MODO_ESCURO[4], CORES_MODO_ESCURO[0]]
-            ),
-            legend=None
-        ),
-        tooltip=[
-            alt.Tooltip('Categoria:N', title='Categoria'),
-            alt.Tooltip('Valor:Q', title='Valor (R$)', format=',.2f'),
-            alt.Tooltip('Tipo:N', title='Tipo')
-        ]
-    ).properties(
-        title=alt.TitleParams(
-            text="Composição do Resultado Financeiro",
-            fontSize=20,
-            anchor='start'
-        ),
-        height=500,
-        width=1000,
-        padding={'bottom': 100}
-    ).configure_view(
-        stroke=None
-    ).configure(
-        background='transparent'
-    )
-    
-    return chart
+# --- CSS GLOBAL COM LOGO ---
+st.markdown("""
+<style>
+    /* 1. FUNDO - Gradiente Azul Escuro */
+    .stApp {
+        background: linear-gradient(to bottom, #1e005e 0%, #000033 50%, #000000 100%);
+        background-size: cover;
+        background-attachment: fixed;
+        color: #f0f2f6;
+    }
 
-# --- Dashboard Premium Functions ---
-def create_premium_kpi_cards(df):
-    """Cria cards KPI premium com emoticons DENTRO dos boxes."""
-    if df.empty:
-        return
+    /* 2. Centralização de tabelas */
+    th, td {
+        text-align: center !important;
+        vertical-align: middle !important;
+        color: #e0e0e0 !important;
+    }
+    div[data-testid="stTable"] table {
+        margin-left: auto;
+        margin-right: auto;
+    }
     
-    total_vendas = df['Total'].sum()
-    media_diaria = df['Total'].mean()
-    melhor_dia = df.loc[df['Total'].idxmax(), 'DataFormatada'] if not df.empty and 'DataFormatada' in df.columns else "N/A"
-    crescimento = ((df['Total'].tail(7).mean() - df['Total'].head(7).mean()) / df['Total'].head(7).mean() * 100) if len(df) >= 14 and df['Total'].head(7).mean() != 0 else 0.0
+    /* 3. Inputs */
+    .stTextInput input, .stNumberInput input, .stSelectbox, .stDateInput, div[data-baseweb="select"] > div {
+        background-color: #1a1c24 !important; 
+        color: white !important;
+        border: 1px solid #444 !important;
+    }
+    .stSelectbox div[data-baseweb="select"] span {
+        color: white !important;
+    }
+
+    /* 4. MENU ESTILIZADO */
+    div[role="radiogroup"] {
+        display: flex;
+        flex-direction: row;
+        justify-content: center;
+        width: 100%;
+        background-color: transparent;
+        gap: 15px;
+    }
     
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        with st.container():
-            st.metric(
-                label="💰 Faturamento Total",
-                value=format_brl(total_vendas),
-                delta=f"{crescimento:+.1f}% vs período anterior" if crescimento != 0 else None
-            )
-    
-    with col2:
-        with st.container():
-            st.metric(
-                label="📊 Média Diária",
-                value=format_brl(media_diaria),
-                # delta="+8.2% vs período anterior" # Placeholder delta
-            )
-    
-    with col3:
-        with st.container():
-            st.metric(
-                label="🏆 Melhor Dia",
-                value=melhor_dia,
-                delta="Maior faturamento" if melhor_dia != "N/A" else None
-            )
-    
-    with col4:
-        with st.container():
-            st.metric(
-                label="📈 Tendência (Últimas 2 Semanas)",
-                value=f"{crescimento:+.1f}%",
-                delta="Crescimento" if crescimento > 0 else "Estável/Declínio" if crescimento == 0 else "Declínio"
-            )
-# --- NOVA FUNÇÃO: Gráfico Heatmap de Atividade ---
-def create_activity_heatmap(df_input):
-    """Cria um gráfico de heatmap estilo GitHub para a atividade de vendas - IGNORA FILTRO DE MÊS."""
-    if df_input.empty or 'Data' not in df_input.columns or 'Total' not in df_input.columns:
-        st.info("Dados insuficientes para gerar o heatmap de atividade.")
-        return None
+    div[role="radiogroup"] label {
+        background-color: transparent !important;
+        border: none !important;
+        padding: 5px 15px !important;
+        margin: 0 !important;
+        box-shadow: none !important;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        border-right: 2px solid #555 !important;
+        border-radius: 0 !important;
+    }
 
-    # MODIFICAÇÃO: Recarregar dados completos ignorando filtros
-    df_completo = read_sales_data()  # Busca dados completos da planilha
-    if df_completo.empty:
-        st.info("Sem dados disponíveis para o heatmap.")
-        return None
-    
-    # Processar os dados completos
-    df_completo = process_data(df_completo)
-    
-    df = df_completo.copy()
-    df['Data'] = pd.to_datetime(df['Data'], errors='coerce')
-    df.dropna(subset=['Data'], inplace=True)
-    
-    if df.empty:
-        st.info("Dados insuficientes após processamento para gerar o heatmap de atividade.")
-        return None
+    div[role="radiogroup"] label:last-child {
+        border-right: none !important;
+    }
 
-    # Determinar o ano atual ou mais recente dos dados
-    current_year = df['Data'].dt.year.max()
-    df = df[df['Data'].dt.year == current_year]
+    div[role="radiogroup"] label > div:first-child {
+        display: none !important;
+    }
 
-    if df.empty:
-        st.info(f"Sem dados para o ano {current_year} para gerar o heatmap.")
-        return None
+    div[role="radiogroup"] label div[data-testid="stMarkdownContainer"] p {
+        font-size: 16px !important; 
+        white-space: nowrap !important;
+        font-weight: 500;
+        margin: 0;
+        padding-bottom: 2px;
+        color: #b0b0b0; 
+        border-bottom: 2px solid transparent; 
+    }
 
-    # Criar todas as datas do ano selecionado
-    start_date = datetime(current_year, 1, 1)
-    end_date = datetime(current_year, 12, 31)
-    all_dates = pd.date_range(start=start_date, end=end_date, freq='D')
+    div[role="radiogroup"] label:hover div[data-testid="stMarkdownContainer"] p {
+        color: #ff4b4b !important;
+        border-bottom: 2px solid #ff4b4b !important;
+    }
 
-    # DataFrame com todas as datas
-    full_df = pd.DataFrame({'Data': all_dates})
-    # Certificar que as colunas existem antes de mergear
-    cols_to_merge = ['Data', 'Total', 'Cartao', 'Dinheiro', 'Pix']
-    cols_present = [col for col in cols_to_merge if col in df.columns]
-    full_df = full_df.merge(df[cols_present], on='Data', how='left')
-    
-    # Preencher NaNs e garantir colunas
-    for col in ['Total', 'Cartao', 'Dinheiro', 'Pix']:
-        if col not in full_df.columns:
-            full_df[col] = 0
-        else:
-            full_df[col] = full_df[col].fillna(0)
+    div[role="radiogroup"] label[data-checked="true"] div[data-testid="stMarkdownContainer"] p {
+        color: #ff4b4b !important;
+        border-bottom: 2px solid #ff4b4b !important;
+        font-weight: bold;
+    }
 
-    # Ajuste para o estilo GitHub
-    full_df['day_of_week'] = full_df['Data'].dt.dayofweek # Seg=0, Dom=6
-    full_df['day_name'] = full_df['Data'].dt.strftime('%a') # Abreviação do dia
-    # Mapear para ordem correta no gráfico (Dom=0)
-    day_order_map = {'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6, 'Sun': 0}
-    full_df['day_sort_order'] = full_df['Data'].dt.weekday.map(lambda x: (x + 1) % 7) # Dom=0, Seg=1...
-    day_name_map = {0: 'Dom', 1: 'Seg', 2: 'Ter', 3: 'Qua', 4: 'Qui', 5: 'Sex', 6: 'Sáb'}
-    full_df['day_display_name'] = full_df['day_sort_order'].map(day_name_map)
-    
-    full_df['week'] = full_df['Data'].dt.isocalendar().week
-    full_df['month'] = full_df['Data'].dt.month
-    full_df['month_name'] = full_df['Data'].dt.strftime('%b')
-
-    # Corrigir semanas de dezembro que aparecem como 1 no isocalendar
-    full_df.loc[(full_df['Data'].dt.month == 12) & (full_df['week'] <= 4), 'week'] = full_df['week'].max() + 1
-    # Corrigir semanas de janeiro que aparecem como 52/53
-    full_df.loc[(full_df['Data'].dt.month == 1) & (full_df['week'] >= 52), 'week'] = 0
-    
-    # Recalcular week para garantir ordem correta após ajustes
-    first_day_of_year = pd.Timestamp(f'{current_year}-01-01')
-    full_df['week_corrected'] = ((full_df['Data'] - first_day_of_year).dt.days // 7)
-    
-    # Encontrar a primeira semana (corrigida) de cada mês para os rótulos
-    month_labels = full_df.groupby('month').agg(
-        week_corrected=('week_corrected', 'min'),
-        month_name=('month_name', 'first')
-    ).reset_index()
-
-    # Labels dos meses
-    months_chart = alt.Chart(month_labels).mark_text(
-        align='center', # Centralizado acima da semana
-        baseline='bottom',
-        fontSize=12,
-        dy=-1,
-        dx=-30, # Espaço acima do heatmap
-        color='#A9A9A9' # Cor cinza claro para meses
-    ).encode(
-        x=alt.X('week_corrected:O', axis=None), # Usar semana corrigida
-        text='month_name:N'
-    ).properties(
-        width=800 # Ajustar largura se necessário
-    )
-
-    # Gráfico principal (heatmap)
-    heatmap = alt.Chart(full_df).mark_rect(
-        stroke='#ffffff', # Borda branca fina
-        strokeWidth=2,
-        cornerRadius=0.5 # Leve arredondamento
-    ).encode(
-        x=alt.X('week_corrected:O', # Usar semana corrigida
-                title=None, 
-                axis=None),
-        y=alt.Y('day_display_name:N', 
-                sort=['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'],
-                title=None,
-                axis=alt.Axis(labelAngle=0, labelFontSize=12, ticks=False, domain=False, grid=False, labelColor='#A9A9A9')),
-        color=alt.Color('Total:Q',
-            scale=alt.Scale(
-                # Usar cores do tema escuro, adaptadas para heatmap
-                range=['#f0f0f0', '#9be9a8', '#40c463', '#30a14e', '#216e39'], # Cinza escuro -> Verdes
-                # range=['#f0f0f0', '#9be9a8', '#40c463', '#30a14e', '#216e39'], # Esquema original GitHub claro
-                type='threshold',
-                domain=[0.01, 1500, 2500, 3500] # Ajustar domínios conforme necessidade
-            ),
-            legend=None), # Legenda pode ser adicionada separadamente se desejado
-        tooltip=[
-            alt.Tooltip('Data:T', title='Data', format='%d/%m/%Y'),
-            alt.Tooltip('day_display_name:N', title='Dia'),
-            alt.Tooltip('Total:Q', title='Total Vendas (R$)', format=',.2f'),
-            alt.Tooltip('Cartao:Q', title='Cartão (R$)', format=',.2f'),
-            alt.Tooltip('Dinheiro:Q', title='Dinheiro (R$)', format=',.2f'),
-            alt.Tooltip('Pix:Q', title='Pix (R$)', format=',.2f')
-        ]
-    ).properties(
-        width=1000, # Ajustar largura
-        height=250  # Ajustar altura
-    )
-
-    # Combinar gráfico final
-    final_chart = alt.vconcat(
-        months_chart,
-        heatmap,
-        spacing=1 # Pequeno espaço entre meses e heatmap
-    ).configure_view(
-        strokeWidth=0 # Sem borda ao redor do gráfico combinado
-    ).configure_concat(
-        spacing=5
-    ).properties(
-        title=alt.TitleParams(
-            text=f'Atividade de Vendas - {current_year}',
-            fontSize=18,
-            anchor='start',
-            color='white', # Cor do título para tema escuro
-            dy=-10 # Ajustar posição vertical do título
-        )
-    ).configure(
-        background='transparent' # Fundo transparente para integrar ao app
-    )
-
-    return final_chart
-
-# Função para formatar valores em moeda brasileira
-def format_brl(value):
-    return f"R$ {value:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
-
-# --- Interface Principal da Aplicação ---
-def main():
-    # --- MODIFICAÇÃO DO LOGO E TÍTULO ---
-    # --- MODIFICAÇÃO DO LOGO E TÍTULO ---
-    st.markdown("""
-    <style>
+    /* 5. LOGO COM EFEITO */
     .logo-container {
         display: flex;
         align-items: center;
+        justify-content: center;
         margin-bottom: 1rem;
     }
     
@@ -1061,7 +635,7 @@ def main():
         transform: translate(-50%, -50%);
         width: 175px;
         height: 175px;
-        background-image: url('https://raw.githubusercontent.com/lucasricardocs/clipsburger/refs/heads/main/logo.png');
+        background-image: url('https://raw.githubusercontent.com/lucasricardocs/combo/main/logo.png');
         background-size: contain;
         background-repeat: no-repeat;
         background-position: center;
@@ -1070,656 +644,323 @@ def main():
         animation: celestialPulse 12s ease-in-out infinite alternate;
     }
     
-    .logo-image {
+    .logo-main {
         position: relative;
         width: 200px;
-        height: auto;
-        z-index: 10;
-        border-radius: 10px;
+        height: 200px;
+        background-image: url('https://raw.githubusercontent.com/lucasricardocs/combo/main/logo.png');
+        background-size: contain;
+        background-repeat: no-repeat;
+        background-position: center;
+        z-index: 2;
     }
     
     @keyframes celestialPulse {
-        0% {
-            filter: blur(20px) brightness(1.8) saturate(2.5) hue-rotate(0deg);
+        0% { 
+            filter: blur(20px) brightness(1.8) saturate(2.5);
+            transform: translate(-50%, -50%) scale(1);
+        }
+        50% { 
+            filter: blur(25px) brightness(2.2) saturate(3);
             transform: translate(-50%, -50%) scale(1.1);
-            opacity: 0.7;
         }
-        25% {
-            filter: blur(22px) brightness(2.0) saturate(3.0) hue-rotate(90deg);
-            transform: translate(-50%, -50%) scale(1.15);
-            opacity: 0.8;
-        }
-        50% {
-            filter: blur(25px) brightness(2.2) saturate(3.5) hue-rotate(180deg);
-            transform: translate(-50%, -50%) scale(1.2);
-            opacity: 0.9;
-        }
-        75% {
-            filter: blur(22px) brightness(2.0) saturate(3.0) hue-rotate(270deg);
-            transform: translate(-50%, -50%) scale(1.15);
-            opacity: 0.8;
-        }
-        100% {
-            filter: blur(28px) brightness(2.4) saturate(4.0) hue-rotate(360deg);
-            transform: translate(-50%, -50%) scale(1.25);
-            opacity: 0.6;
+        100% { 
+            filter: blur(20px) brightness(1.8) saturate(2.5);
+            transform: translate(-50%, -50%) scale(1);
         }
     }
-    
-    .title-container {
-        /* O título e subtítulo ficam aqui */
-    }
-    
-    .title-main {
-        margin: 0; 
-        padding: 0;
-        line-height: 1.2;
-    }
-    
-    .title-sub {
-        margin: 0; 
-        font-size: 14px; 
-        color: gray; 
-        padding: 0;
-        line-height: 1.2;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-    
-    # Usar HTML para controle fino do layout
-    st.markdown(f"""
-    <div class="logo-container">
-        <div class="logo-wrapper">
-            <div class="logo-background"></div>
-            <img src="https://raw.githubusercontent.com/lucasricardocs/clipsburger/refs/heads/main/logo.png" class="logo-image" alt="Clips Burger Logo">
-        </div>
-        <div class="title-container">
-            <h1 class="title-main">SISTEMA FINANCEIRO - CLIP'S BURGER</h1>
-            <p class="title-sub">Gestão inteligente de vendas com análise financeira em tempo real - {datetime.now().year}</p>
-        </div>
+</style>
+""", unsafe_allow_html=True)
+
+# --- INICIALIZAÇÃO SESSION STATE ---
+init_data_file()
+if 'df_receipts' not in st.session_state:
+    st.session_state.df_receipts = load_data()
+if 'uploaded_data' not in st.session_state:
+    st.session_state.uploaded_data = None
+if 'vendas_data' not in st.session_state:
+    st.session_state.vendas_data = None
+if 'resultado_arquivo' not in st.session_state:
+    st.session_state.resultado_arquivo = None
+if 'resultado_pix' not in st.session_state:
+    st.session_state.resultado_pix = None
+
+# --- INTERFACE PRINCIPAL ---
+
+# Logo com efeito
+st.markdown("""
+<div class="logo-container">
+    <div class="logo-wrapper">
+        <div class="logo-background"></div>
+        <div class="logo-main"></div>
     </div>
-    """, unsafe_allow_html=True)
+</div>
+""", unsafe_allow_html=True)
 
-    df_raw = read_sales_data()
-    df_processed = process_data(df_raw)
+st.markdown("""
+<div style='text-align: center; margin-bottom: 20px;'>
+    <h2 style='color: #ff4b4b; margin: 0;'>🍔 Sistema de Gestão - Clips Burger</h2>
+    <p style='color: #b0b0b0; margin-top: 5px;'>Análise inteligente de vendas e combinações</p>
+</div>
+""", unsafe_allow_html=True)
 
-    # Criar 5 tabs incluindo o Dashboard Premium
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "📝 Registrar Venda", 
-        "📈 Análise Detalhada", 
-        "💡 Estatísticas", 
-        "💰 Análise Contábil",
-    ])
-
-    with tab1:
-        st.header("📝 Registrar Nova Venda")
-        
-        # Inputs FORA do form para atualização em tempo real
-        data_input = st.date_input("📅 Data da Venda", value=datetime.now(), format="DD/MM/YYYY")
-        
-        col1, col2, col3 = st.columns(3)
-        with col1: 
-            cartao_input = st.number_input(
-                "💳 Cartão (R$)", 
-                min_value=0.0, 
-                value=None,
-                format="%.2f", 
-                key="cartao_venda",
-                placeholder="Digite o valor..."
-            )
-        with col2: 
-            dinheiro_input = st.number_input(
-                "💵 Dinheiro (R$)", 
-                min_value=0.0, 
-                value=None,
-                format="%.2f", 
-                key="dinheiro_venda",
-                placeholder="Digite o valor..."
-            )
-        with col3: 
-            pix_input = st.number_input(
-                "📱 PIX (R$)", 
-                min_value=0.0, 
-                value=None,
-                format="%.2f", 
-                key="pix_venda",
-                placeholder="Digite o valor..."
-            )
-        
-        # Calcular total em tempo real (fora do form)
-        cartao_val = cartao_input if cartao_input is not None else 0.0
-        dinheiro_val = dinheiro_input if dinheiro_input is not None else 0.0
-        pix_val = pix_input if pix_input is not None else 0.0
-        total_venda_form = cartao_val + dinheiro_val + pix_val
-        
-        # Display do total em tempo real
-        st.markdown(f"""
-        <div style="text-align: center; padding: 0.7rem 1rem; background: linear-gradient(90deg, #4c78a8, #54a24b); border-radius: 10px; color: white; margin: 0.5rem 0; box-shadow: 0 4px 12px rgba(0,0,0,0.2); height: 3rem; display: flex; align-items: center; justify-content: center;">
-            <div>
-                <span style="font-size: 1.8rem; margin-right: 0.5rem; text-shadow: 1px 1px 3px rgba(0,0,0,0.3);">💰</span>
-                <span style="font-size: 2.2rem; font-weight: bold; text-shadow: 1px 1px 3px rgba(0,0,0,0.3);">Total: {format_brl(total_venda_form)}</span>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Botão de registrar (fora do form)
-        if st.button("✅ Registrar Venda", type="primary", use_container_width=True):
-            if total_venda_form > 0:
-                formatted_date = data_input.strftime("%d/%m/%Y")
-                worksheet_obj = get_worksheet()
-                if worksheet_obj and add_data_to_sheet(formatted_date, cartao_val, dinheiro_val, pix_val, worksheet_obj):
-                    # Limpar caches relevantes após adicionar dados
-                    get_worksheet.clear()
-                    read_sales_data.clear()
-                    process_data.clear()
-                    st.success("✅ Venda registrada e dados recarregados!")
-                    st.rerun()
-                elif not worksheet_obj: 
-                    st.error("❌ Falha ao conectar à planilha. Venda não registrada.")
-            else: 
-                st.warning("⚠️ O valor total da venda deve ser maior que zero.")
-
-    # --- SIDEBAR COM FILTROS ---
-    selected_anos_filter, selected_meses_filter = [], []
+# --- SIDEBAR ---
+with st.sidebar:
+    st.header("⚙️ Configurações do Algoritmo")
     
-    with st.sidebar:
-        st.header("🔍 Filtros de Período")
-        st.markdown("---")
-        
-        # Filtros sempre visíveis
-        if not df_processed.empty and 'Ano' in df_processed.columns and not df_processed['Ano'].isnull().all():
-            anos_disponiveis = sorted(df_processed['Ano'].dropna().unique().astype(int), reverse=True)
-            if anos_disponiveis:
-                default_ano = [datetime.now().year] if datetime.now().year in anos_disponiveis else [anos_disponiveis[0]] if anos_disponiveis else []
-                selected_anos_filter = st.multiselect("📅 Ano(s):", options=anos_disponiveis, default=default_ano)
-                
-                if selected_anos_filter:
-                    df_para_filtro_mes = df_processed[df_processed['Ano'].isin(selected_anos_filter)]
-                    if not df_para_filtro_mes.empty and 'Mês' in df_para_filtro_mes.columns and not df_para_filtro_mes['Mês'].isnull().all():
-                        meses_numeros_disponiveis = sorted(df_para_filtro_mes['Mês'].dropna().unique().astype(int))
-                        meses_opcoes_dict = {m_num: meses_ordem[m_num-1] for m_num in meses_numeros_disponiveis if 1 <= m_num <= 12}
-                        meses_opcoes_display = [f"{m_num} - {m_nome}" for m_num, m_nome in meses_opcoes_dict.items()]
-                        
-                        # Default para o mês atual apenas se estiver nas opções e se apenas um ano (o atual) estiver selecionado
-                        default_meses_selecionados = []
-                        if len(selected_anos_filter) == 1 and selected_anos_filter[0] == datetime.now().year:
-                            default_mes_num = datetime.now().month
-                            default_mes_str = f"{default_mes_num} - {meses_ordem[default_mes_num-1]}" if 1 <= default_mes_num <= 12 and default_mes_num in meses_opcoes_dict else None
-                            if default_mes_str and default_mes_str in meses_opcoes_display:
-                                default_meses_selecionados = [default_mes_str]
-                            else: # Se mês atual não tem dados, seleciona todos
-                                default_meses_selecionados = meses_opcoes_display
-                        else: # Se múltiplos anos ou ano diferente do atual, seleciona todos
-                            default_meses_selecionados = meses_opcoes_display
-                            
-                        selected_meses_str = st.multiselect("📆 Mês(es):", options=meses_opcoes_display, default=default_meses_selecionados)
-                        selected_meses_filter = [int(m.split(" - ")[0]) for m in selected_meses_str]
-            else: 
-                st.info("📊 Nenhum ano disponível para filtro.")
-        else: 
-            st.info("📊 Não há dados processados para aplicar filtros.")
-
-    # Aplicar filtros
-    df_filtered = df_processed.copy()
-    if not df_filtered.empty:
-        if selected_anos_filter and 'Ano' in df_filtered.columns: 
-            df_filtered = df_filtered[df_filtered['Ano'].isin(selected_anos_filter)]
-        if selected_meses_filter and 'Mês' in df_filtered.columns: 
-            df_filtered = df_filtered[df_filtered['Mês'].isin(selected_meses_filter)]
-
-    # Mostrar informações dos filtros aplicados na sidebar
-    if not df_filtered.empty:
-        total_registros_filtrados = len(df_filtered)
-        total_faturamento_filtrado = df_filtered['Total'].sum()
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("### 📈 Resumo dos Filtros Aplicados")
-        st.sidebar.metric("Registros Filtrados", total_registros_filtrados)
-        st.sidebar.metric("Faturamento Filtrado", format_brl(total_faturamento_filtrado))
-    elif not df_processed.empty:
-        st.sidebar.markdown("---")
-        st.sidebar.info("Nenhum registro corresponde aos filtros selecionados.")
+    st.info("🧬 Algoritmo Genético com Restrição de Combo")
     
-    with tab2:
-        st.header("🔎 Análise Detalhada de Vendas")
-        if not df_filtered.empty and 'DataFormatada' in df_filtered.columns:
-            st.subheader("🧾 Tabela de Vendas Filtradas")
-            cols_to_display_tab2 = ['DataFormatada', 'DiaSemana', 'DiaDoMes', 'Cartão', 'Dinheiro', 'Pix', 'Total']
-            cols_existentes_tab2 = [col for col in cols_to_display_tab2 if col in df_filtered.columns]
-            
-            if cols_existentes_tab2: 
-                # Ordenar pela data mais recente primeiro
-                df_display_tab2 = df_filtered.sort_values(by='Data', ascending=False)
-                st.dataframe(df_display_tab2[cols_existentes_tab2], use_container_width=True, height=600, hide_index=True)
-            else: 
-                st.info("Colunas necessárias para a tabela de dados filtrados não estão disponíveis.")
+    population_size = st.slider(
+        "Tamanho da População", 
+        min_value=20, 
+        max_value=200, 
+        value=100, 
+        step=10,
+        help="Maior população = melhor resultado, mas mais lento"
+    )
+    
+    generations = st.slider(
+        "Número de Gerações", 
+        min_value=10, 
+        max_value=500, 
+        value=200, 
+        step=10,
+        help="Mais gerações = melhor convergência"
+    )
+    
+    st.divider()
+    
+    st.caption("⚠️ **Regra do Combo 1:**")
+    st.caption("JBC = Refri Lata (sempre iguais)")
+    st.caption("Cebola = ajuste fino (R$ 0,50)")
 
-    with tab3:
-        st.header("💡 Estatísticas e Tendências de Vendas")
-        if not df_filtered.empty and 'Total' in df_filtered.columns and not df_filtered['Total'].isnull().all():
-            st.subheader("💰 Resumo Financeiro Agregado")
-            total_registros = len(df_filtered)
-            total_faturamento = df_filtered['Total'].sum()
-            media_por_registro = df_filtered['Total'].mean() if total_registros > 0 else 0
-            maior_venda_diaria = df_filtered['Total'].max() if total_registros > 0 else 0
-            menor_venda_diaria = df_filtered[df_filtered['Total'] > 0]['Total'].min() if not df_filtered[df_filtered['Total'] > 0].empty else 0
-            
-            # Layout em colunas para melhor aproveitamento do espaço
-            col_metrics1, col_metrics2, col_metrics3 = st.columns(3)
+# --- MENU DE NAVEGAÇÃO ---
+menu_opcoes = ["📈 Resumo das Vendas", "🧩 Análise com Arquivo", "💸 Calculadora PIX"]
+escolha_menu = st.radio("Navegação", menu_opcoes, horizontal=True, label_visibility="collapsed", key="nav_menu")
 
-            with col_metrics1:
-                st.metric("🔢 Total de Registros", f"{total_registros}")
-                st.metric("⬆️ Maior Venda Diária", format_brl(maior_venda_diaria))
+# --- CONTEÚDO DAS ABAS ---
 
-            with col_metrics2:
-                st.metric("💵 Faturamento Total", format_brl(total_faturamento))
-                st.metric("⬇️ Menor Venda Diária (>0)", format_brl(menor_venda_diaria))
-
-            with col_metrics3:
-                st.metric("📈 Média por Registro", format_brl(media_por_registro))
-            
-           # st.divider()
-
-            # --- INTEGRAÇÃO DO HEATMAP --- 
-            st.subheader("📅 Heatmap de Atividade Anual")
-            heatmap_chart = create_activity_heatmap(df_filtered) # Passa dados filtrados
-            if heatmap_chart:
-                st.altair_chart(heatmap_chart, use_container_width=True)
-            else:
-                st.info("Não foi possível gerar o heatmap de atividade para o período/ano selecionado.")
-            # --- FIM DA INTEGRAÇÃO DO HEATMAP ---
-            
-           # st.markdown("---")
-
-            # Coluna 1: Gráfico Acumulado e Heatmap
-            
-            st.subheader("Gráfico de Área Acumulado")
-            cumulative_chart = create_cumulative_area_chart(df_filtered)
-            if cumulative_chart:
-                st.altair_chart(cumulative_chart, use_container_width=True)
-            else:
-                st.info("Sem dados suficientes para o gráfico de evolução acumulada.")
-            # --- FIM DA INTEGRAÇÃO DO GRAFICO DE MONHATANHA ---
-            
-            #st.markdown("---")
-
-            # Seção de métodos de pagamento com cards lado a lado
-            st.subheader("💳 Métodos de Pagamento (Visão Geral)")
-            cartao_total = df_filtered['Cartão'].sum() if 'Cartão' in df_filtered else 0
-            dinheiro_total = df_filtered['Dinheiro'].sum() if 'Dinheiro' in df_filtered else 0
-            pix_total = df_filtered['Pix'].sum() if 'Pix' in df_filtered else 0
-            total_pagamentos_geral = cartao_total + dinheiro_total + pix_total
-
-            if total_pagamentos_geral > 0:
-                cartao_pct = (cartao_total / total_pagamentos_geral * 100)
-                dinheiro_pct = (dinheiro_total / total_pagamentos_geral * 100)
-                pix_pct = (pix_total / total_pagamentos_geral * 100)
-                
-                # Layout sempre em 3 colunas lado a lado
-                payment_cols = st.columns(3)
-                
-                with payment_cols[0]:
-                    st.markdown(f"""
-                    <div style="text-align: center; padding: 1rem; background: linear-gradient(135deg, #4c78a8, #5a8bb8); border-radius: 10px; color: white; margin-bottom: 1rem;">
-                        <h3 style="margin: 0; font-size: 1.5rem;">💳 Cartão</h3>
-                        <h2 style="margin: 0.5rem 0; font-size: 1.8rem;">{format_brl(cartao_total)}</h2>
-                        <p style="margin: 0; font-size: 1.2rem; opacity: 0.9;">{cartao_pct:.1f}% do total</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                with payment_cols[1]:
-                    st.markdown(f"""
-                    <div style="text-align: center; padding: 1rem; background: linear-gradient(135deg, #54a24b, #64b25b); border-radius: 10px; color: white; margin-bottom: 1rem;">
-                        <h3 style="margin: 0; font-size: 1.5rem;">💵 Dinheiro</h3>
-                        <h2 style="margin: 0.5rem 0; font-size: 1.8rem;">{format_brl(dinheiro_total)}</h2>
-                        <p style="margin: 0; font-size: 1.2rem; opacity: 0.9;">{dinheiro_pct:.1f}% do total</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                with payment_cols[2]:
-                    st.markdown(f"""
-                    <div style="text-align: center; padding: 1rem; background: linear-gradient(135deg, #f58518, #ff9528); border-radius: 10px; color: white; margin-bottom: 1rem;">
-                        <h3 style="margin: 0; font-size: 1.5rem;">📱 PIX</h3>
-                        <h2 style="margin: 0.5rem 0; font-size: 1.8rem;">{format_brl(pix_total)}</h2>
-                        <p style="margin: 0; font-size: 1.2rem; opacity: 0.9;">{pix_pct:.1f}% do total</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-            else: 
-                st.info("Sem dados de pagamento para exibir o resumo nesta seção.")
-            
-            #st.divider()
-
-             # Gráficos lado a lado - 2/3 para vendas diárias, 1/3 para radial
-            #st.subheader("📊 Análise Diária e Métodos de Pagamento")
-            col_chart1, col_chart2 = st.columns([2, 1])
-            
-            with col_chart1:
-                # Gráfico de vendas diárias (2/3 do espaço)
-                daily_chart = create_advanced_daily_sales_chart(df_filtered)
-                if daily_chart:
-                    st.altair_chart(daily_chart, use_container_width=True)
+if escolha_menu == "📈 Resumo das Vendas":
+    st.header("📤 Upload de Dados")
+    arquivo = st.file_uploader("Envie o arquivo de transações (.csv ou .xlsx)", 
+                             type=["csv", "xlsx"])
+    
+    if arquivo:
+        try:
+            with st.spinner("Processando arquivo..."):
+                if arquivo.name.endswith(".csv"):
+                    try:
+                        df = pd.read_csv(arquivo, sep=';', encoding='utf-8', dtype=str)
+                    except pd.errors.ParserError:
+                        arquivo.seek(0)
+                        try:
+                            df = pd.read_csv(arquivo, sep=',', encoding='utf-8', dtype=str)
+                        except:
+                            arquivo.seek(0)
+                            df = pd.read_csv(arquivo, engine='python', dtype=str)
                 else:
-                    st.info("Gráfico de vendas diárias indisponível.")
-            
-            with col_chart2:
-                # Gráfico radial (1/3 do espaço)
-                radial_chart = create_radial_plot(df_filtered)
-                if radial_chart:
-                    st.altair_chart(radial_chart, use_container_width=True)
-                else:
-                    st.info("Gráfico radial de pagamentos indisponível.")
-            
-            #st.markdown("---")
-
-            # Análise melhorada de dias da semana com percentuais
-            weekday_chart, best_day = create_enhanced_weekday_analysis(df_filtered)
-            if weekday_chart:
-                st.altair_chart(weekday_chart, use_container_width=False)
+                    df = pd.read_excel(arquivo, dtype=str)
                 
-                # Análise detalhada dos dias da semana
-                if not df_filtered.empty and 'DiaSemana' in df_filtered.columns:
-                    df_weekday_analysis = df_filtered.copy()
-                    df_weekday_analysis['Total'] = pd.to_numeric(df_weekday_analysis['Total'], errors='coerce')
-                    df_weekday_analysis = df_weekday_analysis.dropna(subset=['Total', 'DiaSemana'])
-                    
-                    if not df_weekday_analysis.empty:
-                        # Calcular médias por dia da semana (excluindo domingo)
-                        dias_trabalho = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"]
-                        df_trabalho = df_weekday_analysis[df_weekday_analysis['DiaSemana'].isin(dias_trabalho)]
-                        
-                        if not df_trabalho.empty:
-                            medias_por_dia = df_trabalho.groupby('DiaSemana', observed=True)['Total'].agg(['mean', 'count']).round(2)
-                            medias_por_dia = medias_por_dia.reindex([d for d in dias_trabalho if d in medias_por_dia.index])
-                            medias_por_dia = medias_por_dia.sort_values('mean', ascending=False)
-                            
-                            st.subheader("📊 Ranking dos Dias da Semana (Seg-Sáb)")
-                            
-                            # Criar colunas para o ranking
-                            col_ranking1, col_ranking2 = st.columns(2)
-                            
-                            with col_ranking1:
-                                st.markdown("### 🏆 **Melhores Dias**")
-                                if len(medias_por_dia) >= 1:
-                                    primeiro = medias_por_dia.index[0]
-                                    st.success(f"🥇 **1º lugar:** {primeiro}")
-                                    st.write(f"   Média: {format_brl(medias_por_dia.loc[primeiro, 'mean'])} ({int(medias_por_dia.loc[primeiro, 'count'])} dias)")
-                                
-                                if len(medias_por_dia) >= 2:
-                                    segundo = medias_por_dia.index[1]
-                                    st.info(f"🥈 **2º lugar:** {segundo}")
-                                    st.write(f"   Média: {format_brl(medias_por_dia.loc[segundo, 'mean'])} ({int(medias_por_dia.loc[segundo, 'count'])} dias)")
-                            
-                            with col_ranking2:
-                                st.markdown("### 📉 **Piores Dias**")
-                                if len(medias_por_dia) >= 2:
-                                    penultimo_idx = -2 if len(medias_por_dia) > 1 else -1 # Handle case with only 1 day
-                                    penultimo = medias_por_dia.index[penultimo_idx]
-                                    st.warning(f"📊 **Penúltimo:** {penultimo}")
-                                    st.write(f"   Média: {format_brl(medias_por_dia.loc[penultimo, 'mean'])} ({int(medias_por_dia.loc[penultimo, 'count'])} dias)")
-                                
-                                if len(medias_por_dia) >= 1:
-                                    ultimo = medias_por_dia.index[-1]
-                                    st.error(f"🔻 **Último lugar:** {ultimo}")
-                                    st.write(f"   Média: {format_brl(medias_por_dia.loc[ultimo, 'mean'])} ({int(medias_por_dia.loc[ultimo, 'count'])} dias)")
-                            
-                            #st.divider()
-                            
-                            # Análise de frequência de trabalho
-                            st.subheader("📅 Análise de Frequência de Trabalho")
-                            
-                            # Calcular dias do período filtrado
-                            if not df_filtered.empty and 'Data' in df_filtered.columns:
-                                data_inicio = df_filtered['Data'].min()
-                                data_fim = df_filtered['Data'].max()
-                                
-                                if pd.notna(data_inicio) and pd.notna(data_fim):
-                                    # Calcular total de dias no período
-                                    total_dias_periodo = (data_fim - data_inicio).days + 1
-                                    
-                                    # Calcular domingos no período
-                                    domingos_periodo = 0
-                                    data_atual = data_inicio
-                                    while data_atual <= data_fim:
-                                        if data_atual.weekday() == 6:  # Domingo = 6
-                                            domingos_periodo += 1
-                                        data_atual += timedelta(days=1)
-                                    
-                                    # Dias úteis esperados (excluindo domingos)
-                                    dias_uteis_esperados = total_dias_periodo - domingos_periodo
-                                    
-                                    # Dias efetivamente trabalhados (registros únicos por data)
-                                    dias_trabalhados = df_filtered['Data'].nunique()
-                                    
-                                    # Dias de falta
-                                    dias_falta = max(0, dias_uteis_esperados - dias_trabalhados) # Não pode ser negativo
-                                    
-                                    # Exibir métricas
-                                    col_freq1, col_freq2, col_freq3, col_freq4 = st.columns(4)
-                                    
-                                    with col_freq1:
-                                        st.metric(
-                                            "📅 Período Analisado",
-                                            f"{total_dias_periodo} dias",
-                                            help=f"De {data_inicio.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')}"
-                                        )
-                                    
-                                    with col_freq2:
-                                        st.metric(
-                                            "🏢 Dias Trabalhados",
-                                            f"{dias_trabalhados} dias",
-                                            help="Dias com registro de vendas"
-                                        )
-                                    
-                                    with col_freq3:
-                                        st.metric(
-                                            "🏖️ Domingos (Folga)",
-                                            f"{domingos_periodo} dias",
-                                            help="Domingos no período (não trabalhamos)"
-                                        )
-                                    
-                                    with col_freq4:
-                                        if dias_falta > 0:
-                                            st.metric(
-                                                "❌ Dias de Falta",
-                                                f"{dias_falta} dias",
-                                                help="Dias úteis sem registro de vendas",
-                                                delta=f"-{dias_falta}",
-                                                delta_color="inverse"
-                                            )
-                                        else:
-                                            st.metric(
-                                                "✅ Frequência",
-                                                "100%",
-                                                help="Todos os dias úteis trabalhados!"
-                                            )
-                                    
-                                    # Calcular taxa de frequência
-                                    if dias_uteis_esperados > 0:
-                                        taxa_frequencia = (dias_trabalhados / dias_uteis_esperados) * 100
-                                        
-                                        if taxa_frequencia >= 95:
-                                            st.success(f"🎯 **Excelente frequência:** {taxa_frequencia:.1f}% dos dias úteis trabalhados!")
-                                        elif taxa_frequencia >= 80:
-                                            st.info(f"👍 **Boa frequência:** {taxa_frequencia:.1f}% dos dias úteis trabalhados")
-                                        else:
-                                            st.warning(f"⚠️ **Atenção à frequência:** {taxa_frequencia:.1f}% dos dias úteis trabalhados")
-                                else:
-                                    st.info("Não foi possível calcular a frequência (sem dias úteis no período?).")
-            else:
-                st.info("📊 Dados insuficientes para calcular a análise por dia da semana.")
+                required_cols = ['Tipo', 'Bandeira', 'Valor']
+                if not all(col in df.columns for col in required_cols):
+                    st.error(f"Erro: O arquivo precisa conter as colunas: {', '.join(required_cols)}")
+                    st.stop()
+
+                df['Tipo'] = df['Tipo'].str.lower().str.strip().fillna('desconhecido')
+                df['Bandeira'] = df['Bandeira'].str.lower().str.strip().fillna('desconhecida')
+                df['Valor'] = pd.to_numeric(
+                    df['Valor'].str.replace('.', '').str.replace(',', '.'), 
+                    errors='coerce')
+                df = df.dropna(subset=['Valor'])
+                
+                df['Forma'] = (df['Tipo'] + ' ' + df['Bandeira']).map(FORMAS_PAGAMENTO)
+                df = df.dropna(subset=['Forma'])
+                
+                if df.empty:
+                    st.warning("Nenhuma transação válida encontrada.")
+                    st.stop()
+
+                vendas = df.groupby('Forma')['Valor'].sum().reset_index()
+                total_vendas = vendas['Valor'].sum()
+                
+                st.session_state.uploaded_data = df
+                st.session_state.vendas_data = vendas
+                st.session_state.total_vendas = total_vendas
             
-            #st.divider()
-
-            sales_histogram_chart = create_sales_histogram(df_filtered)
-            if sales_histogram_chart: 
-                st.altair_chart(sales_histogram_chart, use_container_width=False)
-            else: 
-                st.info("Dados insuficientes para o Histograma de Vendas.")
-        else:
-            if df_processed.empty and df_raw.empty and get_worksheet() is None: 
-                st.warning("Não foi possível carregar os dados da planilha.")
-            elif df_processed.empty: 
-                st.info("Não há dados processados para exibir estatísticas.")
-            elif df_filtered.empty: 
-                st.info("Nenhum dado corresponde aos filtros para exibir estatísticas.")
-            else: 
-                st.info("Não há dados de 'Total' para exibir nas Estatísticas.")
-
-    # --- TAB4: ANÁLISE CONTÁBIL COMPLETA ---
-    with tab4:
-        st.header("📊 Análise Contábil e Financeira Detalhada")
-        
-        st.markdown("""
-        ### 📋 **Sobre esta Análise**
-        
-        Esta análise segue as **normas contábeis brasileiras** com estrutura de DRE conforme:
-        - **Lei 6.404/76** (Lei das S.A.) | **NBC TG 26** (Apresentação das Demonstrações Contábeis)
-        - **Regime Tributário:** Simples Nacional (6% sobre receita tributável)
-        - **Metodologia de Margens:** Margem Bruta = (Lucro Bruto ÷ Receita Líquida) × 100
-        """)
-        
-        # Parâmetros Financeiros
-        with st.container(border=True):
-            st.subheader("⚙️ Parâmetros para Simulação Contábil")
+            st.header("📊 Visualização de Dados")
             
-            col_param1, col_param2, col_param3 = st.columns(3)
-            with col_param1:
-                salario_minimo_input = st.number_input(
-                    "💼 Salário Base Funcionário (R$)",
-                    min_value=0.0, value=st.session_state.get('salario_tab4', 1550.0), format="%.2f",
-                    help="Salário base do funcionário. Os encargos (55%) serão calculados automaticamente.",
-                    key="salario_tab4"
-                )
-            with col_param2:
-                custo_contadora_input = st.number_input(
-                    "📋 Honorários Contábeis Mensais (R$)",
-                    min_value=0.0, value=st.session_state.get('contadora_tab4', 316.0), format="%.2f",
-                    help="Valor mensal pago pelos serviços contábeis.",
-                    key="contadora_tab4"
-                )
-            with col_param3:
-                custo_fornecedores_percentual = st.number_input(
-                    "📦 Custo dos Produtos (% da Receita Bruta)",
-                    min_value=0.0, max_value=100.0, value=st.session_state.get('fornecedores_tab4', 30.0), format="%.1f",
-                    help="Percentual da receita bruta destinado à compra de produtos.",
-                    key="fornecedores_tab4"
-                )
-
-        #st.markdown("---")
-
-        if df_filtered.empty or 'Total' not in df_filtered.columns:
-            st.warning("📊 **Não há dados suficientes para análise contábil.** Ajuste os filtros ou registre vendas.")
-        else:
-            # Calcular resultados financeiros para o período filtrado
-            # Nota: A função DRE recalcula para o ano inteiro selecionado
-            resultados_filtrados = calculate_financial_results(
-                df_filtered, 
-                salario_minimo_input, 
-                custo_contadora_input, # Passar custo mensal aqui
-                custo_fornecedores_percentual
+            st.subheader("Total de Vendas por Forma de Pagamento")
+            bar_chart = create_altair_chart(
+                vendas, 'bar', 'Forma', 'Valor', 'Forma',
+                title=''
+            ).properties(
+                width=800,
+                height=500
             )
-
-            # === DRE TEXTUAL (Anual) ===
-            with st.container(border=True):
-                 # Passa df_processed para ter acesso a todos os dados do ano
-                create_dre_textual(resultados_filtrados, df_processed, selected_anos_filter)
-
-            #st.markdown("---")
-
-            # === DASHBOARD VISUAL (Período Filtrado) ===
-            financial_dashboard = create_financial_dashboard_altair(resultados_filtrados)
-            if financial_dashboard:
-                st.altair_chart(financial_dashboard, use_container_width=True)
-
-            #st.markdown("---")
-
-            # === ANÁLISE DE MARGENS (Período Filtrado) ===
-            with st.container(border=True):
-                st.subheader("📈 Análise de Margens e Indicadores (Período Filtrado)")
+            st.altair_chart(bar_chart, use_container_width=True)
+            
+            st.header("⚙️ Parâmetros Financeiros")
+            col1, col2 = st.columns(2)
+            with col1:
+                salario_minimo = st.number_input("Salário Mínimo (R$)", value=1518.0, step=50.0)
+            with col2:
+                custo_contadora = st.number_input("Custo com Contadora (R$)", value=316.0, step=10.0)
+            
+            st.header("💰 Resultados Financeiros")
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Faturamento Bruto", format_currency(total_vendas))
+            with col2:
+                imposto_simples = total_vendas * 0.06
+                st.metric("Imposto Simples (6%)", format_currency(imposto_simples))
+            with col3:
+                fgts = salario_minimo * 0.08
+                ferias = (salario_minimo / 12) * (4/3)
+                decimo_terceiro = salario_minimo / 12
+                custo_funcionario = salario_minimo + fgts + ferias + decimo_terceiro
+                st.metric("Custo Funcionário CLT", format_currency(custo_funcionario))
+            
+            total_custos = imposto_simples + custo_funcionario + custo_contadora
+            lucro_estimado = total_vendas - total_custos
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Total de Custos", format_currency(total_custos))
+            with col2:
+                st.metric("Lucro Estimado", format_currency(lucro_estimado))
+            
+            st.header("🔍 Detalhamento")
+            
+            tab_detalhes1, tab_detalhes2, tab_detalhes3 = st.tabs([
+                "📝 Composição de Custos", 
+                "📚 Explicação dos Cálculos",
+                "🍰 Gráfico de Composição"
+            ])
+            
+            with tab_detalhes1:
+                st.subheader("Composição dos Custos")
+                st.markdown(f"""
+                - **Imposto Simples Nacional (6%)**: {format_currency(imposto_simples)}
+                - **Custo Funcionário CLT**: {format_currency(custo_funcionario)}
+                - **Custo Contadora**: {format_currency(custo_contadora)}
+                """)
+            
+            with tab_detalhes2:
+                st.subheader("Fórmulas Utilizadas")
+                st.markdown("""
+                **1. Imposto Simples Nacional** `Faturamento Bruto × 6%`  
+                **2. Custo Funcionário CLT** `Salário + FGTS (8%) + Férias (1 mês + 1/3) + 13º Salário`  
+                **3. Total de Custos** `Imposto + Funcionário + Contadora`  
+                **4. Lucro Estimado** `Faturamento Bruto - Total de Custos`
+                """)
+            
+            with tab_detalhes3:
+                st.subheader("Composição dos Custos")
+                custos_df = pd.DataFrame({
+                    'Item': ['Impostos', 'Funcionário', 'Contadora'],
+                    'Valor': [imposto_simples, custo_funcionario, custo_contadora]
+                })
                 
-                col_margin1, col_margin2, col_margin3 = st.columns(3)
-                
-                with col_margin1:
-                    st.metric(
-                        "📊 Margem Bruta",
-                        f"{resultados_filtrados['margem_bruta']:.2f}%",
-                        help="(Lucro Bruto / Receita Líquida) * 100"
+                graf_composicao = alt.Chart(custos_df).mark_arc().encode(
+                    theta='Valor',
+                    color='Item',
+                    tooltip=['Item', alt.Tooltip('Valor', format='$.2f')]
+                ).properties(
+                    width=600,
+                    height=500
+                )
+                st.altair_chart(graf_composicao, use_container_width=True)
+            
+            st.header("📑 Relatório")
+            if st.button("Gerar Relatório PDF"):
+                with st.spinner("Gerando relatório..."):
+                    pdf_buffer = create_pdf_report(
+                        df, vendas, total_vendas, imposto_simples, custo_funcionario, 
+                        custo_contadora, total_custos, lucro_estimado, CONFIG["logo_path"]
                     )
-                    st.metric(
-                        "🏛️ Carga Tributária Efetiva",
-                        f"{(resultados_filtrados['impostos_sobre_vendas'] / resultados_filtrados['receita_bruta'] * 100) if resultados_filtrados['receita_bruta'] > 0 else 0:.2f}%",
-                        help="(Impostos / Receita Bruta) * 100"
-                    )
-                
-                with col_margin2:
-                    st.metric(
-                        "💼 Margem Operacional",
-                        f"{resultados_filtrados['margem_operacional']:.2f}%",
-                        help="(Lucro Operacional / Receita Líquida) * 100"
-                    )
-                    st.metric(
-                        "👥 Custo de Pessoal (% Receita)",
-                        f"{(resultados_filtrados['despesas_com_pessoal'] / resultados_filtrados['receita_bruta'] * 100) if resultados_filtrados['receita_bruta'] > 0 else 0:.2f}%",
-                        help="(Desp. Pessoal / Receita Bruta) * 100"
-                    )
-                
-                with col_margin3:
-                    st.metric(
-                        "💰 Margem Líquida",
-                        f"{resultados_filtrados['margem_liquida']:.2f}%",
-                        help="(Lucro Líquido / Receita Líquida) * 100"
-                    )
-                    st.metric(
-                        "📦 Custo dos Produtos (% Receita)",
-                        f"{(resultados_filtrados['custo_produtos_vendidos'] / resultados_filtrados['receita_bruta'] * 100) if resultados_filtrados['receita_bruta'] > 0 else 0:.2f}%",
-                        help="(CPV / Receita Bruta) * 100"
-                    )
+                    b64_pdf = base64.b64encode(pdf_buffer.getvalue()).decode()
+                    pdf_display = f'<a href="application/pdf;base64,{b64_pdf}" download="relatorio_clips_burger.pdf">📥 Clique aqui para baixar o Relatório PDF</a>'
+                    st.markdown(pdf_display, unsafe_allow_html=True)
+                    st.success("Relatório gerado com sucesso!")
+            
+        except Exception as e:
+            st.error(f"Ocorreu um erro ao processar o arquivo: {str(e)}")
+            st.exception(e)
+    else:
+        st.info("Aguardando upload do arquivo de transações.")
 
-            #st.markdown("---")
+elif escolha_menu == "🧩 Análise com Arquivo":
+    st.header("🧩 Análise de Combinações por Arquivo")
+    
+    if st.session_state.vendas_data is not None:
+        vendas = st.session_state.vendas_data
+        
+        forma_selecionada = st.selectbox(
+            "Selecione a forma de pagamento",
+            options=vendas['Forma'].tolist(),
+            format_func=lambda x: f"{x} ({format_currency(vendas.loc[vendas['Forma'] == x, 'Valor'].iloc[0])})"
+        )
+        
+        valor_selecionado = vendas.loc[vendas['Forma'] == forma_selecionada, 'Valor'].iloc[0]
+        
+        if st.button("🔎 Analisar Combinação", type="primary", use_container_width=True):
+            with st.spinner("Calculando a melhor combinação com Combo 1..."):
+                dados = gerar_dados_geneticos_combo(
+                    valor_selecionado, 
+                    population_size, 
+                    generations
+                )
+                st.session_state.resultado_arquivo = dados
+        
+        if st.session_state.resultado_arquivo:
+            st.divider()
+            renderizar_resultados(st.session_state.resultado_arquivo)
+        
+    else:
+        st.info("Faça o upload de dados na aba 'Resumo das Vendas' primeiro.")
 
-            # === RESUMO EXECUTIVO (Período Filtrado) ===
-            with st.container(border=True):
-                st.subheader("📋 Resumo Executivo (Período Filtrado)")
-                
-                col_exec1, col_exec2 = st.columns(2)
-                
-                with col_exec1:
-                    st.markdown("**💰 Receitas:**")
-                    st.write(f"• Receita Bruta: {format_brl(resultados_filtrados['receita_bruta'])}")
-                    st.write(f"• Receita Líquida: {format_brl(resultados_filtrados['receita_liquida'])}")
-                    st.write(f"• Receita Tributável: {format_brl(resultados_filtrados['receita_tributavel'])}")
-                    st.write(f"• Receita Não Tributável: {format_brl(resultados_filtrados['receita_nao_tributavel'])}")
-                    
-                    st.markdown("**📊 Resultados:**")
-                    st.write(f"• Lucro Bruto: {format_brl(resultados_filtrados['lucro_bruto'])}")
-                    st.write(f"• Lucro Operacional: {format_brl(resultados_filtrados['lucro_operacional'])}")
-                    st.write(f"• Lucro Líquido: {format_brl(resultados_filtrados['lucro_liquido'])}")
-                
-                with col_exec2:
-                    st.markdown("**💸 Custos e Despesas:**")
-                    st.write(f"• Impostos s/ Vendas: {format_brl(resultados_filtrados['impostos_sobre_vendas'])}")
-                    st.write(f"• Custo dos Produtos: {format_brl(resultados_filtrados['custo_produtos_vendidos'])}")
-                    st.write(f"• Despesas com Pessoal: {format_brl(resultados_filtrados['despesas_com_pessoal'])} (Ref. período)")
-                    st.write(f"• Serviços Contábeis: {format_brl(resultados_filtrados['despesas_contabeis'])} (Ref. período)")
-                    
-                    st.markdown("**🎯 Indicadores-Chave:**")
-                    if resultados_filtrados['margem_bruta'] >= 50:
-                        st.success(f"✅ Margem Bruta Saudável: {resultados_filtrados['margem_bruta']:.1f}% (Período)")
-                    elif resultados_filtrados['margem_bruta'] >= 30:
-                        st.warning(f"⚠️ Margem Bruta Moderada: {resultados_filtrados['margem_bruta']:.1f}% (Período)")
-                    else:
-                        st.error(f"❌ Margem Bruta Baixa: {resultados_filtrados['margem_bruta']:.1f}% (Período)")
-                    
-                    if resultados_filtrados['lucro_liquido'] > 0:
-                        st.success(f"✅ Resultado Positivo: {format_brl(resultados_filtrados['lucro_liquido'])} (Período)")
-                    else:
-                        st.error(f"❌ Resultado Negativo: {format_brl(resultados_filtrados['lucro_liquido'])} (Período)")
+elif escolha_menu == "💸 Calculadora PIX":
+    st.header("💸 Calculadora Rápida (PIX/Manual)")
+    st.markdown("Digite um valor e descubra quantos Combos 1 + Cebolas formam esse total.")
+    
+    col_input, col_action = st.columns([0.4, 0.6])
+    
+    with col_input:
+        valor_pix_input = st.number_input(
+            "Digite o Valor (R$):", 
+            min_value=0.0, 
+            step=1.0, 
+            format="%.2f",
+            help="Insira o valor para análise"
+        )
+    
+    with col_action:
+        st.write("")
+        st.write("")
+        if st.button("🚀 Calcular Combinação", type="primary", use_container_width=True):
+            if valor_pix_input > 0:
+                with st.spinner("Calculando a melhor combinação..."):
+                    dados = gerar_dados_geneticos_combo(
+                        valor_pix_input, 
+                        population_size, 
+                        generations
+                    )
+                    st.session_state.resultado_pix = dados
+            else:
+                st.error("Por favor, insira um valor maior que zero.")
 
-            # Nota final
-            st.info("""
-            💡 **Nota Importante:** A DRE Textual acima é sempre anual. As demais análises (Gráfico Financeiro, Margens, Resumo Executivo) referem-se ao **período selecionado nos filtros**. 
-            Para decisões estratégicas, consulte sempre um contador qualificado.
-            """)
+    if st.session_state.resultado_pix:
+        st.divider()
+        renderizar_resultados(st.session_state.resultado_pix)
 
-# --- Ponto de Entrada da Aplicação ---
-if __name__ == "__main__":
-    main()
+# Rodapé
+st.divider()
+st.markdown(
+    """
+    <div style='text-align: center; color: gray; font-size: small;'>
+        © 2025 Clips Burger - Sistema de Gestão de Combos | Desenvolvido com ❤️ e Streamlit
+    </div>
+    """, 
+    unsafe_allow_html=True
+)
